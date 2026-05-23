@@ -1,0 +1,38 @@
+{
+  "dragonknight": {
+    "name": "Dragonknight", "color": "#e53935", "weapon": "sword", "baseMaxHp": 200, "dmgMult": 0.8, "basicAttackCD": 0.4, "basicDmg": 8,
+    "rareWeapon": { "name": "Wyrmbane Greatsword", "desc": "+200% DMG | RMB: Wyrm Strike", "rmbSkill": "Wyrm Strike" },
+    "rareArmor": { "name": "Dragon Scale Plate", "desc": "+150 Max HP | Heals 5 HP on kill" },
+    "rareAmulet": { "name": "Heart of the Mountain", "desc": "Stomp stuns for 4s & grants +50% Move Speed" },
+    "skills": {
+      "1": { "name": "Whirlwind", "level": 1, "maxCd": 4.0, "baseDmg": 20, "selectedUpg": null, "upgA": { "name": "Vast Sweep", "desc": "+50% Radius" }, "upgB": { "name": "Savage Spin", "desc": "+50% Damage" } },
+      "2": { "name": "Ground Stomp", "level": 0, "maxCd": 6.0, "baseDmg": 10, "selectedUpg": null, "upgA": { "name": "Quake", "desc": "+50% Radius" }, "upgB": { "name": "Concussion", "desc": "Stuns for 4 seconds" } },
+      "3": { "name": "Charge Impact", "level": 0, "maxCd": 5.0, "baseDmg": 25, "selectedUpg": null, "upgA": { "name": "Relentless", "desc": "+50% Charge Distance" }, "upgB": { "name": "Devastating", "desc": "+100% Impact Damage" } },
+      "4": { "name": "Dragon Breath", "level": 0, "maxCd": 12.0, "baseDmg": 50, "selectedUpg": null, "upgA": { "name": "Inferno Nova", "desc": "Fires in a 360 circle" }, "upgB": { "name": "Deep Breath", "desc": "+50% Range" } }
+    }
+  },
+  "spellweaver": {
+    "name": "Spellweaver", "color": "#4fc3f7", "weapon": "staff", "baseMaxHp": 80, "dmgMult": 1.2, "basicAttackCD": 0.3, "basicDmg": 6,
+    "rareWeapon": { "name": "Archmagus Staff", "desc": "+200% DMG | RMB: Arcane Beam", "rmbSkill": "Arcane Beam" },
+    "rareArmor": { "name": "Robes of the Magi", "desc": "+60 Max HP | Basic attacks pierce 1 enemy" },
+    "rareAmulet": { "name": "Chronos Pendant", "desc": "Kills reduce all cooldowns by 0.5s" },
+    "skills": {
+      "1": { "name": "Fireball", "level": 1, "maxCd": 2.0, "baseDmg": 20, "selectedUpg": null, "upgA": { "name": "Blazing Speed", "desc": "+50% Projectile Speed & Range" }, "upgB": { "name": "Massive Eruption", "desc": "+50% Explosion Radius" } },
+      "2": { "name": "Frost Nova", "level": 0, "maxCd": 5.0, "baseDmg": 15, "selectedUpg": null, "upgA": { "name": "Deep Freeze", "desc": "Completely freezes enemies (0 Speed)" }, "upgB": { "name": "Widespread Cold", "desc": "+50% Radius" } },
+      "3": { "name": "Blink", "level": 0, "maxCd": 4.0, "baseDmg": 0, "selectedUpg": null, "upgA": { "name": "Arcane Arrival", "desc": "Shoots missile at nearest enemy" }, "upgB": { "name": "Frost Departure", "desc": "Leaves a Frost Nova at start" } },
+      "4": { "name": "Meteor", "level": 0, "maxCd": 10.0, "baseDmg": 100, "selectedUpg": null, "upgA": { "name": "Instant Impact", "desc": "Removes the 1s fall delay" }, "upgB": { "name": "Cataclysm", "desc": "+50% Radius" } }
+    }
+  },
+  "ranger": {
+    "name": "Ranger", "color": "#81c784", "weapon": "bow", "baseMaxHp": 120, "dmgMult": 1.0, "basicAttackCD": 0.25, "basicDmg": 5,
+    "rareWeapon": { "name": "Stormcaller Bow", "desc": "+200% DMG | RMB: Lightning Volley", "rmbSkill": "Lightning Volley" },
+    "rareArmor": { "name": "Windrunner Tunic", "desc": "+80 Max HP | +30% Base Move Speed" },
+    "rareAmulet": { "name": "Pendant of the Hunt", "desc": "Basic attacks fire two arrows" },
+    "skills": {
+      "1": { "name": "Ricochet Shot", "level": 1, "maxCd": 3.0, "baseDmg": 15, "bounces": 3, "selectedUpg": null, "upgA": { "name": "Chain Reaction", "desc": "+2 Bounces" }, "upgB": { "name": "Heavy Tips", "desc": "+50% Damage" } },
+      "2": { "name": "Volley", "level": 0, "maxCd": 4.0, "baseDmg": 12, "selectedUpg": null, "upgA": { "name": "Hail of Arrows", "desc": "Fires 2 additional arrows" }, "upgB": { "name": "Barbed Shafts", "desc": "Arrows pierce 1 enemy" } },
+      "3": { "name": "Leap", "level": 0, "maxCd": 5.0, "baseDmg": 0, "selectedUpg": null, "upgA": { "name": "Parting Shot", "desc": "Shoots arrow at nearest enemy" }, "upgB": { "name": "Agility", "desc": "Leap range increased by 50%" } },
+      "4": { "name": "Piercing Shot", "level": 0, "maxCd": 8.0, "baseDmg": 40, "selectedUpg": null, "upgA": { "name": "Ballista", "desc": "Projectile is 2x wider" }, "upgB": { "name": "Lethality", "desc": "+50% Damage" } }
+    }
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "melee": { "size": 28, "color": "#e53935", "baseSpeed": 110, "speedVar": 30, "baseHp": 10, "hpScale": 8, "baseDmg": 4, "dmgScale": 1.5, "baseXp": 10, "xpScale": 2 },
+  "ranged": { "size": 24, "color": "#ab47bc", "baseSpeed": 80, "speedVar": 0, "baseHp": 6, "hpScale": 4.8, "baseDmg": 4, "dmgScale": 1.5, "baseXp": 12, "xpScale": 2, "attackTimer": 1.0 },
+  "boss": { "size": 60, "color": "#ffeb3b", "baseSpeed": 60, "speedVar": 0, "baseHp": 400, "hpScale": 100, "baseDmg": 10, "dmgScale": 2, "baseXp": 200, "xpScale": 0, "attackTimer": 2.0 }
+}
