@@ -1,0 +1,63 @@
+Okay then, Let's do these changes:
+
+Basic system updates:
+- Let the player choose the starting skill. Also add a little description of the skills on the skill choosing menu. 
+- Ults should get the evolve after rank 5
+- The tanky enemies should have a slightly smaller shield and it shouldn't block all attacks but instead block a certain amount of dmg before the shield breaks
+- Move the UI to the bottom of the screen to make it more visible. Also add some style to it
+- Add a restart button when the game ends. (just reload the pagexd)
+- Add a unique rare boots and gloves option to the shop as well
+- reduce the dmg% buff of the rare weapons to 100% instead of 200%
+- The frenzy passive to the dragonknight sounded great. But then the Ranger and Spellweaver should have one as well. 
+
+Dragonknight rework: 
+- Add a bit more range to it's basic attack 
+- Implement the Defense mechanic you mentioned
+- The changes you mentioned to the boots and gloves (leap cd reduc, and knockback)
+- Implement the impact frames and harder hits
+- 1st ability: shield throw: throws the shield and it bounces back. If the dragonknight catches it they get a +shield for a short duration. It should bounce back from walls as well. 
+Evolves: 
+- 1st option: make the shield impact aoe dmg
+- 2nd option: longer and stronger shield
+- 2nd ability: the iron bulwark shield system
+Evolves: 
+- 1st option: a small aoe dmg when the player activates
+- 2nd option: a brief surge of movement speed and the first attack deals +dmg
+- 3rd ability: the thunderous leap you mentioned. 
+Evolves:
+- 1st option: the leap leaves and impact zone which detonates after a short delay
+- 2nd option: send out 4 small projectiles when you land
+- Ult: Should remain the dragon breath attack
+Evolves: 
+- 1st option: icy breath: the breath slows the targets as well. Change the color to light blue.
+- 2nd option: shieldbreaker: instantly breaks shields
+
+Ranger: 
+1st ability evolve:
+- 1st option: ricochet between more enemies
+- 2nd option: slows target and sets bleeding
+2nd ability rework: the volley should be the ult. the new 2nd ability should be a movement speed boost and slight healing.
+- 1st option: more healing
+- 2nd option: more movement speed
+3rd ability: make it more like the bandit warlords dash instead of a direct tp.
+Evolves:
+- launch an attack towards the nearest enemy
+- bigger jump range
+Ult: change this to the volley ability
+- 1st option: arrows pierce 1 enemy
+- 2nd option: fires +2 arrows
+
+Spellweaver: 
+1st ability evolve:
+- 1st option: faster projectile
+- 2nd option: leaves a burning surface for 0.75 seconds
+2nd ability evolve:
+- 1st option: Completely freezes the enemy (0 speed)
+- 2nd option: Gives a slight shield
+3rd ability evolve:
+- 1st option: shoots missile at nearest enemy
+- 2nd option: leaves a smaller frost nova at the casting position
+Ult evolve:
+- 1st option: reduced impact delay by 0.25. Totally removing it was waaay to OP
+- 2nd: a smaller second explosion after 1.5 sec
+

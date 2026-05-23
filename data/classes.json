@@ -1,38 +1,47 @@
 {
   "dragonknight": {
-    "name": "Dragonknight", "color": "#e53935", "weapon": "sword", "baseMaxHp": 200, "dmgMult": 0.8, "basicAttackCD": 0.4, "basicDmg": 8,
-    "rareWeapon": { "name": "Wyrmbane Greatsword", "desc": "+200% DMG | RMB: Wyrm Strike", "rmbSkill": "Wyrm Strike" },
+    "name": "Dragonknight", "color": "#e53935", "weapon": "sword", "baseMaxHp": 200, "baseArmor": 5, "dmgMult": 0.8, "basicAttackCD": 0.4, "basicDmg": 15,
+    "passive": "Frenzy: Melee hits grant +2% DMG and +2% Attack Speed (Max 10 stacks). Fades after 3s out of combat.",
+    "rareWeapon": { "name": "Wyrmbane Greatsword", "desc": "+100% DMG | RMB: Wyrm Strike", "rmbSkill": "Wyrm Strike" },
     "rareArmor": { "name": "Dragon Scale Plate", "desc": "+150 Max HP | Heals 5 HP on kill" },
     "rareAmulet": { "name": "Heart of the Mountain", "desc": "Stomp stuns for 4s & grants +50% Move Speed" },
+    "rareBoots": { "name": "Earthshaker Treads", "desc": "+20 Move Speed | Reduces Leap CD by 2.0s" },
+    "rareGloves": { "name": "Titan Gauntlets", "desc": "+10% Attack Speed | Basic attacks knock enemies back" },
     "skills": {
-      "1": { "name": "Whirlwind", "level": 1, "maxCd": 4.0, "baseDmg": 20, "selectedUpg": null, "upgA": { "name": "Vast Sweep", "desc": "+50% Radius" }, "upgB": { "name": "Savage Spin", "desc": "+50% Damage" } },
-      "2": { "name": "Ground Stomp", "level": 0, "maxCd": 6.0, "baseDmg": 10, "selectedUpg": null, "upgA": { "name": "Quake", "desc": "+50% Radius" }, "upgB": { "name": "Concussion", "desc": "Stuns for 4 seconds" } },
-      "3": { "name": "Charge Impact", "level": 0, "maxCd": 5.0, "baseDmg": 25, "selectedUpg": null, "upgA": { "name": "Relentless", "desc": "+50% Charge Distance" }, "upgB": { "name": "Devastating", "desc": "+100% Impact Damage" } },
-      "4": { "name": "Dragon Breath", "level": 0, "maxCd": 12.0, "baseDmg": 50, "selectedUpg": null, "upgA": { "name": "Inferno Nova", "desc": "Fires in a 360 circle" }, "upgB": { "name": "Deep Breath", "desc": "+50% Range" } }
+      "1": { "name": "Shield Throw", "level": 0, "maxCd": 4.0, "baseDmg": 30, "selectedUpg": null, "upgA": { "name": "Explosive Impact", "desc": "Deals AoE damage on hit" }, "upgB": { "name": "Aegis Catch", "desc": "Catching shield grants a 50% stronger shield" } },
+      "2": { "name": "Iron Bulwark", "level": 0, "maxCd": 8.0, "baseDmg": 20, "selectedUpg": null, "upgA": { "name": "Spiked Shield", "desc": "Deals AoE damage upon activation" }, "upgB": { "name": "Adrenaline Surge", "desc": "Grants brief MS boost and frenzy stacks" } },
+      "3": { "name": "Thunder Leap", "level": 0, "maxCd": 6.0, "baseDmg": 35, "selectedUpg": null, "upgA": { "name": "Aftershock", "desc": "Leaves a zone that detonates after a delay" }, "upgB": { "name": "Shrapnel Landing", "desc": "Shoots 4 projectiles outward upon landing" } },
+      "4": { "name": "Dragon Breath", "level": 0, "maxCd": 12.0, "baseDmg": 70, "selectedUpg": null, "upgA": { "name": "Glacial Breath", "desc": "Turns blue and heavily slows enemies" }, "upgB": { "name": "Shatter Breath", "desc": "Instantly shatters all enemy shields" } }
     }
   },
   "spellweaver": {
-    "name": "Spellweaver", "color": "#4fc3f7", "weapon": "staff", "baseMaxHp": 80, "dmgMult": 1.2, "basicAttackCD": 0.3, "basicDmg": 6,
-    "rareWeapon": { "name": "Archmagus Staff", "desc": "+200% DMG | RMB: Arcane Beam", "rmbSkill": "Arcane Beam" },
+    "name": "Spellweaver", "color": "#4fc3f7", "weapon": "staff", "baseMaxHp": 80, "baseArmor": 0, "dmgMult": 1.2, "basicAttackCD": 0.3, "basicDmg": 10,
+    "passive": "Arcane Resonance: Casting spells empowers your next basic attack to explode in an AoE.",
+    "rareWeapon": { "name": "Archmagus Staff", "desc": "+100% DMG | RMB: Arcane Beam", "rmbSkill": "Arcane Beam" },
     "rareArmor": { "name": "Robes of the Magi", "desc": "+60 Max HP | Basic attacks pierce 1 enemy" },
     "rareAmulet": { "name": "Chronos Pendant", "desc": "Kills reduce all cooldowns by 0.5s" },
+    "rareBoots": { "name": "Aether Treads", "desc": "+20 Move Speed | +50% Blink Range" },
+    "rareGloves": { "name": "Spellbinder Wraps", "desc": "+10% Attack Speed | Basic attacks bounce once" },
     "skills": {
-      "1": { "name": "Fireball", "level": 1, "maxCd": 2.0, "baseDmg": 20, "selectedUpg": null, "upgA": { "name": "Blazing Speed", "desc": "+50% Projectile Speed & Range" }, "upgB": { "name": "Massive Eruption", "desc": "+50% Explosion Radius" } },
-      "2": { "name": "Frost Nova", "level": 0, "maxCd": 5.0, "baseDmg": 15, "selectedUpg": null, "upgA": { "name": "Deep Freeze", "desc": "Completely freezes enemies (0 Speed)" }, "upgB": { "name": "Widespread Cold", "desc": "+50% Radius" } },
-      "3": { "name": "Blink", "level": 0, "maxCd": 4.0, "baseDmg": 0, "selectedUpg": null, "upgA": { "name": "Arcane Arrival", "desc": "Shoots missile at nearest enemy" }, "upgB": { "name": "Frost Departure", "desc": "Leaves a Frost Nova at start" } },
-      "4": { "name": "Meteor", "level": 0, "maxCd": 10.0, "baseDmg": 100, "selectedUpg": null, "upgA": { "name": "Instant Impact", "desc": "Removes the 1s fall delay" }, "upgB": { "name": "Cataclysm", "desc": "+50% Radius" } }
+      "1": { "name": "Fireball", "level": 0, "maxCd": 2.0, "baseDmg": 25, "selectedUpg": null, "upgA": { "name": "Velocity", "desc": "+100% Projectile Speed" }, "upgB": { "name": "Scorched Earth", "desc": "Leaves a burning surface for 0.75s" } },
+      "2": { "name": "Frost Nova", "level": 0, "maxCd": 5.0, "baseDmg": 20, "selectedUpg": null, "upgA": { "name": "Deep Freeze", "desc": "Completely freezes enemies (0 Speed)" }, "upgB": { "name": "Ice Barrier", "desc": "Grants a slight personal shield" } },
+      "3": { "name": "Blink", "level": 0, "maxCd": 4.0, "baseDmg": 25, "selectedUpg": null, "upgA": { "name": "Arcane Arrival", "desc": "Shoots missile at nearest enemy" }, "upgB": { "name": "Frost Departure", "desc": "Leaves a small Frost Nova at start position" } },
+      "4": { "name": "Meteor", "level": 0, "maxCd": 10.0, "baseDmg": 120, "selectedUpg": null, "upgA": { "name": "Accelerated Drop", "desc": "Reduces impact delay by 0.25s" }, "upgB": { "name": "Echo Blast", "desc": "Smaller secondary explosion after 1.5s" } }
     }
   },
   "ranger": {
-    "name": "Ranger", "color": "#81c784", "weapon": "bow", "baseMaxHp": 120, "dmgMult": 1.0, "basicAttackCD": 0.25, "basicDmg": 5,
-    "rareWeapon": { "name": "Stormcaller Bow", "desc": "+200% DMG | RMB: Lightning Volley", "rmbSkill": "Lightning Volley" },
+    "name": "Ranger", "color": "#81c784", "weapon": "bow", "baseMaxHp": 120, "baseArmor": 2, "dmgMult": 1.0, "basicAttackCD": 0.25, "basicDmg": 8,
+    "passive": "Fleetfoot: Continuous movement builds up momentum, granting up to +20% Damage. Stopping clears it.",
+    "rareWeapon": { "name": "Stormcaller Bow", "desc": "+100% DMG | RMB: Lightning Volley", "rmbSkill": "Lightning Volley" },
     "rareArmor": { "name": "Windrunner Tunic", "desc": "+80 Max HP | +30% Base Move Speed" },
     "rareAmulet": { "name": "Pendant of the Hunt", "desc": "Basic attacks fire two arrows" },
+    "rareBoots": { "name": "Zephyr Striders", "desc": "+30 Move Speed | Dash range +50%" },
+    "rareGloves": { "name": "Sniper's Grips", "desc": "+10% Attack Speed | Basic attacks pierce +1 target" },
     "skills": {
-      "1": { "name": "Ricochet Shot", "level": 1, "maxCd": 3.0, "baseDmg": 15, "bounces": 3, "selectedUpg": null, "upgA": { "name": "Chain Reaction", "desc": "+2 Bounces" }, "upgB": { "name": "Heavy Tips", "desc": "+50% Damage" } },
-      "2": { "name": "Volley", "level": 0, "maxCd": 4.0, "baseDmg": 12, "selectedUpg": null, "upgA": { "name": "Hail of Arrows", "desc": "Fires 2 additional arrows" }, "upgB": { "name": "Barbed Shafts", "desc": "Arrows pierce 1 enemy" } },
-      "3": { "name": "Leap", "level": 0, "maxCd": 5.0, "baseDmg": 0, "selectedUpg": null, "upgA": { "name": "Parting Shot", "desc": "Shoots arrow at nearest enemy" }, "upgB": { "name": "Agility", "desc": "Leap range increased by 50%" } },
-      "4": { "name": "Piercing Shot", "level": 0, "maxCd": 8.0, "baseDmg": 40, "selectedUpg": null, "upgA": { "name": "Ballista", "desc": "Projectile is 2x wider" }, "upgB": { "name": "Lethality", "desc": "+50% Damage" } }
+      "1": { "name": "Ricochet Shot", "level": 0, "maxCd": 3.0, "baseDmg": 18, "bounces": 3, "selectedUpg": null, "upgA": { "name": "Chain Reaction", "desc": "Bounces to more enemies" }, "upgB": { "name": "Barbed Tips", "desc": "Slows target and applies bleeding" } },
+      "2": { "name": "Nature's Stride", "level": 0, "maxCd": 8.0, "baseDmg": 0, "selectedUpg": null, "upgA": { "name": "Mending Winds", "desc": "Increases healing amount" }, "upgB": { "name": "Tailwind", "desc": "Increases movement speed boost" } },
+      "3": { "name": "Vault", "level": 0, "maxCd": 5.0, "baseDmg": 30, "selectedUpg": null, "upgA": { "name": "Parting Shot", "desc": "Launches an attack toward nearest enemy" }, "upgB": { "name": "Acrobatics", "desc": "Bigger jump range" } },
+      "4": { "name": "Volley", "level": 0, "maxCd": 10.0, "baseDmg": 30, "selectedUpg": null, "upgA": { "name": "Heavy Shafts", "desc": "Arrows pierce 1 enemy" }, "upgB": { "name": "Rain of Arrows", "desc": "Fires +2 additional arrows" } }
     }
   }
 }
