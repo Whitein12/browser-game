@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Browser ARPG - Data Driven Engine</title>
+    <title>Browser ARPG - Dungeon Update</title>
     <style>
         body { margin: 0; overflow: hidden; background: #111; color: #eee; font-family: monospace; user-select: none; }
         canvas { display: block; cursor: crosshair; }
@@ -29,7 +29,7 @@
         .hidden { display: none !important; }
         
         .btn { padding: 12px 24px; margin: 5px; font-size: 16px; font-family: monospace; font-weight: bold; cursor: pointer; background: #333; color: #fff; border: 2px solid #555; text-transform: uppercase; transition: 0.2s; }
-        .btn:hover:not(:disabled) { background: #555; }
+        .btn:hover:not(:disabled) { background: #555; transform: translateY(-2px); }
         .btn:disabled { opacity: 0.3; cursor: not-allowed; }
         .btn-gold { border-color: #ffd54f; color: #ffd54f; }
         
@@ -50,12 +50,20 @@
 <body>
     <div id="ui-layer">
         <div id="start-screen" class="modal-overlay">
-            <h1 style="color:#fff;">Select Your Class</h1>
             <div id="loading-text" style="color: #ffca28; font-size: 18px;">Connecting to Server & Loading Data...</div>
-            <div id="class-buttons" style="display: none;">
-                <button class="btn" style="border-color:#ef5350; color:#ef5350;" onclick="startGame('dragonknight')">Dragonknight</button>
-                <button class="btn" style="border-color:#4fc3f7; color:#4fc3f7;" onclick="startGame('spellweaver')">Spellweaver</button>
-                <button class="btn" style="border-color:#81c784; color:#81c784;" onclick="startGame('ranger')">Ranger</button>
+            
+            <div id="class-selection" class="hidden" style="text-align: center;">
+                <h1 style="color:#fff;">Select Your Class</h1>
+                <button class="btn" style="border-color:#ef5350; color:#ef5350;" onclick="chooseClass('dragonknight')">Dragonknight</button>
+                <button class="btn" style="border-color:#4fc3f7; color:#4fc3f7;" onclick="chooseClass('spellweaver')">Spellweaver</button>
+                <button class="btn" style="border-color:#81c784; color:#81c784;" onclick="chooseClass('ranger')">Ranger</button>
+            </div>
+
+            <div id="dungeon-selection" class="hidden" style="text-align: center;">
+                <h1 style="color:#fff;">Select Dungeon</h1>
+                <p style="color:#aaa;">Stage 1 & 2 encounters available.</p>
+                <button class="btn" style="border-color:#8bc34a; color:#8bc34a;" onclick="selectDungeon('slime_caves')">The Slime Caves</button>
+                <button class="btn" style="border-color:#ff9800; color:#ff9800;" onclick="selectDungeon('bandit_bastion')">Bandit Bastion</button>
             </div>
         </div>
 

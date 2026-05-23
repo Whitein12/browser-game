@@ -1,5 +1,17 @@
 {
-  "melee": { "size": 28, "color": "#e53935", "baseSpeed": 110, "speedVar": 30, "baseHp": 10, "hpScale": 8, "baseDmg": 4, "dmgScale": 1.5, "baseXp": 10, "xpScale": 2 },
-  "ranged": { "size": 24, "color": "#ab47bc", "baseSpeed": 80, "speedVar": 0, "baseHp": 6, "hpScale": 4.8, "baseDmg": 4, "dmgScale": 1.5, "baseXp": 12, "xpScale": 2, "attackTimer": 1.0 },
-  "boss": { "size": 60, "color": "#ffeb3b", "baseSpeed": 60, "speedVar": 0, "baseHp": 400, "hpScale": 100, "baseDmg": 10, "dmgScale": 2, "baseXp": 200, "xpScale": 0, "attackTimer": 2.0 }
+  "slime_caves": {
+    "minions": [
+      { "id": "slime_melee", "size": 28, "color": "#8bc34a", "baseSpeed": 110, "speedVar": 30, "baseHp": 10, "hpScale": 8, "baseDmg": 4, "dmgScale": 1.5, "baseXp": 10, "xpScale": 2, "type": "slime_melee", "weight": 0.7 },
+      { "id": "slime_ranged", "size": 24, "color": "#ab47bc", "baseSpeed": 80, "speedVar": 0, "baseHp": 6, "hpScale": 4.8, "baseDmg": 4, "dmgScale": 1.5, "baseXp": 12, "xpScale": 2, "type": "slime_ranged", "attackTimer": 1.0, "weight": 0.3 }
+    ],
+    "boss": { "id": "slime_boss", "size": 60, "color": "#cddc39", "baseSpeed": 60, "speedVar": 0, "baseHp": 400, "hpScale": 100, "baseDmg": 10, "dmgScale": 2, "baseXp": 200, "xpScale": 0, "type": "boss_slime", "attackTimer": 2.0 }
+  },
+  "bandit_bastion": {
+    "minions": [
+      { "id": "bandit_thief", "size": 26, "color": "#ff9800", "baseSpeed": 150, "speedVar": 20, "baseHp": 8, "hpScale": 6, "baseDmg": 5, "dmgScale": 1.8, "baseXp": 12, "xpScale": 2, "type": "thief", "weight": 0.4 },
+      { "id": "bandit_archer", "size": 24, "color": "#8d6e63", "baseSpeed": 70, "speedVar": 10, "baseHp": 7, "hpScale": 5, "baseDmg": 6, "dmgScale": 2.0, "baseXp": 14, "xpScale": 2, "type": "archer", "attackTimer": 1.0, "ammo": 3, "weight": 0.3 },
+      { "id": "bandit_shield", "size": 32, "color": "#78909c", "baseSpeed": 60, "speedVar": 5, "baseHp": 15, "hpScale": 12, "baseDmg": 3, "dmgScale": 1.2, "baseXp": 15, "xpScale": 2.5, "type": "shield", "weight": 0.3 }
+    ],
+    "boss": { "id": "bandit_warlord", "size": 50, "color": "#d84315", "baseSpeed": 80, "speedVar": 0, "baseHp": 450, "hpScale": 110, "baseDmg": 12, "dmgScale": 2.5, "baseXp": 250, "xpScale": 0, "type": "boss_warlord", "attackTimer": 2.0 }
+  }
 }

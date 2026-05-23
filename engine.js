@@ -31,7 +31,10 @@ const player = {
 let classDataConfig = {};
 let enemyDataConfig = {};
 let itemDataConfig = {};
+
+let selectedClassId = null;
 let activeClass = null;
+let activeDungeon = null;
 
 let equipment = { weapon: null, armor: null, amulet: null, boots: null, gloves: null };
 let inventory = [];
@@ -40,7 +43,7 @@ let evolvingSkillId = null;
 let isProcessingClick = false; 
 
 const cooldowns = { basic: 0, s1: 0, s2: 0, s3: 0, s4: 0, rmb: 0 };
-const buffs = { msBoost: 0 };
+const buffs = { rapidFire: 0, msBoost: 0, slowed: 0 };
 const enemies = []; const projectiles = []; const effects = []; const drops = [];
 
 const el = (id) => document.getElementById(id);
@@ -50,21 +53,16 @@ const el = (id) => document.getElementById(id);
 async function initializeData() {
     try {
         const [classesRes, enemiesRes, itemsRes] = await Promise.all([
-            fetch('data/classes.json'),
-            fetch('data/enemies.json'),
-            fetch('data/items.json')
+            fetch('data/classes.json'), fetch('data/enemies.json'), fetch('data/items.json')
         ]);
-        
-        if (!classesRes.ok || !enemiesRes.ok || !itemsRes.ok) {
-            throw new Error("Failed to fetch one or more JSON files.");
-        }
+        if (!classesRes.ok || !enemiesRes.ok || !itemsRes.ok) throw new Error("Fetch failed.");
 
         classDataConfig = await classesRes.json();
         enemyDataConfig = await enemiesRes.json();
         itemDataConfig = await itemsRes.json();
         
-        el('loading-text').style.display = 'none';
-        el('class-buttons').style.display = 'block';
+        el('loading-text').classList.add('hidden');
+        el('class-selection').classList.remove('hidden');
     } catch (e) {
         console.error("Failed to load JSON:", e);
         el('loading-text').innerText = "Error: Could not load data. Ensure Python server is running on localhost.";
@@ -72,6 +70,17 @@ async function initializeData() {
     }
 }
 initializeData();
+
+window.chooseClass = (cid) => {
+    selectedClassId = cid;
+    el('class-selection').classList.add('hidden');
+    el('dungeon-selection').classList.remove('hidden');
+};
+
+window.selectDungeon = (did) => {
+    activeDungeon = enemyDataConfig[did];
+    startGame(selectedClassId);
+};
 
 function startGame(className) {
     activeClass = JSON.parse(JSON.stringify(classDataConfig[className])); 
@@ -101,7 +110,6 @@ function recalcStats() {
     
     let gearMs = equipment.boots ? equipment.boots.val : 0;
     player.speed = 250 + gearMs;
-
     updateHUD();
 }
 
@@ -114,20 +122,35 @@ function calcDmg(baseAmount, skillLevel = 1) {
 
 function getCDR() {
     let cdr = 1.0;
-    if (equipment.amulet && equipment.amulet.type === 'amulet' && equipment.amulet.rarity !== 'rare') {
-        cdr -= equipment.amulet.val;
-    }
+    if (equipment.amulet && equipment.amulet.type === 'amulet' && equipment.amulet.rarity !== 'rare') cdr -= equipment.amulet.val;
     return Math.max(0.2, cdr); 
+}
+
+// --- Universal Damage Logic (Thief Evade & Shield Block) --- //
+function applyDamage(enemy, amount) {
+    if (enemy.type === 'thief' && Math.random() < 0.20) {
+        effects.push({ type: 'text', text: 'Evaded!', x: enemy.x, y: enemy.y - 20, color: '#fff', life: 0.6, maxLife: 0.6 });
+        return;
+    }
+    if (enemy.type === 'shield') {
+        const angleToPlayer = Math.atan2(player.y - enemy.y, player.x - enemy.x);
+        let diff = enemy.facingAngle - angleToPlayer;
+        while(diff < -Math.PI) diff += Math.PI*2; while(diff > Math.PI) diff -= Math.PI*2;
+        if (Math.abs(diff) < Math.PI / 2) {
+            amount *= 0.5;
+            effects.push({ type: 'text', text: 'Blocked', x: enemy.x, y: enemy.y - 20, color: '#78909c', life: 0.6, maxLife: 0.6 });
+        }
+    }
+    enemy.hp -= amount;
+    checkEnemyDeath(enemy);
 }
 
 function gainXP(amount) {
     player.xp += amount;
     let leveledUp = false;
     while (player.xp >= player.maxXp) {
-        player.level++; player.xp -= player.maxXp;
-        player.maxXp = Math.floor(player.maxXp * 1.5);
-        player.skillPoints++; 
-        leveledUp = true;
+        player.level++; player.xp -= player.maxXp; player.maxXp = Math.floor(player.maxXp * 1.5);
+        player.skillPoints++; leveledUp = true;
     }
     if (leveledUp && gameState === STATE.PLAYING) triggerLevelUp();
     updateHUD();
@@ -140,65 +163,46 @@ function generateItem(tierLevel) {
     
     const slotData = itemDataConfig.slotData[type];
     const val = tier * slotData.valMult;
-    
     let displayVal = (type === 'weapon' || type === 'gloves' || type === 'amulet') ? Math.round(val * 100) : Math.round(val);
-    const desc = slotData.descTemplate.replace('{VAL}', displayVal);
-    const name = `T${tier} ${slotData.namePrefix}`;
-    const price = tier * 25;
     
-    return { id: Math.random().toString(36).substr(2, 9), name, type, val, desc, price, rarity: 'common' };
+    return { id: Math.random().toString(36).substr(2, 9), name: `T${tier} ${slotData.namePrefix}`, type, val, desc: slotData.descTemplate.replace('{VAL}', displayVal), price: tier * 25, rarity: 'common' };
 }
 
 function triggerLevelUp() {
     if (gameState === STATE.EVOLVE || player.skillPoints <= 0) return;
-    gameState = STATE.LEVELUP;
-    isProcessingClick = false; 
+    gameState = STATE.LEVELUP; isProcessingClick = false; 
     
     el('levelup-screen').querySelector('h1').innerText = `LEVEL UP! (${player.skillPoints} Points)`;
     el('levelup-screen').classList.remove('hidden');
-    const container = el('skill-buttons');
-    container.innerHTML = '';
+    const container = el('skill-buttons'); container.innerHTML = '';
     
     let allMaxed = true;
-
     for (let i = 1; i <= 4; i++) {
         const sk = activeClass.skills[i];
-        const btn = document.createElement('button');
-        btn.className = 'btn';
+        const btn = document.createElement('button'); btn.className = 'btn';
         
-        if (i === 4 && player.level < 6) {
-            btn.innerText = `[LOCKED] ${sk.name} (Unlocks at Lv.6)`; btn.disabled = true;
-        } else if (sk.level >= 5) { 
-            btn.innerText = `${sk.name} (MAX LEVEL)`; btn.disabled = true; 
-        } else {
+        if (i === 4 && player.level < 6) { btn.innerText = `[LOCKED] ${sk.name} (Unlocks at Lv.6)`; btn.disabled = true; } 
+        else if (sk.level >= 5) { btn.innerText = `${sk.name} (MAX LEVEL)`; btn.disabled = true; } 
+        else {
             allMaxed = false; 
             if (sk.level === 0) btn.innerText = `Unlock ${sk.name}`;
-            else if (sk.level === 2) {
-                btn.innerText = `EVOLVE ${sk.name} (Rank 3)`;
-                btn.style.borderColor = '#ffca28'; btn.style.color = '#ffca28';
-            }
+            else if (sk.level === 2) { btn.innerText = `EVOLVE ${sk.name} (Rank 3)`; btn.style.borderColor = '#ffca28'; btn.style.color = '#ffca28'; }
             else btn.innerText = `Upgrade ${sk.name} (Lv.${sk.level} -> Lv.${sk.level + 1})`;
             
             btn.onclick = () => {
-                if (isProcessingClick) return;
-                isProcessingClick = true; 
-                if (sk.level === 2) triggerEvolution(i);
-                else { sk.level++; finishLevelUp(); }
+                if (isProcessingClick) return; isProcessingClick = true; 
+                if (sk.level === 2) triggerEvolution(i); else { sk.level++; finishLevelUp(); }
             };
         }
         container.appendChild(btn);
     }
 
     if (allMaxed) {
-        const btn = document.createElement('button');
-        btn.className = 'btn';
-        btn.style.borderColor = '#00e676'; btn.style.color = '#00e676';
+        const btn = document.createElement('button'); btn.className = 'btn'; btn.style.borderColor = '#00e676'; btn.style.color = '#00e676';
         btn.innerText = "All Skills Maxed! Gain +20 Max HP & +5% DMG";
         btn.onclick = () => {
-            if (isProcessingClick) return;
-            isProcessingClick = true;
-            player.maxHp += 20; player.hp += 20; player.bonusDmg += 0.05;
-            finishLevelUp();
+            if (isProcessingClick) return; isProcessingClick = true;
+            player.maxHp += 20; player.hp += 20; player.bonusDmg += 0.05; finishLevelUp();
         };
         container.appendChild(btn);
     }
@@ -206,8 +210,7 @@ function triggerLevelUp() {
 
 function triggerEvolution(skillIndex) {
     el('levelup-screen').classList.add('hidden');
-    gameState = STATE.EVOLVE;
-    evolvingSkillId = skillIndex;
+    gameState = STATE.EVOLVE; evolvingSkillId = skillIndex;
     const sk = activeClass.skills[skillIndex];
     
     el('upgrade-screen').classList.remove('hidden');
@@ -218,28 +221,24 @@ function triggerEvolution(skillIndex) {
 }
 
 window.selectUpgrade = function(path) {
-    if (gameState !== STATE.EVOLVE || isProcessingClick) return;
-    isProcessingClick = true;
+    if (gameState !== STATE.EVOLVE || isProcessingClick) return; isProcessingClick = true;
     const sk = activeClass.skills[evolvingSkillId];
     sk.level++; sk.selectedUpg = path;
-    el('upgrade-screen').classList.add('hidden');
-    finishLevelUp();
+    el('upgrade-screen').classList.add('hidden'); finishLevelUp();
 }
 
 function finishLevelUp() {
     player.skillPoints--;
     if (player.skillPoints > 0) { triggerLevelUp(); } 
     else {
-        el('levelup-screen').classList.add('hidden');
-        updateHUD();
+        el('levelup-screen').classList.add('hidden'); updateHUD();
         if (enemiesToSpawn === 0 && activeEnemies === 0) {
             gameState = STATE.INTERMISSION;
             el('intermission-title').innerText = isBossWave ? "Boss Defeated!" : "Wave Cleared";
             el('btn-shop').classList.toggle('hidden', !isBossWave); 
             el('intermission-screen').classList.remove('hidden');
         } else {
-            gameState = STATE.PLAYING;
-            lastTime = performance.now(); 
+            gameState = STATE.PLAYING; lastTime = performance.now(); 
         }
     }
 }
@@ -249,10 +248,7 @@ function startNextWave() {
     enemiesToSpawn = isBossWave ? 4 : 3 + Math.floor(wave * 2.5);
     activeEnemies = 0; enemySpawnTimer = 1.0;
     
-    el('intermission-screen').classList.add('hidden');
-    el('inventory-screen').classList.add('hidden');
-    el('shop-screen').classList.add('hidden');
-    
+    el('intermission-screen').classList.add('hidden'); el('inventory-screen').classList.add('hidden'); el('shop-screen').classList.add('hidden');
     player.hp = Math.min(player.maxHp, player.hp + (player.maxHp * 0.3)); 
     gameState = STATE.PLAYING; lastTime = performance.now(); updateHUD();
     
@@ -266,21 +262,20 @@ function spawnEnemy() {
     else { ex = Math.random() * canvas.width; ey = Math.random() < 0.5 ? -30 : canvas.height + 30; }
 
     if (isBossWave && !bossSpawned && enemiesToSpawn === 0) {
-        bossSpawned = true;
-        const b = enemyDataConfig.boss;
+        bossSpawned = true; const b = activeDungeon.boss;
         const bossHp = b.baseHp + (wave * b.hpScale);
-        enemies.push({ x: canvas.width/2, y: -50, size: b.size, color: b.color, speed: b.baseSpeed, hp: bossHp, maxHp: bossHp, type: 'boss', dmg: b.baseDmg + (wave * b.dmgScale), xp: b.baseXp, attackTimer: b.attackTimer, frozenTimer: 0 });
+        enemies.push({ x: canvas.width/2, y: -50, size: b.size, color: b.color, speed: b.baseSpeed, hp: bossHp, maxHp: bossHp, type: b.type, dmg: b.baseDmg + (wave * b.dmgScale), xp: b.baseXp, attackTimer: b.attackTimer, frozenTimer: 0, state: 'idle', stateTimer: 2.0, facingAngle: 0 });
         updateHUD(); return;
     }
 
-    const type = Math.random() < 0.7 ? 'melee' : 'ranged';
-    const d = enemyDataConfig[type];
-    const hpScale = d.baseHp + (wave * d.hpScale);
-    const dmgScale = d.baseDmg + (wave * d.dmgScale);
-    const speed = d.baseSpeed + Math.random() * d.speedVar;
-    const xp = d.baseXp + (wave * d.xpScale);
-
-    enemies.push({ x: ex, y: ey, size: d.size, color: d.color, speed: speed, hp: hpScale, maxHp: hpScale, type: type, dmg: dmgScale, xp: xp, attackTimer: d.attackTimer || 0, frozenTimer: 0 });
+    const roll = Math.random(); let cumulative = 0; let m = activeDungeon.minions[0];
+    for (const minion of activeDungeon.minions) { cumulative += minion.weight; if (roll <= cumulative) { m = minion; break; } }
+    
+    const hpScale = m.baseHp + (wave * m.hpScale);
+    const dmgScale = m.baseDmg + (wave * m.dmgScale);
+    const speed = m.baseSpeed + Math.random() * m.speedVar;
+    
+    enemies.push({ x: ex, y: ey, size: m.size, color: m.color, speed: speed, hp: hpScale, maxHp: hpScale, type: m.type, dmg: dmgScale, xp: m.baseXp + (wave * m.xpScale), attackTimer: m.attackTimer || 0, ammo: m.ammo || 0, frozenTimer: 0, facingAngle: 0 });
     updateHUD();
 }
 
@@ -298,12 +293,11 @@ function checkEnemyDeath(e) {
     if (e.hp <= 0) {
         if (activeClass.name === 'Dragonknight' && equipment.armor && equipment.armor.name === 'Dragon Scale Plate') player.hp = Math.min(player.maxHp, player.hp + 5);
         if (activeClass.name === 'Spellweaver' && equipment.amulet && equipment.amulet.name === 'Chronos Pendant') {
-            for(let i=1; i<=4; i++) cooldowns[`s${i}`] = Math.max(0, cooldowns[`s${i}`] - 0.5);
-            cooldowns.rmb = Math.max(0, cooldowns.rmb - 0.5);
+            for(let i=1; i<=4; i++) cooldowns[`s${i}`] = Math.max(0, cooldowns[`s${i}`] - 0.5); cooldowns.rmb = Math.max(0, cooldowns.rmb - 0.5);
         }
 
         const rates = itemDataConfig.dropChances;
-        if (e.type === 'boss') {
+        if (e.type.startsWith('boss')) {
             drops.push({ x: e.x + 20, y: e.y, type: 'item', itemData: generateItem(wave + 2), radius: 10, life: 30.0 });
             for(let i=0; i<5; i++) drops.push({ x: e.x - 20 + (i*10), y: e.y + (i*10), type: 'gold', val: 20 + wave*2, radius: 8, life: 30.0 });
         } else {
@@ -314,8 +308,7 @@ function checkEnemyDeath(e) {
         }
         
         gainXP(e.xp);
-        const idx = enemies.indexOf(e);
-        if (idx > -1) enemies.splice(idx, 1);
+        const idx = enemies.indexOf(e); if (idx > -1) enemies.splice(idx, 1);
         activeEnemies--; score++; updateHUD();
 
         if (enemiesToSpawn === 0 && activeEnemies === 0) {
@@ -330,6 +323,7 @@ function checkEnemyDeath(e) {
     }
 }
 
+// UI Nav exposed to global
 window.openInventory = () => { gameState = STATE.INVENTORY; el('intermission-screen').classList.add('hidden'); el('inventory-screen').classList.remove('hidden'); renderInventory(); }
 window.closeInventory = () => { el('inventory-screen').classList.add('hidden'); el('intermission-screen').classList.remove('hidden'); }
 window.openShop = () => { gameState = STATE.SHOP; el('intermission-screen').classList.add('hidden'); el('shop-screen').classList.remove('hidden'); generateShop(); renderShop(); }
@@ -339,8 +333,7 @@ window.startNextWave = startNextWave;
 function equipItem(itemIndex) {
     const item = inventory[itemIndex];
     if (equipment[item.type]) inventory.push(equipment[item.type]); 
-    equipment[item.type] = item;
-    inventory.splice(itemIndex, 1);
+    equipment[item.type] = item; inventory.splice(itemIndex, 1);
     recalcStats(); renderInventory();
 }
 
@@ -355,11 +348,9 @@ function renderInventory() {
     const list = el('backpack-list'); list.innerHTML = '';
     if (inventory.length === 0) list.innerHTML = '<span style="color:#666;">Backpack is empty.</span>';
     inventory.forEach((item, index) => {
-        const div = document.createElement('div');
-        div.className = `item-slot ${item.rarity === 'rare' ? 'rare' : ''}`;
+        const div = document.createElement('div'); div.className = `item-slot ${item.rarity === 'rare' ? 'rare' : ''}`;
         div.innerHTML = `<span>[${item.type.toUpperCase()}] ${item.name}</span> <span class="item-stats">${item.desc}</span>`;
-        div.onclick = () => equipItem(index);
-        list.appendChild(div);
+        div.onclick = () => equipItem(index); list.appendChild(div);
     });
 }
 
@@ -375,8 +366,7 @@ function renderShop() {
     el('shop-gold-display').innerText = `Your Gold: ${player.gold}`;
     const buyList = el('shop-buy-list'); buyList.innerHTML = '';
     shopItems.forEach((item, index) => {
-        const div = document.createElement('div');
-        div.className = `item-slot ${item.rarity === 'rare' ? 'rare' : ''}`;
+        const div = document.createElement('div'); div.className = `item-slot ${item.rarity === 'rare' ? 'rare' : ''}`;
         div.innerHTML = `<div><span>[${item.type.toUpperCase()}] ${item.name}</span><br><span class="item-stats">${item.desc}</span></div><div class="price-tag">${item.price}g</div>`;
         div.onclick = () => { if (player.gold >= item.price) { player.gold -= item.price; inventory.push(item); shopItems.splice(index, 1); renderShop(); updateHUD(); } };
         buyList.appendChild(div);
@@ -386,8 +376,7 @@ function renderShop() {
     if (inventory.length === 0) sellList.innerHTML = '<span style="color:#666;">Nothing to sell.</span>';
     inventory.forEach((item, index) => {
         const sellPrice = Math.floor(item.price * 0.5);
-        const div = document.createElement('div');
-        div.className = `item-slot ${item.rarity === 'rare' ? 'rare' : ''}`;
+        const div = document.createElement('div'); div.className = `item-slot ${item.rarity === 'rare' ? 'rare' : ''}`;
         div.innerHTML = `<div><span>[${item.type.toUpperCase()}] ${item.name}</span><br><span class="item-stats">${item.desc}</span></div><div class="price-tag">+${sellPrice}g</div>`;
         div.onclick = () => { player.gold += sellPrice; inventory.splice(index, 1); renderShop(); updateHUD(); };
         sellList.appendChild(div);
@@ -397,13 +386,9 @@ function renderShop() {
 function updateHUD() {
     if (!activeClass) return;
     el('class-name').innerText = `${activeClass.name} Lv.${player.level}`;
-    el('hp-bar').style.width = Math.max(0, (player.hp / player.maxHp * 100)) + '%';
-    el('hp-text').innerText = `${Math.ceil(player.hp)} / ${player.maxHp}`;
-    el('xp-bar').style.width = Math.max(0, (player.xp / player.maxXp * 100)) + '%';
-    el('xp-text').innerText = `${player.xp} / ${player.maxXp} XP`;
-    el('wave-display').innerText = `Wave ${wave}`;
-    el('wave-subtext').innerText = `Enemies Left: ${enemiesToSpawn + activeEnemies}`;
-    el('gold-display').innerText = `Gold: ${player.gold}`;
+    el('hp-bar').style.width = Math.max(0, (player.hp / player.maxHp * 100)) + '%'; el('hp-text').innerText = `${Math.ceil(player.hp)} / ${player.maxHp}`;
+    el('xp-bar').style.width = Math.max(0, (player.xp / player.maxXp * 100)) + '%'; el('xp-text').innerText = `${player.xp} / ${player.maxXp} XP`;
+    el('wave-display').innerText = `Wave ${wave}`; el('wave-subtext').innerText = `Enemies Left: ${enemiesToSpawn + activeEnemies}`; el('gold-display').innerText = `Gold: ${player.gold}`;
 
     let skillText = [];
     for(let i=1; i<=4; i++) { if (activeClass.skills[i].level > 0) skillText.push(`${i}: ${activeClass.skills[i].name}`); }
@@ -430,36 +415,19 @@ window.addEventListener('keydown', e => {
         return;
     }
     if (gameState !== STATE.PLAYING || player.hp <= 0) return;
-    if (k === 'w') keys.w = true; if (k === 'a') keys.a = true;
-    if (k === 's') keys.s = true; if (k === 'd') keys.d = true;
+    if (k === 'w') keys.w = true; if (k === 'a') keys.a = true; if (k === 's') keys.s = true; if (k === 'd') keys.d = true;
     for (let i=1; i<=4; i++) if (k === i.toString() && cooldowns[`s${i}`] <= 0 && activeClass.skills[i].level > 0) castSkill(i);
 });
 
 window.addEventListener('keyup', e => {
     const k = e.key.toLowerCase();
-    if (k === 'w') keys.w = false; if (k === 'a') keys.a = false;
-    if (k === 's') keys.s = false; if (k === 'd') keys.d = false;
+    if (k === 'w') keys.w = false; if (k === 'a') keys.a = false; if (k === 's') keys.s = false; if (k === 'd') keys.d = false;
 });
 
 function getVector(x1, y1, x2, y2) { const dx = x2 - x1; const dy = y2 - y1; return [dx, dy, Math.hypot(dx, dy)]; }
-
-function getNearestEnemy(range, excludeList = []) {
-    let nearest = null; let minDist = range;
-    for(const e of enemies) { 
-        if (excludeList.includes(e)) continue;
-        const dist = Math.hypot(e.x - player.x, e.y - player.y); 
-        if(dist < minDist) { minDist = dist; nearest = e; } 
-    }
-    return nearest;
-}
-
 function getNearestEnemyFromPoint(x, y, range, excludeList = []) {
     let nearest = null; let minDist = range;
-    for(const e of enemies) { 
-        if (excludeList.includes(e)) continue;
-        const dist = Math.hypot(e.x - x, e.y - y); 
-        if(dist < minDist) { minDist = dist; nearest = e; } 
-    }
+    for(const e of enemies) { if (excludeList.includes(e)) continue; const dist = Math.hypot(e.x - x, e.y - y); if(dist < minDist) { minDist = dist; nearest = e; } }
     return nearest;
 }
 
@@ -471,9 +439,8 @@ function castRMB() {
         for(let i=enemies.length-1; i>=0; i--) {
             const e = enemies[i];
             if (Math.hypot(player.x-e.x, player.y-e.y) <= 150 + e.size/2) {
-                let diff = Math.atan2(e.y-player.y, e.x-player.x) - attackAngle;
-                while(diff < -Math.PI) diff += Math.PI*2; while(diff > Math.PI) diff -= Math.PI*2;
-                if (Math.abs(diff) <= (Math.PI/1.5)/2) { e.hp -= calcDmg(80); checkEnemyDeath(e); }
+                let diff = Math.atan2(e.y-player.y, e.x-player.x) - attackAngle; while(diff < -Math.PI) diff += Math.PI*2; while(diff > Math.PI) diff -= Math.PI*2;
+                if (Math.abs(diff) <= (Math.PI/1.5)/2) applyDamage(e, calcDmg(80));
             }
         }
     } else if (activeClass.name === 'Spellweaver') {
@@ -485,7 +452,7 @@ function castRMB() {
             const e = enemies[i];
             let t = ((e.x - player.x) * (endX - player.x) + (e.y - player.y) * (endY - player.y)) / l2; t = Math.max(0, Math.min(1, t));
             const projX = player.x + t * (endX - player.x); const projY = player.y + t * (endY - player.y);
-            if (Math.hypot(e.x - projX, e.y - projY) < e.size/2 + 20) { e.hp -= calcDmg(120); checkEnemyDeath(e); }
+            if (Math.hypot(e.x - projX, e.y - projY) < e.size/2 + 20) applyDamage(e, calcDmg(120));
         }
     } else if (activeClass.name === 'Ranger') {
         const baseAngle = Math.atan2(mouseY - player.y, mouseX - player.x);
@@ -506,13 +473,13 @@ function castSkill(index) {
         if (index===1) {
             let radius = 100 + (sk.level*10); if (sk.selectedUpg === 'A') radius *= 1.5; if (sk.selectedUpg === 'B') dmg *= 1.5;
             effects.push({ type: 'circle', x: player.x, y: player.y, radius: radius, color: 'rgba(229, 57, 53, 0.4)', life: 0.25, maxLife: 0.25 });
-            for(let i=enemies.length-1; i>=0; i--) { if (Math.hypot(player.x-enemies[i].x, player.y-enemies[i].y) <= radius + enemies[i].size/2) { enemies[i].hp -= dmg; checkEnemyDeath(enemies[i]); } }
+            for(let i=enemies.length-1; i>=0; i--) { if (Math.hypot(player.x-enemies[i].x, player.y-enemies[i].y) <= radius + enemies[i].size/2) applyDamage(enemies[i], dmg); }
         }
         else if (index===2) {
             let radius = sk.selectedUpg === 'A' ? 180 : 120; let stunTime = sk.selectedUpg === 'B' ? 4.0 : 2.0;
             if (equipment.amulet && equipment.amulet.name === 'Heart of the Mountain') { stunTime = 4.0; buffs.msBoost = 3.0; }
             effects.push({ type: 'circle', x: player.x, y: player.y, radius: radius, color: '#ffb74d', life: 0.3, maxLife: 0.3 });
-            for(let i=enemies.length-1; i>=0; i--) { if (Math.hypot(player.x-enemies[i].x, player.y-enemies[i].y) <= radius + enemies[i].size/2) { enemies[i].hp -= dmg; enemies[i].frozenTimer = stunTime; checkEnemyDeath(enemies[i]); } }
+            for(let i=enemies.length-1; i>=0; i--) { if (Math.hypot(player.x-enemies[i].x, player.y-enemies[i].y) <= radius + enemies[i].size/2) { applyDamage(enemies[i], dmg); enemies[i].frozenTimer = stunTime; } }
         }
         else if (index===3) {
             const [dx, dy, dist] = getVector(player.x, player.y, mouseX, mouseY);
@@ -520,7 +487,7 @@ function castSkill(index) {
             effects.push({ type: 'line', x1: player.x, y1: player.y, x2: player.x + (dx/dist)*moveDist, y2: player.y + (dy/dist)*moveDist, color: '#e53935', life: 0.2, maxLife: 0.2 });
             player.x += (dx / dist) * moveDist; player.y += (dy / dist) * moveDist;
             effects.push({ type: 'circle', x: player.x, y: player.y, radius: 80, color: '#ef5350', life: 0.3, maxLife: 0.3 });
-            for(let i=enemies.length-1; i>=0; i--) { if (Math.hypot(player.x-enemies[i].x, player.y-enemies[i].y) <= 80 + enemies[i].size/2) { enemies[i].hp -= dmg; checkEnemyDeath(enemies[i]); } }
+            for(let i=enemies.length-1; i>=0; i--) { if (Math.hypot(player.x-enemies[i].x, player.y-enemies[i].y) <= 80 + enemies[i].size/2) applyDamage(enemies[i], dmg); }
         }
         else if (index===4) {
             const attackAngle = Math.atan2(mouseY - player.y, mouseX - player.x);
@@ -529,7 +496,7 @@ function castSkill(index) {
             for(let i=enemies.length-1; i>=0; i--) {
                 if (Math.hypot(player.x-enemies[i].x, player.y-enemies[i].y) <= range + enemies[i].size/2) {
                     let diff = Math.atan2(enemies[i].y-player.y, enemies[i].x-player.x) - attackAngle; while(diff < -Math.PI) diff += Math.PI*2; while(diff > Math.PI) diff -= Math.PI*2;
-                    if (Math.abs(diff) <= spread/2) { enemies[i].hp -= dmg; checkEnemyDeath(enemies[i]); }
+                    if (Math.abs(diff) <= spread/2) applyDamage(enemies[i], dmg);
                 }
             }
         }
@@ -544,7 +511,7 @@ function castSkill(index) {
             effects.push({ type: 'circle', x: player.x, y: player.y, radius: radius, color: '#81d4fa', life: 0.4, maxLife: 0.4 });
             for(let i=enemies.length-1; i>=0; i--) {
                 if (Math.hypot(player.x-enemies[i].x, player.y-enemies[i].y) <= radius + enemies[i].size/2) {
-                    enemies[i].hp -= dmg; if(sk.selectedUpg === 'A') enemies[i].speed = 0; enemies[i].frozenTimer = 3.0; checkEnemyDeath(enemies[i]); 
+                    applyDamage(enemies[i], dmg); if(sk.selectedUpg === 'A') enemies[i].speed = 0; enemies[i].frozenTimer = 3.0; 
                 }
             }
         }
@@ -554,7 +521,7 @@ function castSkill(index) {
             effects.push({ type: 'circle', x: player.x, y: player.y, radius: player.radius, color: player.color, life: 0.2, maxLife: 0.2 });
             player.x += (dx / dist) * moveDist; player.y += (dy / dist) * moveDist;
             if (sk.selectedUpg === 'A') {
-                let target = getNearestEnemy(400);
+                let target = getNearestEnemyFromPoint(player.x, player.y, 400);
                 if (target) {
                     const [tx, ty, td] = getVector(player.x, player.y, target.x, target.y);
                     projectiles.push({ x: player.x, y: player.y, vx: (tx/td)*600, vy: (ty/td)*600, radius: 8, color: '#e040fb', life: 1.5, type: 'basic', damage: calcDmg(30), pierce: false, isEnemy: false });
@@ -562,28 +529,27 @@ function castSkill(index) {
             }
             if (sk.selectedUpg === 'B') {
                 effects.push({ type: 'circle', x: startX, y: startY, radius: 100, color: '#81d4fa', life: 0.3, maxLife: 0.3 });
-                for(let i=enemies.length-1; i>=0; i--) { if (Math.hypot(startX-enemies[i].x, startY-enemies[i].y) <= 100 + enemies[i].size/2) { enemies[i].hp -= dmg; enemies[i].frozenTimer = 2.0; checkEnemyDeath(enemies[i]); } }
+                for(let i=enemies.length-1; i>=0; i--) { if (Math.hypot(startX-enemies[i].x, startY-enemies[i].y) <= 100 + enemies[i].size/2) { applyDamage(enemies[i], dmg); enemies[i].frozenTimer = 2.0; } }
             }
         }
         else if (index===4) {
             const tx = mouseX; const ty = mouseY; let radius = sk.selectedUpg === 'B' ? 180 : 120;
             if (sk.selectedUpg === 'A') {
                 effects.push({ type: 'circle', x: tx, y: ty, radius: radius, color: '#ff5722', life: 0.4, maxLife: 0.4 });
-                for(let i=enemies.length-1; i>=0; i--) { if (Math.hypot(tx-enemies[i].x, ty-enemies[i].y) <= radius + enemies[i].size/2) { enemies[i].hp -= dmg; checkEnemyDeath(enemies[i]); } }
+                for(let i=enemies.length-1; i>=0; i--) { if (Math.hypot(tx-enemies[i].x, ty-enemies[i].y) <= radius + enemies[i].size/2) applyDamage(enemies[i], dmg); }
             } else {
                 effects.push({ type: 'circle', x: tx, y: ty, radius: radius, color: 'rgba(255, 87, 34, 0.3)', life: 1.0, maxLife: 1.0, isWarning: true });
                 setTimeout(() => {
                     if(gameState!==STATE.PLAYING) return;
                     effects.push({ type: 'circle', x: tx, y: ty, radius: radius, color: '#ff5722', life: 0.4, maxLife: 0.4 });
-                    for(let i=enemies.length-1; i>=0; i--) { if (Math.hypot(tx-enemies[i].x, ty-enemies[i].y) <= radius + enemies[i].size/2) { enemies[i].hp -= dmg; checkEnemyDeath(enemies[i]); } }
+                    for(let i=enemies.length-1; i>=0; i--) { if (Math.hypot(tx-enemies[i].x, ty-enemies[i].y) <= radius + enemies[i].size/2) applyDamage(enemies[i], dmg); }
                 }, 1000);
             }
         }
     } else if (activeClass.name === 'Ranger') {
         if (index===1) {
             const [dx, dy, dist] = getVector(player.x, player.y, mouseX, mouseY);
-            let bounces = sk.selectedUpg === 'A' ? 5 : 3;
-            if (sk.selectedUpg === 'B') dmg *= 1.5;
+            let bounces = sk.selectedUpg === 'A' ? 5 : 3; if (sk.selectedUpg === 'B') dmg *= 1.5;
             if(dist>0) projectiles.push({ x: player.x, y: player.y, vx: (dx/dist)*900, vy: (dy/dist)*900, radius: 6, color: '#ffeb3b', life: 3.0, type: 'ricochet', damage: dmg, pierce: false, isEnemy: false, bounces: bounces, hitList: [] });
         }
         else if (index===2) {
@@ -600,7 +566,7 @@ function castSkill(index) {
             effects.push({ type: 'circle', x: player.x, y: player.y, radius: player.radius, color: player.color, life: 0.2, maxLife: 0.2 });
             player.x += (dx / dist) * moveDist; player.y += (dy / dist) * moveDist;
             if (sk.selectedUpg === 'A') {
-                let target = getNearestEnemy(400);
+                let target = getNearestEnemyFromPoint(player.x, player.y, 400);
                 if (target) {
                     const [tx, ty, td] = getVector(player.x, player.y, target.x, target.y);
                     projectiles.push({ x: player.x, y: player.y, vx: (tx/td)*1000, vy: (ty/td)*1000, radius: 6, color: '#00e676', life: 1.5, type: 'pierce', damage: calcDmg(40), pierce: true, hitList: [], isEnemy: false });
@@ -615,10 +581,11 @@ function castSkill(index) {
     }
 }
 
+// Fixed Attack Speed Model: 0.15s hard lock + variable gear cooldown
 function castBasic() {
-    const baseAttackCD = activeClass.basicAttackCD;
+    const ANIM_LOCK = 0.15;
     let gloveBonus = equipment.gloves ? equipment.gloves.val : 0; 
-    cooldowns.basic = (baseAttackCD * getCDR()) / (1.0 + gloveBonus);
+    cooldowns.basic = ANIM_LOCK + ((activeClass.basicAttackCD * getCDR()) / (1.0 + gloveBonus));
     const dmg = calcDmg(activeClass.basicDmg, 1);
     
     if (activeClass.weapon === 'sword') {
@@ -628,7 +595,7 @@ function castBasic() {
             const e = enemies[i];
             if (Math.hypot(player.x-e.x, player.y-e.y) <= 75 + e.size/2) {
                 let diff = Math.atan2(e.y-player.y, e.x-player.x) - attackAngle; while(diff < -Math.PI) diff += Math.PI*2; while(diff > Math.PI) diff -= Math.PI*2;
-                if (Math.abs(diff) <= (Math.PI/1.5)/2) { e.hp -= dmg; checkEnemyDeath(e); }
+                if (Math.abs(diff) <= (Math.PI/1.5)/2) applyDamage(e, dmg);
             }
         }
     } else {
@@ -651,6 +618,7 @@ function update(dt) {
     if (cooldowns.rmb > 0) cooldowns.rmb -= dt;
     for(let i=1; i<=4; i++) if (cooldowns[`s${i}`] > 0) cooldowns[`s${i}`] -= dt;
     if (buffs.msBoost > 0) buffs.msBoost -= dt;
+    if (buffs.slowed > 0) buffs.slowed -= dt;
 
     let cdText = [];
     for(let i=1; i<=4; i++) { if (activeClass.skills[i].level > 0) cdText.push(`${i}: ${Math.max(0, cooldowns[`s${i}`]).toFixed(1)}s`); }
@@ -662,8 +630,10 @@ function update(dt) {
     let vx = 0; let vy = 0;
     if (keys.w) vy -= 1; if (keys.s) vy += 1; if (keys.a) vx -= 1; if (keys.d) vx += 1;
     const mag = Math.hypot(vx, vy);
-    let currentSpeed = player.speed; if (buffs.msBoost > 0) currentSpeed *= 1.5;
-    if (activeClass.name === 'Ranger' && equipment.armor && equipment.armor.name === 'Windrunner Tunic') currentSpeed *= 1.3;
+    
+    let currentSpeed = player.speed; 
+    if (buffs.msBoost > 0) currentSpeed *= 1.5;
+    if (buffs.slowed > 0) currentSpeed *= 0.5;
 
     if (mag > 0) {
         player.x += (vx / mag) * currentSpeed * dt; player.y += (vy / mag) * currentSpeed * dt;
@@ -703,23 +673,19 @@ function update(dt) {
                         let explRadius = p.sourceSkill && p.sourceSkill.selectedUpg === 'B' ? 120 : 80;
                         effects.push({ type: 'circle', x: p.x, y: p.y, radius: explRadius, color: '#ff7043', life: 0.3, maxLife: 0.3 });
                         for(let k=enemies.length-1; k>=0; k--) {
-                            if (Math.hypot(p.x - enemies[k].x, p.y - enemies[k].y) <= explRadius + enemies[k].size/2) { enemies[k].hp -= p.damage; checkEnemyDeath(enemies[k]); }
+                            if (Math.hypot(p.x - enemies[k].x, p.y - enemies[k].y) <= explRadius + enemies[k].size/2) applyDamage(enemies[k], p.damage);
                         }
                     } else if (p.type === 'ricochet') {
-                        e.hp -= p.damage; checkEnemyDeath(e);
+                        applyDamage(e, p.damage);
                         if (p.bounces > 0) {
                             p.bounces--; p.hitList.push(e);
                             let nextT = getNearestEnemyFromPoint(p.x, p.y, 400, p.hitList);
-                            if (nextT) {
-                                const [nx, ny, nd] = getVector(p.x, p.y, nextT.x, nextT.y);
-                                p.vx = (nx/nd)*900; p.vy = (ny/nd)*900;
-                            } else { hit = true; } 
+                            if (nextT) { const [nx, ny, nd] = getVector(p.x, p.y, nextT.x, nextT.y); p.vx = (nx/nd)*900; p.vy = (ny/nd)*900; } 
+                            else { hit = true; } 
                         } else { hit = true; }
-                    } else { e.hp -= p.damage; checkEnemyDeath(e); }
+                    } else { applyDamage(e, p.damage); }
                     
-                    if (p.pierce || p.type === 'ricochet') { 
-                        if (p.type !== 'ricochet') p.hitList.push(e); 
-                    } else { hit = true; break; }
+                    if (p.pierce || p.type === 'ricochet') { if (p.type !== 'ricochet') p.hitList.push(e); } else { hit = true; break; }
                 }
             }
             if (hit) projectiles.splice(i, 1);
@@ -729,28 +695,91 @@ function update(dt) {
     for (let i = enemies.length - 1; i >= 0; i--) {
         const e = enemies[i];
         if (e.frozenTimer > 0) { e.frozenTimer -= dt; e.color = '#90caf9'; } 
-        else { e.color = e.type === 'melee' ? '#e53935' : e.type === 'ranged' ? '#ab47bc' : '#ffeb3b'; }
+        else { e.color = e.type === 'thief' ? '#ff9800' : e.type === 'archer' ? '#8d6e63' : e.type === 'shield' ? '#78909c' : e.type === 'boss_warlord' ? '#d84315' : e.type === 'boss_slime' ? '#cddc39' : e.type === 'slime_ranged' ? '#ab47bc' : '#8bc34a'; }
 
-        const currentSpeed = (e.speed === 0 || e.frozenTimer > 0) ? (e.speed === 0 ? 0 : e.speed * 0.3) : e.speed;
+        const curSpd = (e.speed === 0 || e.frozenTimer > 0) ? (e.speed === 0 ? 0 : e.speed * 0.3) : e.speed;
         const [edx, edy, edist] = getVector(e.x, e.y, player.x, player.y);
         
-        if (e.type === 'melee') {
-            if (edist > 0) { e.x += (edx/edist)*currentSpeed*dt; e.y += (edy/edist)*currentSpeed*dt; }
-            if (edist < player.radius + e.size / 2) { player.hp -= e.dmg * dt; if (player.hp < 0) player.hp = 0; updateHUD(); }
-        } else if (e.type === 'ranged') {
-            if (edist > 250) { e.x += (edx/edist)*currentSpeed*dt; e.y += (edy/edist)*currentSpeed*dt; }
+        if (edist > 0) {
+            let targetAngle = Math.atan2(edy, edx);
+            if (e.type === 'shield') {
+                let diff = targetAngle - (e.facingAngle || 0);
+                while(diff < -Math.PI) diff += Math.PI*2; while(diff > Math.PI) diff -= Math.PI*2;
+                e.facingAngle = (e.facingAngle || 0) + diff * 3.0 * dt; 
+            } else {
+                e.facingAngle = targetAngle;
+            }
+        }
+
+        if (e.type === 'slime_melee' || e.type === 'thief' || e.type === 'shield') {
+            if (edist > 0) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
+            if (edist < player.radius + e.size / 2) { 
+                player.hp -= e.dmg * dt; if (player.hp < 0) player.hp = 0; updateHUD(); 
+                if (e.type === 'slime_melee') buffs.slowed = 0.5; 
+            }
+        } else if (e.type === 'slime_ranged' || e.type === 'archer') {
+            if (edist > 250) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
             e.attackTimer -= dt;
             if (e.attackTimer <= 0 && edist <= 400 && e.frozenTimer <= 0) {
-                e.attackTimer = 2.5; projectiles.push({ x: e.x, y: e.y, vx: (edx/edist)*350, vy: (edy/edist)*350, radius: 6, color: '#e040fb', life: 3.0, isEnemy: true, damage: e.dmg });
+                projectiles.push({ x: e.x, y: e.y, vx: (edx/edist)*350, vy: (edy/edist)*350, radius: 6, color: e.type==='archer' ? '#8d6e63' : '#e040fb', life: 3.0, isEnemy: true, damage: e.dmg });
+                if (e.type === 'archer') {
+                    e.ammo--; if (e.ammo <= 0) { e.ammo = 3; e.attackTimer = 2.0; } else { e.attackTimer = 0.4; } 
+                } else { e.attackTimer = 2.5; }
             }
-        } else if (e.type === 'boss') {
-            if (edist > 100) { e.x += (edx/edist)*currentSpeed*dt; e.y += (edy/edist)*currentSpeed*dt; }
-            e.attackTimer -= dt;
-            if (e.attackTimer <= 0 && e.frozenTimer <= 0) {
-                e.attackTimer = 2.5;
-                for(let r=0; r<8; r++) { const angle = (Math.PI*2/8) * r; projectiles.push({ x: e.x, y: e.y, vx: Math.cos(angle)*250, vy: Math.sin(angle)*250, radius: 8, color: '#ff3d00', life: 4.0, isEnemy: true, damage: e.dmg }); }
+        } else if (e.type === 'boss_slime') {
+            e.stateTimer -= dt;
+            if (e.state === 'idle') {
+                if (edist > 50) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
+                if (e.stateTimer <= 0 && e.frozenTimer <= 0) {
+                    if (Math.random() < 0.5) { e.state = 'bounce_telegraph'; e.stateTimer = 1.0; e.dashTargetX = player.x; e.dashTargetY = player.y; } 
+                    else { e.state = 'fireball'; e.stateTimer = 0.5; }
+                }
+            } else if (e.state === 'fireball') {
+                if (e.stateTimer <= 0) {
+                    for(let r=0; r<4; r++) { const angle = (Math.PI*2/4) * r + (Math.PI/4); projectiles.push({ x: e.x, y: e.y, vx: Math.cos(angle)*300, vy: Math.sin(angle)*300, radius: 10, color: '#ff3d00', life: 4.0, isEnemy: true, damage: e.dmg }); }
+                    e.state = 'idle'; e.stateTimer = 2.0;
+                }
+            } else if (e.state === 'bounce_telegraph') {
+                effects.push({ type: 'circle', x: e.dashTargetX, y: e.dashTargetY, radius: 100, color: 'rgba(255, 235, 59, 0.3)', life: 0.1, maxLife: 0.1 });
+                if (e.stateTimer <= 0) {
+                    e.x = e.dashTargetX; e.y = e.dashTargetY;
+                    effects.push({ type: 'circle', x: e.x, y: e.y, radius: 100, color: 'rgba(255, 235, 59, 0.7)', life: 0.3, maxLife: 0.3 });
+                    if (Math.hypot(e.x - player.x, e.y - player.y) <= 100 + player.radius) { player.hp -= e.dmg * 2; if (player.hp < 0) player.hp = 0; updateHUD(); }
+                    e.state = 'idle'; e.stateTimer = 2.0;
+                }
             }
-            if (edist < player.radius + e.size / 2) { player.hp -= e.dmg * 2 * dt; if (player.hp < 0) player.hp = 0; updateHUD(); }
+        } else if (e.type === 'boss_warlord') {
+            e.stateTimer -= dt;
+            if (e.state === 'idle') {
+                if (edist > 80) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
+                if (e.stateTimer <= 0 && e.frozenTimer <= 0) {
+                    if (Math.random() < 0.5) { e.state = 'knife_volley'; e.stateTimer = 0.5; } 
+                    else { e.state = 'dash_telegraph'; e.stateTimer = 0.4; e.dashTargetX = player.x + (edx/edist)*250; e.dashTargetY = player.y + (edy/edist)*250; }
+                }
+            } else if (e.state === 'knife_volley') {
+                if (e.stateTimer <= 0) {
+                    const baseAngle = Math.atan2(edy, edx);
+                    for(let r=-2; r<=2; r++) { projectiles.push({ x: e.x, y: e.y, vx: Math.cos(baseAngle+(r*0.15))*500, vy: Math.sin(baseAngle+(r*0.15))*500, radius: 6, color: '#ff9800', life: 2.0, isEnemy: true, damage: e.dmg }); }
+                    e.state = 'idle'; e.stateTimer = 2.0;
+                }
+            } else if (e.state === 'dash_telegraph') {
+                effects.push({ type: 'circle', x: e.x, y: e.y, radius: e.size, color: 'rgba(216, 67, 21, 0.2)', life: 0.1, maxLife: 0.1 });
+                if (e.stateTimer <= 0) { 
+                    e.state = 'dash_execute'; 
+                    e.stateTimer = 0.1; 
+                    e.dashSpeedX = (e.dashTargetX - e.x) / 0.1; 
+                    e.dashSpeedY = (e.dashTargetY - e.y) / 0.1; 
+                }
+            } else if (e.state === 'dash_execute') {
+                e.x += e.dashSpeedX * dt; 
+                e.y += e.dashSpeedY * dt;
+                
+                e.x = Math.max(e.size/2, Math.min(canvas.width - e.size/2, e.x));
+                e.y = Math.max(e.size/2, Math.min(canvas.height - e.size/2, e.y));
+
+                if (Math.hypot(e.x - player.x, e.y - player.y) < e.size/2 + player.radius) { player.hp -= e.dmg * 2; if (player.hp < 0) player.hp = 0; updateHUD(); }
+                if (e.stateTimer <= 0) { e.state = 'idle'; e.stateTimer = 2.0; }
+            }
         }
     }
 }
@@ -774,13 +803,22 @@ function draw() {
         if (ef.type === 'circle') { ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.radius, 0, Math.PI*2); if (ef.isWarning) { ctx.strokeStyle = '#ff5722'; ctx.lineWidth = 2; ctx.stroke(); } ctx.fill(); } 
         else if (ef.type === 'line') { ctx.strokeStyle = ef.color; ctx.lineWidth = 40; ctx.beginPath(); ctx.moveTo(ef.x1, ef.y1); ctx.lineTo(ef.x2, ef.y2); ctx.stroke(); } 
         else if (ef.type === 'cone') { ctx.beginPath(); ctx.moveTo(ef.x, ef.y); ctx.arc(ef.x, ef.y, ef.radius, ef.angle - ef.spread/2, ef.angle + ef.spread/2); ctx.closePath(); ctx.fill(); }
+        else if (ef.type === 'text') { ctx.font = '16px monospace'; ctx.textAlign = 'center'; ctx.fillText(ef.text, ef.x, ef.y - (1.0 - (ef.life/ef.maxLife)) * 30); }
         ctx.globalAlpha = 1.0;
     }
 
     for (const e of enemies) {
         ctx.fillStyle = e.color;
-        if (e.type === 'ranged' || e.type === 'boss') { ctx.beginPath(); ctx.arc(e.x, e.y, e.size/2, 0, Math.PI*2); ctx.fill(); } else { ctx.fillRect(e.x - e.size/2, e.y - e.size/2, e.size, e.size); }
-        if (e.type !== 'boss') { ctx.fillStyle = '#000'; ctx.fillRect(e.x - e.size/2, e.y - e.size/2 - 12, e.size, 4); ctx.fillStyle = '#4caf50'; ctx.fillRect(e.x - e.size/2, e.y - e.size/2 - 12, e.size * (e.hp/e.maxHp), 4); }
+        if (e.type === 'slime_ranged' || e.type.startsWith('boss')) { ctx.beginPath(); ctx.arc(e.x, e.y, e.size/2, 0, Math.PI*2); ctx.fill(); } 
+        else { ctx.fillRect(e.x - e.size/2, e.y - e.size/2, e.size, e.size); }
+        
+        if (e.type === 'shield') {
+            ctx.strokeStyle = '#fff'; ctx.lineWidth = 4; ctx.beginPath();
+            ctx.arc(e.x, e.y, e.size/2 + 2, e.facingAngle - Math.PI/2, e.facingAngle + Math.PI/2);
+            ctx.stroke();
+        }
+
+        if (!e.type.startsWith('boss')) { ctx.fillStyle = '#000'; ctx.fillRect(e.x - e.size/2, e.y - e.size/2 - 12, e.size, 4); ctx.fillStyle = '#4caf50'; ctx.fillRect(e.x - e.size/2, e.y - e.size/2 - 12, e.size * (e.hp/e.maxHp), 4); }
     }
 
     for (const p of projectiles) {
@@ -807,7 +845,7 @@ function draw() {
         ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.fillStyle = '#d32f2f'; ctx.font = '64px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('YOU DIED', canvas.width/2, canvas.height/2);
     }
 
-    const boss = enemies.find(e => e.type === 'boss');
+    const boss = enemies.find(e => e.type.startsWith('boss'));
     if (boss) {
         const bw = 400; const bh = 20; const bx = canvas.width/2 - bw/2; const by = 30;
         ctx.fillStyle = '#111'; ctx.fillRect(bx, by, bw, bh); ctx.fillStyle = '#ffeb3b'; ctx.fillRect(bx, by, bw * (boss.hp/boss.maxHp), bh);
