@@ -19,7 +19,7 @@ let mouseX = canvas.width / 2; let mouseY = canvas.height / 2;
 const player = { 
     x: 0, y: 0, radius: 18, speed: 250,
     level: 1, xp: 0, maxXp: 50,
-    baseHp: 100, hp: 100, maxHp: 100, shield: 0,
+    baseHp: 100, hp: 100, maxHp: 100, shield: 0, shieldTimer: 0,
     gold: 0, bonusDmg: 0.0, skillPoints: 0, armor: 0,
     frenzyStacks: 0, frenzyTimer: 0, momentum: 0, arcaneResonance: false
 };
@@ -61,7 +61,7 @@ function startGame(className) {
     player.level = 1; player.xp = 0; player.maxXp = 50; player.gold = 0; player.bonusDmg = 0.0; player.skillPoints = 1;
     wave = 0; equipment = { weapon: null, armor: null, amulet: null, boots: null, gloves: null }; inventory = [];
     
-    recalcStats(); player.hp = player.maxHp;
+    recalcStats(); player.hp = player.maxHp; player.shield = 0; player.shieldTimer = 0;
     enemies.length = 0; projectiles.length = 0; effects.length = 0; drops.length = 0;
     
     el('start-screen').classList.add('hidden'); el('hud').classList.remove('hidden');
@@ -95,7 +95,6 @@ function getCDR() {
 }
 
 function applyDamage(enemy, amount, source = 'player') {
-    // Only apply hitstop frames for direct impacts, NOT Damage-over-Time (puddles)
     if (source !== 'dot') hitStopTimer = 0.04;
 
     if (enemy.type === 'thief' && Math.random() < 0.20) {
@@ -112,8 +111,7 @@ function applyDamage(enemy, amount, source = 'player') {
         }
     }
     
-    if (activeClass.name === 'Ranger' && activeClass.skills[1].selectedUpg === 'B' && source !== 'magic' && source !== 'dot') enemy.hp -= (amount * 1.2); 
-    else enemy.hp -= amount;
+    enemy.hp -= amount;
 
     if (activeClass.name === 'Dragonknight' && source === 'melee') {
         player.frenzyStacks = Math.min(10, player.frenzyStacks + 1); player.frenzyTimer = 3.0;
@@ -166,11 +164,10 @@ function triggerLevelUp(customTitle = null) {
         const sk = activeClass.skills[i];
         const btn = document.createElement('button'); btn.className = 'btn';
         
-        // Strict Ultimate Lock at Level 5
         if (i === 4 && player.level < 5 && sk.level === 0) { 
             btn.innerText = `[LOCKED] ${sk.name} (Unlocks at Lv.5)`; btn.disabled = true; 
         } 
-        else if (sk.level >= 4) { // Rank 4 is max (0=Unlock, 1=Upg, 2=Upg, 3=Evolve to Rank4)
+        else if (sk.level >= 4) { 
             btn.innerText = `${sk.name} (MAX LEVEL)`; btn.disabled = true; 
         } 
         else {
@@ -250,16 +247,16 @@ function spawnEnemy() {
         bossSpawned = true; 
         const b = (isStage2 && activeDungeon.stage2_boss) ? activeDungeon.stage2_boss : activeDungeon.stage1_boss; 
         const bossHp = b.baseHp + (wave * b.hpScale);
-        const bossSpeed = b.baseSpeed + (wave * 2.0); // Slight boss speed scaling
-        enemies.push({ x: canvas.width/2, y: -50, size: b.size, color: b.color, speed: bossSpeed, hp: bossHp, maxHp: bossHp, type: b.type, dmg: b.baseDmg + (wave * b.dmgScale), xp: b.baseXp, attackTimer: b.attackTimer, meleeTimer: 0, frozenTimer: 0, state: 'idle', stateTimer: b.stateTimer || 2.0, facingAngle: 0, puddleTimer: 0, attackIndex: 0 });
+        const bossSpeed = b.baseSpeed + (wave * 2.0);
+        enemies.push({ x: canvas.width/2, y: -50, size: b.size, color: b.color, speed: bossSpeed, hp: bossHp, maxHp: bossHp, type: b.type, dmg: b.baseDmg + (wave * b.dmgScale), xp: b.baseXp, attackTimer: b.attackTimer, meleeTimer: 0, frozenTimer: 0, state: 'idle', stateTimer: b.stateTimer || 2.0, facingAngle: 0, puddleTimer: 0, bleedTimer: 0, bleedDmg: 0 });
         updateHUD(); return;
     }
 
     const roll = Math.random(); let cumulative = 0; let m = minionList[0];
     for (const minion of minionList) { cumulative += minion.weight; if (roll <= cumulative) { m = minion; break; } }
     
-    const speed = m.baseSpeed + Math.random() * m.speedVar + (wave * 2.5); // Enemies get faster per wave
-    enemies.push({ x: ex, y: ey, size: m.size, color: m.color, speed: speed, hp: m.baseHp + (wave * m.hpScale), maxHp: m.baseHp + (wave * m.hpScale), type: m.type, dmg: m.baseDmg + (wave * m.dmgScale), xp: m.baseXp + (wave * m.xpScale), attackTimer: m.attackTimer || 0, meleeTimer: 0, ammo: m.ammo || 0, frozenTimer: 0, facingAngle: 0, shieldHp: m.shieldHp, shieldMax: m.shieldMax, puddleTimer: m.puddleTimer || 0 });
+    const speed = m.baseSpeed + Math.random() * m.speedVar + (wave * 2.5); 
+    enemies.push({ x: ex, y: ey, size: m.size, color: m.color, speed: speed, hp: m.baseHp + (wave * m.hpScale), maxHp: m.baseHp + (wave * m.hpScale), type: m.type, dmg: m.baseDmg + (wave * m.dmgScale), xp: m.baseXp + (wave * m.xpScale), attackTimer: m.attackTimer || 0, meleeTimer: 0, ammo: m.ammo || 0, frozenTimer: 0, facingAngle: 0, shieldHp: m.shieldHp, shieldMax: m.shieldMax, puddleTimer: m.puddleTimer || 0, bleedTimer: 0, bleedDmg: 0 });
     updateHUD();
 }
 
@@ -293,7 +290,7 @@ function checkEnemyDeath(e) {
         gainXP(e.xp); const idx = enemies.indexOf(e); if (idx > -1) enemies.splice(idx, 1);
         activeEnemies--; score++; updateHUD();
 
-        if (enemiesToSpawn === 0 && activeEnemies === 0) {
+        if (enemiesToSpawn <= 0 && activeEnemies <= 0) {
             collectAllDrops();
             if (gameState === STATE.PLAYING) { 
                 gameState = STATE.INTERMISSION; el('intermission-title').innerText = isBossWave ? "Boss Defeated!" : "Wave Cleared"; el('btn-shop').classList.toggle('hidden', !isBossWave); el('intermission-screen').classList.remove('hidden');
@@ -331,10 +328,10 @@ function renderInventory() {
 function generateShop() {
     shopItems = []; for(let i=0; i<3; i++) shopItems.push(generateItem(wave + 2)); 
     shopItems.push({ id: 'rare_wep', name: activeClass.rareWeapon.name, type: 'weapon', val: 1.0, desc: activeClass.rareWeapon.desc, price: 250, rarity: 'rare' });
-    shopItems.push({ id: 'rare_arm', name: activeClass.rareArmor.name, type: 'armor', val: activeClass.name==='Dragonknight'?150:activeClass.name==='Ranger'?80:60, desc: activeClass.rareArmor.desc, price: 200, rarity: 'rare' });
-    shopItems.push({ id: 'rare_amu', name: activeClass.rareAmulet.name, type: 'amulet', val: 0, desc: activeClass.rareAmulet.desc, price: 200, rarity: 'rare' });
-    shopItems.push({ id: 'rare_bot', name: activeClass.rareBoots.name, type: 'boots', val: activeClass.name==='Ranger'?30:20, desc: activeClass.rareBoots.desc, price: 150, rarity: 'rare' });
-    shopItems.push({ id: 'rare_glv', name: activeClass.rareGloves.name, type: 'gloves', val: 0.1, desc: activeClass.rareGloves.desc, price: 150, rarity: 'rare' });
+    shopItems.push({ id: 'rare_arm', name: activeClass.rareArmor.name, type: 'armor', val: activeClass.name==='Dragonknight'?200:activeClass.name==='Ranger'?120:100, desc: activeClass.rareArmor.desc, price: 200, rarity: 'rare' });
+    shopItems.push({ id: 'rare_amu', name: activeClass.rareAmulet.name, type: 'amulet', val: 0.20, desc: activeClass.rareAmulet.desc, price: 200, rarity: 'rare' });
+    shopItems.push({ id: 'rare_bot', name: activeClass.rareBoots.name, type: 'boots', val: 50, desc: activeClass.rareBoots.desc, price: 150, rarity: 'rare' });
+    shopItems.push({ id: 'rare_glv', name: activeClass.rareGloves.name, type: 'gloves', val: 0.25, desc: activeClass.rareGloves.desc, price: 150, rarity: 'rare' });
 }
 
 function renderShop() {
@@ -506,7 +503,7 @@ function castSkill(index) {
         }
         else if (index===2) {
             effects.push({ type: 'circle', x: player.x, y: player.y, radius: 180, color: '#81d4fa', life: 0.4, maxLife: 0.4 });
-            if (sk.selectedUpg === 'B') player.shield += 40;
+            if (sk.selectedUpg === 'B') { player.shield += 40; player.shieldTimer = 5.0; }
             for(let i=enemies.length-1; i>=0; i--) {
                 if (Math.hypot(player.x-enemies[i].x, player.y-enemies[i].y) <= 180 + enemies[i].size/2) {
                     applyDamage(enemies[i], dmg, 'magic'); if(sk.selectedUpg === 'A') enemies[i].speed = 0; enemies[i].frozenTimer = 3.0; 
@@ -635,6 +632,7 @@ function update(dt) {
     if (buffs.slowed > 0) buffs.slowed -= dt;
     if (buffs.ironBulwark > 0) buffs.ironBulwark -= dt;
 
+    if (player.shield > 0) { player.shieldTimer -= dt; if (player.shieldTimer <= 0) { player.shield = 0; updateHUD(); } }
     if (activeClass && activeClass.name === 'Dragonknight') { if (player.frenzyTimer > 0) { player.frenzyTimer -= dt; if (player.frenzyTimer <= 0) player.frenzyStacks = 0; } }
 
     let cdText = [];
@@ -666,12 +664,11 @@ function update(dt) {
             else if (d.type === 'dmg') { player.bonusDmg += 0.05; } 
             else if (d.type === 'gold') { player.gold += d.val; }
             else if (d.type === 'item') { inventory.push(d.itemData); }
-            else if (d.type === 'shield_catch') { let shieldAmt = d.skill && d.skill.selectedUpg === 'B' ? 100 : 50; player.shield += shieldAmt; }
+            else if (d.type === 'shield_catch') { let shieldAmt = d.skill && d.skill.selectedUpg === 'B' ? 100 : 50; player.shield += shieldAmt; player.shieldTimer = 5.0; }
             drops.splice(i, 1); updateHUD();
         }
     }
 
-    // Apply continuous ground effects
     for (let i = effects.length - 1; i >= 0; i--) { 
         effects[i].life -= dt; 
         if (effects[i].type === 'fire_puddle') {
@@ -728,7 +725,7 @@ function update(dt) {
                     if ((p.pierce || p.type === 'shield_throw') && p.hitList.includes(e)) continue;
 
                     if (p.type === 'fireball' || p.resonance) {
-                        let explRadius = p.sourceSkill && p.sourceSkill.selectedUpg === 'B' ? 100 : 70;
+                        let explRadius = p.sourceSkill && p.sourceSkill.selectedUpg === 'B' ? 120 : 80;
                         effects.push({ type: 'circle', x: p.x, y: p.y, radius: explRadius, color: '#ff7043', life: 0.3, maxLife: 0.3 });
                         if (p.sourceSkill && p.sourceSkill.selectedUpg === 'B') {
                             effects.push({ type: 'fire_puddle', x: p.x, y: p.y, radius: explRadius, color: 'rgba(255, 87, 34, 0.4)', life: 0.75, maxLife: 0.75, dmg: p.damage * 0.5 });
@@ -746,7 +743,7 @@ function update(dt) {
                         }
                     } else if (p.type === 'ricochet') {
                         applyDamage(e, p.damage, 'ranged');
-                        if (p.sourceSkill && p.sourceSkill.selectedUpg === 'B') e.frozenTimer = 1.0; 
+                        if (p.sourceSkill && p.sourceSkill.selectedUpg === 'B') { e.frozenTimer = 1.0; e.bleedTimer = 3.0; e.bleedDmg = p.damage * 0.4; } 
                         if (p.bounces > 0) {
                             p.bounces--; p.hitList.push(e);
                             let nextT = null; let minDist = 400;
@@ -768,10 +765,21 @@ function update(dt) {
         if (e.frozenTimer > 0) { e.frozenTimer -= dt; e.color = '#90caf9'; } 
         else { e.color = e.type === 'thief' ? '#ff9800' : e.type === 'archer' ? '#8d6e63' : e.type === 'shield' ? '#78909c' : e.type === 'boss_warlord' ? '#d84315' : e.type === 'boss_slime' ? '#cddc39' : e.type === 'slime_ranged' ? '#ab47bc' : e.type === 'voltaic_ooze' ? '#03a9f4' : e.type === 'toxic_sludge' ? '#009688' : e.type === 'boss_amalgam' ? '#004d40' : e.type === 'amalgam_minion' ? '#4db6ac' : '#8bc34a'; }
 
+        if (e.bleedTimer > 0) {
+            e.bleedTimer -= dt; applyDamage(e, e.bleedDmg * dt, 'dot');
+            if (Math.random() < 0.1) effects.push({ type: 'circle', x: e.x, y: e.y, radius: 4, color: '#f44336', life: 0.2, maxLife: 0.2 });
+        }
+
         const curSpd = (e.speed === 0 || e.frozenTimer > 0) ? (e.speed === 0 ? 0 : e.speed * 0.3) : e.speed;
         const [edx, edy, edist] = getVector(e.x, e.y, player.x, player.y);
         
         if (e.meleeTimer > 0) e.meleeTimer -= dt; 
+
+        // Soft Entity Collision against Player (Prevents perfect overlapping/sticking)
+        if (edist < player.radius + e.size / 2 && e.state !== 'dash_execute' && e.state !== 'bounce_telegraph') {
+            let overlap = (player.radius + e.size / 2) - edist;
+            e.x -= (edx / edist) * overlap; e.y -= (edy / edist) * overlap;
+        }
 
         if (edist > 0) {
             let targetAngle = Math.atan2(edy, edx);
@@ -782,7 +790,7 @@ function update(dt) {
 
         if (e.type === 'slime_melee' || e.type === 'thief' || e.type === 'shield' || e.type === 'voltaic_ooze' || e.type === 'toxic_sludge') {
             if (edist > 0) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
-            if (edist < player.radius + e.size / 2) { 
+            if (edist < player.radius + e.size / 2 + 5) { 
                 if (e.meleeTimer <= 0) { takeDamage(e.dmg); e.meleeTimer = 1.0; }
                 if (e.type === 'slime_melee') buffs.slowed = 0.5; 
             }
@@ -800,12 +808,12 @@ function update(dt) {
                 else { e.attackTimer = 2.5; }
             }
         } else if (e.type === 'boss_slime') {
-            if (edist < player.radius + e.size / 2 && e.meleeTimer <= 0) { takeDamage(e.dmg); e.meleeTimer = 1.0; }
+            if (edist < player.radius + e.size / 2 + 5 && e.meleeTimer <= 0) { takeDamage(e.dmg); e.meleeTimer = 1.0; }
             e.stateTimer -= dt;
             if (e.state === 'idle') {
                 if (edist > 50) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
                 if (e.stateTimer <= 0 && e.frozenTimer <= 0) {
-                    if (Math.random() < 0.5) { e.state = 'bounce_telegraph'; e.stateTimer = 1.0; e.dashTargetX = player.x; e.dashTargetY = player.y; } else { e.state = 'fireball'; e.stateTimer = 0.5; }
+                    if (Math.random() < 0.5) { e.state = 'bounce_telegraph'; e.stateTimer = 0.6; e.dashTargetX = player.x; e.dashTargetY = player.y; } else { e.state = 'fireball'; e.stateTimer = 0.5; }
                 }
             } else if (e.state === 'fireball') {
                 if (e.stateTimer <= 0) {
@@ -825,38 +833,41 @@ function update(dt) {
             e.stateTimer -= dt;
             if (e.state === 'idle') {
                 if (edist > 60) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
-                if (edist < player.radius + e.size / 2 && e.meleeTimer <= 0) { takeDamage(e.dmg); e.meleeTimer = 1.0; }
+                if (edist < player.radius + e.size / 2 + 5 && e.meleeTimer <= 0) { takeDamage(e.dmg); e.meleeTimer = 1.0; }
                 if (e.stateTimer <= 0 && e.frozenTimer <= 0) { 
-                    e.attackIndex = (e.attackIndex || 0) + 1;
-                    const nextAtk = e.attackIndex % 3;
-                    if (nextAtk === 1) { e.state = 'chase'; e.stateTimer = 3.0; effects.push({ type: 'text', text: 'ENRAGE!', x: e.x, y: e.y - 40, color: '#ff5252', life: 1.0, maxLife: 1.0 }); }
-                    else if (nextAtk === 2) { e.state = 'spit'; e.stateTimer = 0.5; e.shotsFired = 0; }
-                    else { e.state = 'summon'; e.stateTimer = 1.0; effects.push({ type: 'text', text: 'SUMMON!', x: e.x, y: e.y - 40, color: '#4db6ac', life: 1.0, maxLife: 1.0 });}
+                    e.attackIndex = (e.attackIndex || 0) + 1; const nextAtk = e.attackIndex % 3;
+                    if (nextAtk === 1) { e.state = 'stampede'; e.stateTimer = 3.0; e.puddleTimer = 0; effects.push({ type: 'text', text: 'STAMPEDE!', x: e.x, y: e.y - 40, color: '#ff5252', life: 1.0, maxLife: 1.0 }); }
+                    else if (nextAtk === 2) { e.state = 'nova'; e.stateTimer = 1.0; effects.push({ type: 'text', text: 'TOXIC NOVA!', x: e.x, y: e.y - 40, color: '#009688', life: 1.0, maxLife: 1.0 });}
+                    else { e.state = 'summon'; e.stateTimer = 1.0; effects.push({ type: 'text', text: 'ASSIMILATE!', x: e.x, y: e.y - 40, color: '#4db6ac', life: 1.0, maxLife: 1.0 });}
                 }
-            } else if (e.state === 'chase') {
-                let chaseSpd = curSpd * 2.5;
+            } else if (e.state === 'stampede') {
+                let chaseSpd = curSpd * 2.2;
                 if (edist > 0) { e.x += (edx/edist)*chaseSpd*dt; e.y += (edy/edist)*chaseSpd*dt; }
-                if (edist < player.radius + e.size / 2 && e.meleeTimer <= 0) { takeDamage(e.dmg * 1.5); e.meleeTimer = 1.0; }
-                if (e.stateTimer <= 0) { e.state = 'idle'; e.stateTimer = 2.0; }
-            } else if (e.state === 'spit') {
+                if (edist < player.radius + e.size / 2 + 5 && e.meleeTimer <= 0) { takeDamage(e.dmg * 1.5); e.meleeTimer = 1.0; }
+                e.puddleTimer -= dt;
+                if (e.puddleTimer <= 0) { effects.push({ type: 'puddle', x: e.x, y: e.y, radius: 30, color: '#009688', life: 2.0, maxLife: 2.0 }); e.puddleTimer = 0.3; }
+                if (e.stateTimer <= 0) { e.state = 'idle'; e.stateTimer = 1.5; }
+            } else if (e.state === 'nova') {
                 if (e.stateTimer <= 0) {
-                    if (edist > 0) projectiles.push({ x: e.x, y: e.y, vx: (edx/edist)*600, vy: (edy/edist)*600, radius: 10, color: '#009688', life: 2.0, isEnemy: true, damage: e.dmg, type: 'boss_slimeball' });
-                    e.shotsFired++;
-                    if (e.shotsFired >= 3) { e.state = 'idle'; e.stateTimer = 2.0; } else { e.stateTimer = 0.4; }
+                    for (let r=0; r<12; r++) { const angle = (Math.PI*2/12) * r; projectiles.push({ x: e.x, y: e.y, vx: Math.cos(angle)*400, vy: Math.sin(angle)*400, radius: 10, color: '#009688', life: 2.5, isEnemy: true, damage: e.dmg, type: 'boss_slimeball' }); }
+                    e.state = 'idle'; e.stateTimer = 2.0;
                 }
             } else if (e.state === 'summon') {
                 if (e.stateTimer <= 0) {
-                    for(let i=0; i<3; i++) {
-                        const angle = (Math.PI*2/3) * i + Math.random();
-                        enemies.push({ x: e.x + Math.cos(angle)*50, y: e.y + Math.sin(angle)*50, size: 24, color: '#4db6ac', speed: 90, hp: 60, maxHp: 60, type: 'amalgam_minion', dmg: e.dmg, xp: 0, frozenTimer: 0, facingAngle: 0, meleeTimer: 0 });
+                    for(let i=0; i<4; i++) {
+                        const angle = (Math.PI*2/4) * i + Math.random();
+                        let mx = e.x + Math.cos(angle)*250; let my = e.y + Math.sin(angle)*250;
+                        mx = Math.max(24, Math.min(canvas.width - 24, mx)); my = Math.max(24, Math.min(canvas.height - 24, my));
+                        enemies.push({ x: mx, y: my, size: 24, color: '#4db6ac', speed: curSpd * 1.5, hp: 60, maxHp: 60, type: 'amalgam_minion', dmg: e.dmg, xp: 0, frozenTimer: 0, facingAngle: 0, meleeTimer: 0 });
+                        activeEnemies++;
                     }
-                    e.state = 'idle'; e.stateTimer = 3.0;
+                    e.state = 'idle'; e.stateTimer = 4.0;
                 }
             } else if (e.state === 'devastate') {
-                if (e.stateTimer > 0) { effects.push({ type: 'circle', x: e.x, y: e.y, radius: 250, color: 'rgba(0, 150, 136, 0.2)', life: 0.1, maxLife: 0.1 }); } 
+                if (e.stateTimer > 0) { effects.push({ type: 'circle', x: e.x, y: e.y, radius: 300, color: 'rgba(0, 150, 136, 0.3)', life: 0.1, maxLife: 0.1 }); } 
                 else {
-                    effects.push({ type: 'circle', x: e.x, y: e.y, radius: 250, color: '#004d40', life: 0.5, maxLife: 0.5 });
-                    if (edist <= 250 + player.radius) takeDamage(e.dmg * 4);
+                    effects.push({ type: 'circle', x: e.x, y: e.y, radius: 300, color: '#004d40', life: 0.5, maxLife: 0.5 });
+                    if (edist <= 300 + player.radius) takeDamage(e.dmg * 3);
                     e.state = 'idle'; e.stateTimer = 2.0;
                 }
             }
@@ -867,15 +878,16 @@ function update(dt) {
                 if (bdist > boss.size/2) { e.x += (bx/bdist)*curSpd*dt; e.y += (by/bdist)*curSpd*dt; } 
                 else {
                     boss.state = 'devastate'; boss.stateTimer = 1.0;
+                    boss.hp = Math.min(boss.maxHp, boss.hp + boss.maxHp * 0.1); 
                     effects.push({ type: 'text', text: 'ABSORBED!', x: boss.x, y: boss.y - 40, color: '#ff5252', life: 1.0, maxLife: 1.0 });
-                    enemies.splice(i, 1); continue;
+                    enemies.splice(i, 1); activeEnemies--; continue;
                 }
             } else {
                 if (edist > 0) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
-                if (edist < player.radius + e.size / 2 && e.meleeTimer <= 0) { takeDamage(e.dmg); e.meleeTimer = 1.0; }
+                if (edist < player.radius + e.size / 2 + 5 && e.meleeTimer <= 0) { takeDamage(e.dmg); e.meleeTimer = 1.0; }
             }
         } else if (e.type === 'boss_warlord') {
-            if (edist < player.radius + e.size / 2 && e.meleeTimer <= 0) { takeDamage(e.dmg); e.meleeTimer = 1.0; }
+            if (edist < player.radius + e.size / 2 + 5 && e.meleeTimer <= 0) { takeDamage(e.dmg); e.meleeTimer = 1.0; }
             e.stateTimer -= dt;
             if (e.state === 'idle') {
                 if (edist > 80) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
