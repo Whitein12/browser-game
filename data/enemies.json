@@ -19,9 +19,9 @@
     ],
     "stage1_boss": { "id": "bandit_warlord", "size": 50, "color": "#d84315", "baseSpeed": 85, "speedVar": 0, "baseHp": 600, "hpScale": 120, "baseDmg": 18, "dmgScale": 2.5, "baseXp": 250, "xpScale": 0, "type": "boss_warlord", "attackTimer": 2.0 },
     "stage2_minions": [
-      { "id": "bandit_horse", "size": 36, "color": "#795548", "baseSpeed": 110, "speedVar": 20, "baseHp": 40, "hpScale": 15, "baseDmg": 15, "dmgScale": 2.5, "baseXp": 15, "xpScale": 3, "type": "horse", "weight": 0.4 },
-      { "id": "bandit_trapper", "size": 26, "color": "#5d4037", "baseSpeed": 80, "speedVar": 10, "baseHp": 25, "hpScale": 8, "baseDmg": 10, "dmgScale": 1.5, "baseXp": 14, "xpScale": 3, "type": "trapper", "attackTimer": 2.0, "weight": 0.3 },
-      { "id": "bandit_caster", "size": 28, "color": "#ffeb3b", "baseSpeed": 60, "speedVar": 5, "baseHp": 30, "hpScale": 10, "baseDmg": 5, "dmgScale": 1.0, "baseXp": 16, "xpScale": 3, "type": "caster", "weight": 0.3 }
+      { "id": "bandit_horse", "size": 36, "color": "#795548", "baseSpeed": 110, "speedVar": 20, "baseHp": 40, "hpScale": 15, "baseDmg": 15, "dmgScale": 2.5, "baseXp": 15, "xpScale": 3, "type": "horse", "weight": 0.65 },
+      { "id": "bandit_trapper", "size": 26, "color": "#5d4037", "baseSpeed": 80, "speedVar": 10, "baseHp": 25, "hpScale": 8, "baseDmg": 10, "dmgScale": 1.5, "baseXp": 14, "xpScale": 3, "type": "trapper", "attackTimer": 2.0, "weight": 0.25 },
+      { "id": "bandit_caster", "size": 28, "color": "#ffeb3b", "baseSpeed": 60, "speedVar": 5, "baseHp": 30, "hpScale": 10, "baseDmg": 5, "dmgScale": 1.0, "baseXp": 16, "xpScale": 3, "type": "caster", "weight": 0.10 }
     ],
     "stage2_boss": { "id": "beastmaster", "size": 60, "color": "#3e2723", "baseSpeed": 90, "speedVar": 0, "baseHp": 1500, "hpScale": 220, "baseDmg": 22, "dmgScale": 3, "baseXp": 450, "xpScale": 0, "type": "boss_beastmaster", "stateTimer": 3.0 }
   }

@@ -236,8 +236,9 @@ const EnemyAI = {
     'archer': RangedAI,
     
     'caster': (e, dt, curSpd, edx, edy, edist, i) => {
-        if (edist > 350) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
-        effects.push({ type: 'circle', x: e.x, y: e.y, radius: 300, color: 'rgba(255, 235, 59, 0.05)', life: 0.1, maxLife: 0.1 });
+        if (edist > 400) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
+        else if (edist < 250) { e.x -= (edx/edist)*curSpd*dt; e.y -= (edy/edist)*curSpd*dt; } 
+        effects.push({ type: 'circle', x: e.x, y: e.y, radius: 400, color: 'rgba(255, 235, 59, 0.05)', life: 0.1, maxLife: 0.1 });
     },
     'trapper': (e, dt, curSpd, edx, edy, edist, i) => {
         if (edist > 300) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
@@ -252,14 +253,15 @@ const EnemyAI = {
         }
     },
     'horse': (e, dt, curSpd, edx, edy, edist, i) => {
+        if (edist < player.radius + e.size / 2 + 5 && e.meleeTimer <= 0 && (!e.state || e.state === 'idle')) { takeDamage(e.dmg); e.meleeTimer = 1.0; }
         e.stateTimer -= dt;
         if (!e.state || e.state === 'idle') {
             if (edist > 0) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
             if (edist < 350 && e.stateTimer <= 0 && e.frozenTimer <= 0) { 
                 e.state = 'telegraph'; e.stateTimer = 0.75; 
                 const [dx, dy, d] = getVector(e.x, e.y, player.x, player.y);
-                e.dashVx = (dx/d) * curSpd * 4.0; 
-                e.dashVy = (dy/d) * curSpd * 4.0;
+                e.dashVx = (dx/d) * curSpd * 7.0; 
+                e.dashVy = (dy/d) * curSpd * 7.0;
                 e.dashTargetX = e.x + (dx/d)*800;
                 e.dashTargetY = e.y + (dy/d)*800;
             }
@@ -343,6 +345,30 @@ const EnemyAI = {
             }
         }
     },
+    'boss_warlord': (e, dt, curSpd, edx, edy, edist, i) => {
+        if (edist < player.radius + e.size / 2 + 5 && e.meleeTimer <= 0) { takeDamage(e.dmg); e.meleeTimer = 1.0; }
+        e.stateTimer -= dt;
+        if (e.state === 'idle') {
+            if (edist > 80) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
+            if (e.stateTimer <= 0 && e.frozenTimer <= 0) {
+                if (Math.random() < 0.5) { e.state = 'knife_volley'; e.stateTimer = 0.5; } else { e.state = 'dash_telegraph'; e.stateTimer = 0.4; e.dashTargetX = player.x + (edx/edist)*250; e.dashTargetY = player.y + (edy/edist)*250; }
+            }
+        } else if (e.state === 'knife_volley') {
+            if (e.stateTimer <= 0) {
+                const baseAngle = Math.atan2(edy, edx);
+                for(let r=-2; r<=2; r++) { projectiles.push({ x: e.x, y: e.y, vx: Math.cos(baseAngle+(r*0.15))*500, vy: Math.sin(baseAngle+(r*0.15))*500, radius: 6, color: '#ff9800', life: 2.0, isEnemy: true, damage: e.dmg }); }
+                e.state = 'idle'; e.stateTimer = 2.0;
+            }
+        } else if (e.state === 'dash_telegraph') {
+            effects.push({ type: 'circle', x: e.x, y: e.y, radius: e.size, color: 'rgba(216, 67, 21, 0.2)', life: 0.1, maxLife: 0.1 });
+            if (e.stateTimer <= 0) { e.state = 'dash_execute'; e.stateTimer = 0.1; e.dashSpeedX = (e.dashTargetX - e.x) / 0.1; e.dashSpeedY = (e.dashTargetY - e.y) / 0.1; e.dashHit = false; }
+        } else if (e.state === 'dash_execute') {
+            e.x += e.dashSpeedX * dt; e.y += e.dashSpeedY * dt;
+            e.x = Math.max(e.size/2, Math.min(canvas.width - e.size/2, e.x)); e.y = Math.max(e.size/2, Math.min(canvas.height - e.size/2, e.y));
+            if (Math.hypot(e.x - player.x, e.y - player.y) < e.size/2 + player.radius && !e.dashHit) { takeDamage(e.dmg * 2); e.dashHit = true; }
+            if (e.stateTimer <= 0) { e.state = 'idle'; e.stateTimer = 2.0; }
+        }
+    },
     'boss_beastmaster': (e, dt, curSpd, edx, edy, edist, i) => {
         e.stateTimer -= dt;
         if (e.state === 'idle' || !e.state) {
@@ -384,30 +410,6 @@ const EnemyAI = {
                 if (e.joustCount < 3) { e.state = 'joust_prep'; e.stateTimer = 0.4; }
                 else { e.state = 'idle'; e.stateTimer = 3.0; }
             }
-        }
-    },
-    'boss_warlord': (e, dt, curSpd, edx, edy, edist, i) => {
-        if (edist < player.radius + e.size / 2 + 5 && e.meleeTimer <= 0) { takeDamage(e.dmg); e.meleeTimer = 1.0; }
-        e.stateTimer -= dt;
-        if (e.state === 'idle') {
-            if (edist > 80) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
-            if (e.stateTimer <= 0 && e.frozenTimer <= 0) {
-                if (Math.random() < 0.5) { e.state = 'knife_volley'; e.stateTimer = 0.5; } else { e.state = 'dash_telegraph'; e.stateTimer = 0.4; e.dashTargetX = player.x + (edx/edist)*250; e.dashTargetY = player.y + (edy/edist)*250; }
-            }
-        } else if (e.state === 'knife_volley') {
-            if (e.stateTimer <= 0) {
-                const baseAngle = Math.atan2(edy, edx);
-                for(let r=-2; r<=2; r++) { projectiles.push({ x: e.x, y: e.y, vx: Math.cos(baseAngle+(r*0.15))*500, vy: Math.sin(baseAngle+(r*0.15))*500, radius: 6, color: '#ff9800', life: 2.0, isEnemy: true, damage: e.dmg }); }
-                e.state = 'idle'; e.stateTimer = 2.0;
-            }
-        } else if (e.state === 'dash_telegraph') {
-            effects.push({ type: 'circle', x: e.x, y: e.y, radius: e.size, color: 'rgba(216, 67, 21, 0.2)', life: 0.1, maxLife: 0.1 });
-            if (e.stateTimer <= 0) { e.state = 'dash_execute'; e.stateTimer = 0.1; e.dashSpeedX = (e.dashTargetX - e.x) / 0.1; e.dashSpeedY = (e.dashTargetY - e.y) / 0.1; e.dashHit = false; }
-        } else if (e.state === 'dash_execute') {
-            e.x += e.dashSpeedX * dt; e.y += e.dashSpeedY * dt;
-            e.x = Math.max(e.size/2, Math.min(canvas.width - e.size/2, e.x)); e.y = Math.max(e.size/2, Math.min(canvas.height - e.size/2, e.y));
-            if (Math.hypot(e.x - player.x, e.y - player.y) < e.size/2 + player.radius && !e.dashHit) { takeDamage(e.dmg * 2); e.dashHit = true; }
-            if (e.stateTimer <= 0) { e.state = 'idle'; e.stateTimer = 2.0; }
         }
     },
     'amalgam_minion': (e, dt, curSpd, edx, edy, edist, i) => { 
@@ -1061,8 +1063,8 @@ function update(dt) {
         let curSpd = (e.speed === 0 || e.frozenTimer > 0) ? (e.speed === 0 ? 0 : e.speed * 0.3) : e.speed;
         
         hasCasterAura = false;
-        for(let j=0; j<enemies.length; j++) { if (enemies[j].type === 'caster' && Math.hypot(e.x - enemies[j].x, e.y - enemies[j].y) < 250) hasCasterAura = true; }
-        if (hasCasterAura) curSpd *= 1.5;
+        for(let j=0; j<enemies.length; j++) { if (enemies[j].type === 'caster' && Math.hypot(e.x - enemies[j].x, e.y - enemies[j].y) < 400) hasCasterAura = true; }
+        if (hasCasterAura) curSpd *= 2.0;
 
         const [edx, edy, edist] = getVector(e.x, e.y, player.x, player.y);
         if (e.meleeTimer > 0) e.meleeTimer -= dt; 
