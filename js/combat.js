@@ -130,6 +130,13 @@ function applyDamage(enemy, amount, source = 'player', projAngle = null) {
 
 function takeDamage(amount, isContinuous = false) {
     if (player.iFrames > 0) return;
+
+    if (buffs.parryTimer > 0 && !isContinuous) { 
+        effects.push({ type: 'text', text: 'PARRIED!', x: player.x, y: player.y - 40, color: '#00e5ff', life: 1.0, maxLife: 1.0 }); 
+        if (activeClass.skills[1].selectedUpg === 'A') player.flow = 100; // Path A counter-attack bonus
+        return; 
+    }
+
     if (buffs.evade100 > 0) {
         if (!isContinuous) effects.push({ type: 'text', text: 'Evaded!', x: player.x, y: player.y - 30, color: '#e1bee7', life: 0.6, maxLife: 0.6 });
         return;

@@ -9,13 +9,13 @@
         
         #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
         
-        .hud-bottom { position: absolute; bottom: 0px; left: 0px; width: calc(100% - 40px); display: flex; justify-content: space-between; align-items: flex-end; background: linear-gradient(to top, rgba(0,0,0,0.5), transparent); padding: 40px 20px 20px 20px; }
+        .hud-bottom { position: absolute; bottom: 0px; left: 0px; width: calc(100% - 40px); display: flex; justify-content: space-between; align-items: flex-end; background: linear-gradient(to top, rgba(0,0,0,0.5), transparent); padding: 40px 20px 20px 20px; pointer-events: none; }
         
         .stats { display: flex; flex-direction: column; gap: 5px; }
         .bar-container { position: relative; width: 300px; height: 24px; background: #222; border: 2px solid #555; border-radius: 4px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.5); }
         .bar-fg { width: 100%; height: 100%; background: #4caf50; transition: width 0.1s linear; }
         .bar-shield { position: absolute; top: 0; left: 0; height: 100%; background: rgba(120, 144, 156, 0.7); width: 0%; transition: width 0.1s linear; }
-        .bar-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-weight: bold; font-size: 14px; text-shadow: 1px 1px 0 #000; }
+        .bar-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-weight: bold; font-size: 14px; text-shadow: 1px 1px 0 #000; white-space: nowrap; }
         
         .skills-display { text-align: right; display: flex; flex-direction: column; gap: 5px; }
         
@@ -32,7 +32,8 @@
         .class-card { background: #222; border: 2px solid; padding: 20px; border-radius: 8px; cursor: pointer; transition: transform 0.2s; position: relative; }
         .class-card:hover { transform: scale(1.05); }
         .class-title { font-size: 24px; font-weight: bold; margin-bottom: 10px; text-shadow: 1px 1px 0 #000; }
-        .diff-tag { position: absolute; bottom: 15px; right: 15px; font-size: 12px; padding: 4px 8px; border-radius: 4px; background: rgba(0,0,0,0.8); border: 1px solid; }        
+        .diff-tag { position: absolute; top: 10px; right: 10px; font-size: 12px; padding: 4px 8px; border-radius: 4px; background: rgba(0,0,0,0.5); border: 1px solid; }
+        
         .inventory-grid { display: flex; gap: 20px; max-width: 1000px; width: 100%; padding: 20px; box-sizing: border-box; }
         .inv-column { flex: 1; background: #222; border: 2px solid #555; border-radius: 8px; padding: 15px; display: flex; flex-direction: column; gap: 10px; }
         .item-slot { background: #111; border: 1px solid #444; padding: 10px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
@@ -43,6 +44,17 @@
         
         #loading-text { font-size: 24px; color: #fff; margin-bottom: 20px; }
         .dev-input { background: #111; color: #fff; border: 1px solid #ff4081; padding: 5px; font-family: monospace; width: 60px; text-align: center; }
+
+        /* --- NEW HUD ELEMENTS --- */
+        #top-hud { position: absolute; top: 15px; left: 50%; transform: translateX(-50%); display: flex; gap: 30px; font-family: monospace; color: #fff; text-shadow: 1px 1px 2px #000; font-size: 20px; z-index: 10; font-weight: bold; pointer-events: none; }
+        #bottom-hud { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 20px; z-index: 10; pointer-events: none; }
+        .cd-circle { position: relative; width: 50px; height: 50px; background: rgba(0,0,0,0.6); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: monospace; color: white; font-size: 16px; border: 2px solid #555; }
+        .cd-circle svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+        .cd-circle circle { fill: none; stroke: #00e5ff; stroke-width: 4; stroke-dasharray: 144; stroke-dashoffset: 144; transition: stroke-dashoffset 0.1s linear; }
+        .cd-key { position: absolute; bottom: -20px; font-size: 12px; color: #bbb; text-align: center; width: 100%; }
+        
+        #flow-bar-container { width: 300px; height: 10px; background: #222; margin-top: 5px; border: 2px solid #555; border-radius: 4px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.5); }
+        #flow-bar { width: 0%; height: 100%; background: linear-gradient(90deg, #b2ebf2, #00e5ff); transition: width 0.1s; }
     </style>
 </head>
 <body>
@@ -50,6 +62,13 @@
     <canvas id="gameCanvas"></canvas>
 
     <div id="ui-layer">
+        
+        <div id="top-hud" class="hidden">
+            <span id="hud-wave">Wave: 1</span>
+            <span id="hud-enemies">Remaining: 0</span>
+            <span id="hud-gold" style="color:#ffd54f;">Gold: 0</span>
+        </div>
+
         <div id="hud" class="hud-bottom hidden">
             <div class="stats">
                 <div style="font-size: 18px; font-weight: bold; margin-bottom: 5px;" id="class-name"></div>
@@ -62,20 +81,16 @@
                     <div class="bar-fg" id="xp-bar" style="background: #2196f3;"></div>
                     <div class="bar-text" id="xp-text" style="font-size: 12px;">0 / 50 XP</div>
                 </div>
-            </div>
-            
-            <div style="text-align: center;">
-                <div style="font-size: 24px; font-weight: bold; color: #fff; text-shadow: 2px 2px 0 #000;" id="wave-display">Wave 1</div>
-                <div style="font-size: 16px; color: #aaa;" id="wave-subtext">Enemies Left: 0</div>
-                <div style="font-size: 18px; color: #ffd54f; margin-top: 5px; font-weight: bold;" id="gold-display">Gold: 0</div>
+                <div id="flow-bar-container" class="hidden"><div id="flow-bar"></div></div>
             </div>
 
             <div class="skills-display">
                 <div style="font-size: 14px; color: #aaa;" id="skill-display"></div>
-                <div style="font-size: 18px; font-weight: bold; color: #fff;" id="cd-display"></div>
                 <div style="font-size: 14px; color: #81c784;" id="perm-display"></div>
             </div>
         </div>
+
+        <div id="bottom-hud" class="hidden"></div>
 
         <div id="start-screen" class="modal-overlay">
             <div id="loading-text">Loading Game Data...</div>
@@ -83,41 +98,41 @@
             <div id="class-selection" class="hidden">
                 <h1 style="font-size: 48px; margin-bottom: 10px; text-shadow: 2px 2px 0 #000;">CHOOSE YOUR CLASS</h1>
                 <div class="grid-container">
-                    <div class="class-card" style="border-color: #e53935;" onclick="chooseClass('dragonknight')">
+                    <div class="class-card" style="border-color: #e53935;" onclick="chooseClass('Dragonknight')">
                         <div class="diff-tag" style="border-color:#4caf50; color:#4caf50;">Difficulty: Low</div>
                         <div class="class-title" style="color: #e53935;">Dragonknight</div>
                         <p style="color: #ccc;">A heavy melee bruiser who builds Frenzy stacks in combat to increase damage and attack speed.</p>
                         <p style="color: #888; font-size: 14px;">Weapon: Sword | High HP | Low Mobility</p>
                     </div>
-                    <div class="class-card" style="border-color: #81c784;" onclick="chooseClass('ranger')">
+                    <div class="class-card" style="border-color: #81c784;" onclick="chooseClass('Ranger')">
                         <div class="diff-tag" style="border-color:#4caf50; color:#4caf50;">Difficulty: Low</div>
                         <div class="class-title" style="color: #81c784;">Ranger</div>
                         <p style="color: #ccc;">A highly mobile archer. Continuous movement builds momentum, increasing overall damage.</p>
                         <p style="color: #888; font-size: 14px;">Weapon: Bow | Med HP | High Mobility</p>
                     </div>
-                    <div class="class-card" style="border-color: #ff9800;" onclick="chooseClass('machinist')">
+                    <div class="class-card" style="border-color: #ff9800;" onclick="chooseClass('Machinist')">
                         <div class="diff-tag" style="border-color:#ffca28; color:#ffca28;">Difficulty: Medium</div>
                         <div class="class-title" style="color: #ff9800;">Machinist</div>
                         <p style="color: #ccc;">An engineer who controls the battlefield with deployed turrets, traps, and scavenged scrap.</p>
                         <p style="color: #888; font-size: 14px;">Weapon: Scattergun | Med HP | Area Denial</p>
                     </div>
-                    <div class="class-card" style="border-color: #4fc3f7;" onclick="chooseClass('spellweaver')">
+                    <div class="class-card" style="border-color: #4fc3f7;" onclick="chooseClass('Spellweaver')">
                         <div class="diff-tag" style="border-color:#ffca28; color:#ffca28;">Difficulty: Medium</div>
                         <div class="class-title" style="color: #4fc3f7;">Spellweaver</div>
                         <p style="color: #ccc;">A fragile but explosive mage. Casting spells empowers basic attacks for huge AoE burst damage.</p>
                         <p style="color: #888; font-size: 14px;">Weapon: Staff | Low HP | High Burst</p>
                     </div>
-                    <div class="class-card" style="border-color: #9c27b0;" onclick="chooseClass('nightblade')">
+                    <div class="class-card" style="border-color: #9c27b0;" onclick="chooseClass('Nightblade')">
                         <div class="diff-tag" style="border-color:#f44336; color:#f44336;">Difficulty: High</div>
                         <div class="class-title" style="color: #9c27b0;">Nightblade</div>
                         <p style="color: #ccc;">A lethal assassin. Passively exposes weak points on enemies for massive true damage triggers.</p>
                         <p style="color: #888; font-size: 14px;">Weapon: Daggers | Very Low HP | Extreme Single Target</p>
                     </div>
-                    <div class="class-card" style="border-color: #00e5ff;" onclick="chooseClass('magicknight')">
+                    <div class="class-card" style="border-color: #00e5ff;" onclick="chooseClass('Swordsaint')">
                         <div class="diff-tag" style="border-color:#f44336; color:#f44336;">Difficulty: Extreme</div>
-                        <div class="class-title" style="color: #00e5ff;">Magic Knight</div>
-                        <p style="color: #ccc;">A spatial puppeteer. Manually commands an ethereal Phantom Blade across the map to shred enemies.</p>
-                        <p style="color: #888; font-size: 14px;">Weapon: Phantom Blade | Low HP | High Complexity</p>
+                        <div class="class-title" style="color: #00e5ff;">Swordsaint</div>
+                        <p style="color: #ccc;">A master tactician. Alternates between defensive melee combat and commanding a devastating Airborne Blade.</p>
+                        <p style="color: #888; font-size: 14px;">Weapon: Phantom Blade | Low HP | High APM</p>
                     </div>
                 </div>
             </div>

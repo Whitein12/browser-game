@@ -18,7 +18,7 @@ var RangedAI = (e, dt, curSpd, edx, edy, edist, i) => {
     e.attackTimer -= dt;
     if (e.attackTimer <= 0 && edist <= 400 && e.frozenTimer <= 0) {
         let projShape = e.type === 'archer' ? 'arrow' : 'slime_blob';
-        projectiles.push({ x: e.x, y: e.y, vx: (edx/edist)*350, vy: (edy/edist)*350, radius: 6, color: e.type==='archer' ? '#8d6e63' : '#ba68c8', life: 3.0, isEnemy: true, damage: e.dmg, shape: projShape });
+        projectiles.push({ x: e.x, y: e.y, vx: (edx/edist)*350, vy: (edy/edist)*350, radius: 8, color: e.type==='archer' ? '#8d6e63' : '#ba68c8', life: 3.0, isEnemy: true, damage: e.dmg, shape: projShape });
         if (e.type === 'archer') { e.ammo--; if (e.ammo <= 0) { e.ammo = 3; e.attackTimer = 2.0; } else { e.attackTimer = 0.4; } } 
         else { e.attackTimer = 2.5; }
     }
@@ -33,30 +33,6 @@ var EnemyAI = {
         if (e.attackTimer <= 0 && e.frozenTimer <= 0) {
             projectiles.push({ x: e.x, y: e.y, vx: (edx/edist)*400, vy: (edy/edist)*400, radius: 6, color: '#ff5722', life: 5.0, isEnemy: true, damage: e.dmg, shape: 'arrow' });
             e.attackTimer = 1.2; 
-        }
-    },
-
-    'boss_warlord': (e, dt, curSpd, edx, edy, edist, i) => {
-        if (edist < player.radius + e.size / 2 + 5 && e.meleeTimer <= 0) { takeDamage(e.dmg); e.meleeTimer = 1.0; }
-        e.stateTimer -= dt;
-        if (e.state === 'idle') {
-            if (edist > 80) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
-            if (e.stateTimer <= 0 && e.frozenTimer <= 0) {
-                if (Math.random() < 0.5) { e.state = 'knife_volley'; e.stateTimer = 0.5; } else { e.state = 'dash_telegraph'; e.stateTimer = 0.4; e.dashTargetX = player.x + (edx/edist)*250; e.dashTargetY = player.y + (edy/edist)*250; }
-            }
-        } else if (e.state === 'knife_volley') {
-            if (e.stateTimer <= 0) {
-                const baseAngle = Math.atan2(edy, edx);
-                for(let r=-2; r<=2; r++) { projectiles.push({ x: e.x, y: e.y, vx: Math.cos(baseAngle+(r*0.15))*500, vy: Math.sin(baseAngle+(r*0.15))*500, radius: 6, color: '#ff9800', life: 2.0, isEnemy: true, damage: e.dmg, shape: 'knife' }); }
-                e.state = 'idle'; e.stateTimer = 2.0;
-            }
-        } else if (e.state === 'dash_telegraph') {
-            effects.push({ type: 'circle', x: e.x, y: e.y, radius: e.size, color: 'rgba(216, 67, 21, 0.2)', life: 0.1, maxLife: 0.1 });
-            if (e.stateTimer <= 0) { e.state = 'dash_execute'; e.stateTimer = 0.1; e.dashSpeedX = (e.dashTargetX - e.x) / 0.1; e.dashSpeedY = (e.dashTargetY - e.y) / 0.1; e.dashHit = false; }
-        } else if (e.state === 'dash_execute') {
-            e.x += e.dashSpeedX * dt; e.y += e.dashSpeedY * dt;
-            if (Math.hypot(e.x - player.x, e.y - player.y) < e.size/2 + player.radius && !e.dashHit) { takeDamage(e.dmg * 2); e.dashHit = true; }
-            if (e.stateTimer <= 0) { e.state = 'idle'; e.stateTimer = 2.0; }
         }
     },
 
@@ -152,7 +128,7 @@ var EnemyAI = {
             if (edist > 150) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
             if (e.stateTimer <= 0) {
                 if (Math.random() < 0.5) { for(let k=0; k<2; k++) { const offX = (Math.random() - 0.5) * 100; const offY = (Math.random() - 0.5) * 100; enemies.push({ x: e.x + offX, y: e.y + offY, size: 28, color: '#8bc34a', speed: 115, hp: 40, maxHp: 40, type: 'slime_melee', dmg: 10, xp: 0, meleeTimer: 0 }); activeEnemies++; } } 
-                else { for(let k=-1; k<=1; k++) { let angle = Math.atan2(edy, edx) + k*0.3; projectiles.push({ x: e.x, y: e.y, vx: Math.cos(angle)*400, vy: Math.sin(angle)*400, radius: 12, color: '#cddc39', life: 3.0, isEnemy: true, damage: e.dmg, type: 'boss_slimeball' }); } }
+                else { for(let k=-1; k<=1; k++) { let angle = Math.atan2(edy, edx) + k*0.3; projectiles.push({ x: e.x, y: e.y, vx: Math.cos(angle)*400, vy: Math.sin(angle)*400, radius: 12, color: '#cddc39', life: 3.0, isEnemy: true, damage: e.dmg, type: 'boss_slimeball', shape: 'slime_blob' }); } }
                 e.stateTimer = 2.5;
             }
         } else if (hpPercent > 0.3) {
@@ -200,7 +176,7 @@ var EnemyAI = {
             if (e.stateTimer <= 0) { e.state = 'idle'; e.stateTimer = 1.5; }
         } else if (e.state === 'nova') {
             if (e.stateTimer <= 0) {
-                for (let r=0; r<12; r++) { const angle = (Math.PI*2/12) * r; projectiles.push({ x: e.x, y: e.y, vx: Math.cos(angle)*400, vy: Math.sin(angle)*400, radius: 10, color: '#009688', life: 2.5, isEnemy: true, damage: e.dmg, type: 'boss_slimeball' }); }
+                for (let r=0; r<12; r++) { const angle = (Math.PI*2/12) * r; projectiles.push({ x: e.x, y: e.y, vx: Math.cos(angle)*400, vy: Math.sin(angle)*400, radius: 10, color: '#009688', life: 2.5, isEnemy: true, damage: e.dmg, type: 'boss_slimeball', shape: 'slime_blob' }); }
                 e.state = 'idle'; e.stateTimer = 2.0;
             }
         } else if (e.state === 'summon') {
@@ -218,6 +194,29 @@ var EnemyAI = {
             else { effects.push({ type: 'circle', x: e.x, y: e.y, radius: 300, color: '#004d40', life: 0.5, maxLife: 0.5 }); if (edist <= 300 + player.radius) takeDamage(e.dmg * 3); e.state = 'idle'; e.stateTimer = 2.0; }
         }
     },
+    'boss_warlord': (e, dt, curSpd, edx, edy, edist, i) => {
+        if (edist < player.radius + e.size / 2 + 5 && e.meleeTimer <= 0) { takeDamage(e.dmg); e.meleeTimer = 1.0; }
+        e.stateTimer -= dt;
+        if (e.state === 'idle') {
+            if (edist > 80) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
+            if (e.stateTimer <= 0 && e.frozenTimer <= 0) {
+                if (Math.random() < 0.5) { e.state = 'knife_volley'; e.stateTimer = 0.5; } else { e.state = 'dash_telegraph'; e.stateTimer = 0.4; e.dashTargetX = player.x + (edx/edist)*250; e.dashTargetY = player.y + (edy/edist)*250; }
+            }
+        } else if (e.state === 'knife_volley') {
+            if (e.stateTimer <= 0) {
+                const baseAngle = Math.atan2(edy, edx);
+                for(let r=-2; r<=2; r++) { projectiles.push({ x: e.x, y: e.y, vx: Math.cos(baseAngle+(r*0.15))*500, vy: Math.sin(baseAngle+(r*0.15))*500, radius: 6, color: '#ff9800', life: 2.0, isEnemy: true, damage: e.dmg, shape: 'knife' }); }
+                e.state = 'idle'; e.stateTimer = 2.0;
+            }
+        } else if (e.state === 'dash_telegraph') {
+            effects.push({ type: 'circle', x: e.x, y: e.y, radius: e.size, color: 'rgba(216, 67, 21, 0.2)', life: 0.1, maxLife: 0.1 });
+            if (e.stateTimer <= 0) { e.state = 'dash_execute'; e.stateTimer = 0.1; e.dashSpeedX = (e.dashTargetX - e.x) / 0.1; e.dashSpeedY = (e.dashTargetY - e.y) / 0.1; e.dashHit = false; }
+        } else if (e.state === 'dash_execute') {
+            e.x += e.dashSpeedX * dt; e.y += e.dashSpeedY * dt;
+            if (Math.hypot(e.x - player.x, e.y - player.y) < e.size/2 + player.radius && !e.dashHit) { takeDamage(e.dmg * 2); e.dashHit = true; }
+            if (e.stateTimer <= 0) { e.state = 'idle'; e.stateTimer = 2.0; }
+        }
+    },
     'boss_beastmaster': (e, dt, curSpd, edx, edy, edist, i) => {
         e.stateTimer -= dt; let enrageMult = (e.hp < e.maxHp * 0.5) ? 0.6 : 1.0; 
         if (e.state === 'idle' || !e.state) {
@@ -232,14 +231,14 @@ var EnemyAI = {
         } else if (e.state === 'bolas') {
             if (e.stateTimer <= 0) {
                 const baseAngle = Math.atan2(edy, edx);
-                for(let r=-1; r<=1; r++) { const angle = baseAngle + (r*0.2); projectiles.push({ x: e.x, y: e.y, vx: Math.cos(angle)*700, vy: Math.sin(angle)*700, radius: 15, color: '#795548', life: 2.0, isEnemy: true, damage: e.dmg, type: 'bolas' }); }
+                for(let r=-1; r<=1; r++) { const angle = baseAngle + (r*0.2); projectiles.push({ x: e.x, y: e.y, vx: Math.cos(angle)*700, vy: Math.sin(angle)*700, radius: 15, color: '#795548', life: 2.0, isEnemy: true, damage: e.dmg, shape: 'bolas' }); }
                 e.state = 'idle'; e.stateTimer = 2.5 * enrageMult;
             }
         } else if (e.state === 'hounds') {
             if (e.stateTimer <= 0) {
                 const baseAngle = Math.atan2(edy, edx);
-                projectiles.push({ x: e.x, y: e.y, vx: Math.cos(baseAngle - 0.5)*400, vy: Math.sin(baseAngle - 0.5)*400, speed: 450, radius: 12, color: '#d7ccc8', life: 4.0, isEnemy: true, damage: e.dmg, type: 'hound', trackTimer: 1.5 });
-                projectiles.push({ x: e.x, y: e.y, vx: Math.cos(baseAngle + 0.5)*400, vy: Math.sin(baseAngle + 0.5)*400, speed: 450, radius: 12, color: '#d7ccc8', life: 4.0, isEnemy: true, damage: e.dmg, type: 'hound', trackTimer: 1.5 });
+                projectiles.push({ x: e.x, y: e.y, vx: Math.cos(baseAngle - 0.5)*400, vy: Math.sin(baseAngle - 0.5)*400, speed: 450, radius: 12, color: '#d7ccc8', life: 4.0, isEnemy: true, damage: e.dmg, shape: 'hound', trackTimer: 1.5 });
+                projectiles.push({ x: e.x, y: e.y, vx: Math.cos(baseAngle + 0.5)*400, vy: Math.sin(baseAngle + 0.5)*400, speed: 450, radius: 12, color: '#d7ccc8', life: 4.0, isEnemy: true, damage: e.dmg, shape: 'hound', trackTimer: 1.5 });
                 e.state = 'idle'; e.stateTimer = 3.0 * enrageMult;
             }
         } else if (e.state === 'joust_prep') {
@@ -260,16 +259,14 @@ var EnemyAI = {
             e.y += ((e.targetY - e.y) * 10 * dt);
             if (e.stateTimer <= 0) {
                 e.y = e.targetY; e.state = 'idle'; e.stateTimer = 2.0;
-                effects.push({ type: 'circle', x: e.x, y: e.y, radius: 100, color: '#4e342e', life: 0.5, maxLife: 0.5 });
+                effects.push({ type: 'crater', x: e.x, y: e.y, radius: 100, color: '#4e342e', life: 0.5, maxLife: 0.5 });
             }
             return;
         }
 
         if (e.isStaggered) {
             e.renderColor = '#ffeb3b'; e.staggerTimer -= dt;
-            if (e.staggerTimer <= 0) {
-                e.isStaggered = false; e.shieldHp = 0;
-            }
+            if (e.staggerTimer <= 0) { e.isStaggered = false; e.shieldHp = 0; }
             return;
         }
         e.renderColor = e.color;
@@ -312,26 +309,18 @@ var EnemyAI = {
 
                 if (e.shieldHp <= 0 && !e.phase2Broken) {
                     e.phase2Broken = true; e.isStaggered = true; e.staggerTimer = 3.0; e.state = 'idle'; e.stateTimer = 3.0;
-                    for(let j=enemies.length-1; j>=0; j--) {
-                        if (enemies[j].isValeriusMinion) { enemies[j].hp = 0; checkEnemyDeath(enemies[j]); }
-                    }
+                    for(let j=enemies.length-1; j>=0; j--) { if (enemies[j].isValeriusMinion) { enemies[j].hp = 0; checkEnemyDeath(enemies[j]); } }
                     return;
                 }
 
-                if (e.stateTimer <= 0 && !e.isStaggered) {
-                    e.state = 'javelin_volley'; e.stateTimer = 2.0; e.volleyAngle = e.facingAngle - 1.0;
-                }
+                if (e.stateTimer <= 0 && !e.isStaggered) { e.state = 'javelin_volley'; e.stateTimer = 2.0; e.volleyAngle = e.facingAngle - 1.0; }
             } else if (phase === 3) {
                 if (edist > 150) { e.x += (edx/edist)*curSpd*1.5*dt; e.y += (edy/edist)*curSpd*1.5*dt; }
                 if (e.stateTimer <= 0) { 
                     let moves = ['chain_hook', 'frenzy_lunge', 'slam'];
                     e.state = moves[Math.floor(Math.random() * moves.length)];
                     if (e.state === 'chain_hook') { e.stateTimer = 1.0; e.hookFired = false; }
-                    else if (e.state === 'frenzy_lunge') { 
-                        e.stateTimer = 0.8; 
-                        e.dashVx = (edx/edist) * curSpd * 8.0; 
-                        e.dashVy = (edy/edist) * curSpd * 8.0; 
-                    }
+                    else if (e.state === 'frenzy_lunge') { e.stateTimer = 0.9; }
                     else if (e.state === 'slam') { e.stateTimer = 1.0; }
                 }
             }
@@ -348,6 +337,7 @@ var EnemyAI = {
         else if (e.state === 'sunder') {
             if (e.stateTimer > 0.5) { effects.push({ type: 'circle', x: e.x, y: e.y, radius: 100, color: 'rgba(93, 64, 55, 0.3)', life: 0.1, maxLife: 0.1 }); }
             else {
+                effects.push({ type: 'crater', x: e.x, y: e.y, radius: 100, color: '#5d4037', life: 1.0, maxLife: 1.0 });
                 effects.push({ type: 'puddle', x: e.x, y: e.y, radius: 100, color: '#5d4037', life: 4.0, maxLife: 4.0, dmg: e.dmg });
                 e.state = 'idle'; e.stateTimer = 1.5;
             }
@@ -355,7 +345,6 @@ var EnemyAI = {
         else if (e.state === 'javelin_volley') {
             e.volleyAngle += dt * 1.5; 
             if (e.stateTimer > 0 && e.stateTimer % 0.2 < 0.05) {
-                // ADDED shape: 'spear' to the end of this projectile push
                 projectiles.push({ x: e.x, y: e.y, vx: Math.cos(e.volleyAngle)*600, vy: Math.sin(e.volleyAngle)*600, radius: 8, color: '#ff9800', life: 3.0, isEnemy: true, damage: e.dmg, shape: 'spear' });
             }
             if (e.stateTimer <= 0) { e.state = 'idle'; e.stateTimer = 2.0; e.facingAngle = Math.atan2(player.y - e.y, player.x - e.x); }
@@ -376,24 +365,34 @@ var EnemyAI = {
             if (pdist > 50) { e.x += (px/pdist)*2500*dt; e.y += (py/pdist)*2500*dt; }
             else {
                 e.x = e.pullTargetX; e.y = e.pullTargetY;
-                effects.push({ type: 'circle', x: e.x, y: e.y, radius: 200, color: '#5d4037', life: 0.3, maxLife: 0.3 });
+                effects.push({ type: 'crater', x: e.x, y: e.y, radius: 200, color: '#5d4037', life: 0.5, maxLife: 0.5 });
                 if (Math.hypot(player.x - e.x, player.y - e.y) <= 200 + player.radius) { takeDamage(e.dmg * 2); buffs.rooted = 1.0; }
                 e.state = 'idle'; e.stateTimer = 2.0;
             }
         }
         else if (e.state === 'frenzy_lunge') {
-            if (e.stateTimer > 0.4) {
-                effects.push({ type: 'line', x1: e.x, y1: e.y, x2: e.x + e.dashVx*0.3, y2: e.y + e.dashVy*0.3, color: 'rgba(255,87,34,0.6)', life: 0.1, maxLife: 0.1, lineWidth: 10 });
-            } else { 
-                e.x += e.dashVx * dt; e.y += e.dashVy * dt; 
-                if (Math.hypot(player.x - e.x, player.y - e.y) < e.size/2 + player.radius) { takeDamage(e.dmg * 2.5); e.state = 'idle'; e.stateTimer = 1.0; } 
+            if (e.stateTimer > 0.6) {
+                e.dashTargetX = player.x + (edx/edist)*100; e.dashTargetY = player.y + (edy/edist)*100;
+                effects.push({ type: 'line', x1: e.x, y1: e.y, x2: e.dashTargetX, y2: e.dashTargetY, color: 'rgba(255,87,34,0.3)', life: 0.1, maxLife: 0.1, lineWidth: 6 });
+            } else if (e.stateTimer > 0.3) {
+                let prog = (0.6 - e.stateTimer) / 0.3;
+                e.spearX = e.x + (e.dashTargetX - e.x) * prog; e.spearY = e.y + (e.dashTargetY - e.y) * prog;
+                effects.push({ type: 'valerius_chain', x1: e.x, y1: e.y, x2: e.spearX, y2: e.spearY, life: 0.1, maxLife: 0.1 });
+            } else {
+                let prog = (0.3 - e.stateTimer) / 0.3;
+                e.x += (e.dashTargetX - e.x) * prog * dt * 10; e.y += (e.dashTargetY - e.y) * prog * dt * 10;
+                effects.push({ type: 'valerius_chain', x1: e.x, y1: e.y, x2: e.dashTargetX, y2: e.dashTargetY, life: 0.1, maxLife: 0.1 });
+                if (Math.hypot(player.x - e.x, player.y - e.y) < e.size/2 + player.radius + 15 && !e.dashHit) { takeDamage(e.dmg * 2.5); e.dashHit = true; }
             }
-            if (e.stateTimer <= 0) { e.state = 'idle'; e.stateTimer = 0.5; }
+            if (e.stateTimer <= 0) { 
+                effects.push({ type: 'crater', x: e.x, y: e.y, radius: 120, color: '#ff5722', life: 0.4, maxLife: 0.4 });
+                e.state = 'idle'; e.stateTimer = 1.0; 
+            }
         }
         else if (e.state === 'slam') {
             if (e.stateTimer > 0.4) { effects.push({ type: 'circle', x: e.x, y: e.y, radius: 140, color: 'rgba(78, 52, 46, 0.3)', life: 0.1, maxLife: 0.1 }); }
             else {
-                effects.push({ type: 'circle', x: e.x, y: e.y, radius: 140, color: '#4e342e', life: 0.3, maxLife: 0.3 });
+                effects.push({ type: 'crater', x: e.x, y: e.y, radius: 140, color: '#4e342e', life: 0.5, maxLife: 0.5 });
                 if (edist <= 140 + player.radius) takeDamage(e.dmg * 3);
                 e.state = 'idle'; e.stateTimer = 1.5;
             }
