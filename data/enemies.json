@@ -9,7 +9,13 @@
       { "id": "voltaic_ooze", "size": 30, "color": "#03a9f4", "baseSpeed": 120, "speedVar": 20, "baseHp": 35, "hpScale": 12, "baseDmg": 12, "dmgScale": 2.0, "baseXp": 15, "xpScale": 3, "type": "voltaic_ooze", "weight": 0.4 },
       { "id": "toxic_sludge", "size": 32, "color": "#009688", "baseSpeed": 90, "speedVar": 10, "baseHp": 45, "hpScale": 15, "baseDmg": 10, "dmgScale": 1.8, "baseXp": 16, "xpScale": 3, "type": "toxic_sludge", "puddleTimer": 1.0, "weight": 0.6 }
     ],
-    "stage2_boss": { "id": "amalgam_boss", "size": 70, "color": "#004d40", "baseSpeed": 70, "speedVar": 0, "baseHp": 1200, "hpScale": 200, "baseDmg": 20, "dmgScale": 3, "baseXp": 400, "xpScale": 0, "type": "boss_amalgam", "stateTimer": 4.0 }
+    "stage2_boss": { "id": "amalgam_boss", "size": 70, "color": "#004d40", "baseSpeed": 70, "speedVar": 0, "baseHp": 1200, "hpScale": 200, "baseDmg": 20, "dmgScale": 3, "baseXp": 400, "xpScale": 0, "type": "boss_amalgam", "stateTimer": 4.0 },
+    "stage3_minions": [
+      { "id": "spore_slime", "size": 28, "color": "#cddc39", "baseSpeed": 85, "speedVar": 10, "baseHp": 50, "hpScale": 18, "baseDmg": 15, "dmgScale": 2.2, "baseXp": 18, "xpScale": 4, "type": "spore_slime", "attackTimer": 2.0, "weight": 0.5 },
+      { "id": "crystal_slime", "size": 36, "color": "#e1bee7", "baseSpeed": 70, "speedVar": 10, "baseHp": 120, "hpScale": 30, "baseDmg": 25, "dmgScale": 3.0, "baseXp": 25, "xpScale": 5, "type": "crystal_slime", "stateTimer": 3.0, "weight": 0.35 },
+      { "id": "slime_warden", "size": 40, "color": "#6a1b9a", "baseSpeed": 100, "speedVar": 15, "baseHp": 200, "hpScale": 50, "baseDmg": 30, "dmgScale": 3.5, "baseXp": 50, "xpScale": 6, "type": "slime_warden", "orbs": 3, "weight": 0.15 }
+    ],
+    "stage3_boss": { "id": "slime_queen", "size": 90, "color": "#f06292", "baseSpeed": 50, "speedVar": 0, "baseHp": 6000, "hpScale": 500, "baseDmg": 35, "dmgScale": 4, "baseXp": 1000, "xpScale": 0, "type": "boss_slime_queen", "stateTimer": 4.0 }
   },
   "bandit_bastion": {
     "stage1_minions": [
@@ -23,6 +29,8 @@
       { "id": "bandit_trapper", "size": 26, "color": "#5d4037", "baseSpeed": 80, "speedVar": 10, "baseHp": 25, "hpScale": 8, "baseDmg": 10, "dmgScale": 1.5, "baseXp": 14, "xpScale": 3, "type": "trapper", "attackTimer": 2.0, "weight": 0.25 },
       { "id": "bandit_caster", "size": 28, "color": "#ffeb3b", "baseSpeed": 60, "speedVar": 5, "baseHp": 30, "hpScale": 10, "baseDmg": 5, "dmgScale": 1.0, "baseXp": 16, "xpScale": 3, "type": "caster", "weight": 0.10 }
     ],
-    "stage2_boss": { "id": "beastmaster", "size": 60, "color": "#3e2723", "baseSpeed": 90, "speedVar": 0, "baseHp": 1500, "hpScale": 220, "baseDmg": 22, "dmgScale": 3, "baseXp": 450, "xpScale": 0, "type": "boss_beastmaster", "stateTimer": 3.0 }
+    "stage2_boss": { "id": "beastmaster", "size": 60, "color": "#3e2723", "baseSpeed": 90, "speedVar": 0, "baseHp": 1500, "hpScale": 220, "baseDmg": 22, "dmgScale": 3, "baseXp": 450, "xpScale": 0, "type": "boss_beastmaster", "stateTimer": 3.0 },
+    "stage3_minions": [],
+    "stage3_boss": { "id": "boss_valerius", "size": 40, "color": "#4e342e", "baseSpeed": 90, "hpScale": 300, "baseHp": 2500, "baseDmg": 25, "dmgScale": 5, "baseXp": 1000, "type": "boss_valerius", "stateTimer": 2.0 }
   }
 }

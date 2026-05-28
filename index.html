@@ -2,14 +2,13 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Browser ARPG - Stage 2 Engine</title>
+    <title>Browser ARPG - Dev Update</title>
     <style>
         body { margin: 0; overflow: hidden; background: #111; color: #eee; font-family: monospace; user-select: none; }
         canvas { display: block; cursor: crosshair; }
         
         #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
         
-        /* UI Moved to Bottom and Styled */
         .hud-bottom { position: absolute; bottom: 0px; left: 0px; width: calc(100% - 40px); display: flex; justify-content: space-between; align-items: flex-end; background: linear-gradient(to top, rgba(0,0,0,0.5), transparent); padding: 40px 20px 20px 20px; }
         
         .stats { display: flex; flex-direction: column; gap: 5px; }
@@ -48,6 +47,10 @@
         .upgrade-card { background: #111; border: 2px solid #ffca28; padding: 20px; cursor: pointer; width: 300px; text-align: center; transition: 0.2s; border-radius: 6px; }
         .upgrade-card:hover { background: #333; transform: scale(1.05); }
         .upgrade-title { color: #ffca28; font-size: 20px; font-weight: bold; margin-bottom: 10px; }
+
+        /* Dev Menu Styles */
+        .dev-input { padding: 10px; font-size: 16px; font-family: monospace; background: #111; color: #fff; border: 1px solid #ff4081; border-radius: 4px; text-align: center; width: 100px; }
+        .btn-dev { border-color: #ff4081; color: #ff4081; }
     </style>
 </head>
 <body>
@@ -85,7 +88,7 @@
                     <span id="skill-display"></span><br>
                     <span class="cooldowns" id="cd-display"></span><br>
                     <span class="perm-stats" id="perm-display"></span><br>
-                    <span style="color:#aaa; font-size:12px;">WASD: Move | LMB: Attack | P: Pause</span>
+                    <span style="color:#aaa; font-size:12px;">WASD: Move | LMB: Attack | P: Pause | ~: Dev Menu</span>
                 </div>
             </div>
             <div>
@@ -97,12 +100,11 @@
 
         <div id="levelup-screen" class="modal-overlay hidden">
             <h1 style="color:#2196f3;" id="levelup-title">LEVEL UP!</h1>
-            <p id="levelup-desc">Select a skill to rank up:</p>
             <div id="skill-buttons" style="display: flex; flex-direction: column; gap: 10px; max-width: 600px; text-align: center;"></div>
         </div>
 
         <div id="upgrade-screen" class="modal-overlay hidden">
-            <h1 style="color:#ffca28;">RANK 5 EVOLUTION</h1>
+            <h1 style="color:#ffca28;">RANK 4 EVOLUTION</h1>
             <p>Choose an upgrade path for <span id="evolve-skill-name" style="font-weight:bold;"></span>:</p>
             <div style="display: flex; gap: 20px; margin-top: 20px;">
                 <div class="upgrade-card" onclick="selectUpgrade('A')">
@@ -158,6 +160,24 @@
             <button class="btn" onclick="closeShop()" style="margin-top: 20px;">Leave Shop</button>
         </div>
 
+        <div id="dev-screen" class="modal-overlay hidden">
+            <h1 style="color:#ff4081; text-shadow: 2px 2px 0px #000;">DEVELOPER CONSOLE</h1>
+            <div style="background: #222; padding: 20px; border: 2px solid #ff4081; border-radius: 8px; text-align: center; display: flex; flex-direction: column; gap: 15px;">
+                <div>
+                    <label style="color:#fff;">Jump to Wave: </label>
+                    <input type="number" id="dev-wave-input" class="dev-input" value="1" min="1">
+                    <button class="btn btn-dev" onclick="devJumpWave()">Warp</button>
+                </div>
+                <hr style="width: 100%; border-color: #555;">
+                <div>
+                    <button class="btn btn-dev" onclick="devLevelUp()">Force Level Up</button>
+                    <button class="btn btn-dev" onclick="devAddGold()">+1000 Gold</button>
+                    <button class="btn btn-dev" onclick="devKillAll()">Kill All Enemies</button>
+                </div>
+            </div>
+            <button class="btn" style="margin-top: 20px;" onclick="closeDevMenu()">Close Console</button>
+        </div>
+
         <div id="death-screen" class="modal-overlay hidden">
             <h1 style="color:#d32f2f; font-size: 64px; margin-bottom: 10px;">YOU DIED</h1>
             <p style="color:#aaa; font-size: 20px; margin-bottom: 30px;">Wave Reached: <span id="death-wave"></span></p>
@@ -166,6 +186,7 @@
     </div>
     <canvas id="gameCanvas"></canvas>
 
+    <script src="registries.js"></script>
     <script src="engine.js"></script>
 </body>
 </html>
