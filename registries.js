@@ -2,6 +2,17 @@
 // registries.js - Content & Mechanics
 // ==========================================
 
+function getBladeConsumeMult() {
+    if (!player.blade) return 1.0;
+    let mult = 1.0 + (player.blade.charges * 0.2);
+    player.blade.charges = 0;
+    return mult;
+}
+
+window.spawnBladeDrop = function(x, y, dmg) {
+    projectiles.push({ x: x, y: y - 500, vx: 0, vy: 2000, radius: 10, color: '#00e5ff', life: 1.0, type: 'phantom_blade_drop', damage: dmg, targetY: y });
+}
+
 var SkillRegistry = {
     'Dragonknight': {
         1: (sk, dmg) => {
@@ -180,15 +191,43 @@ var SkillRegistry = {
                 if (distToSegment(e.x, e.y, player.x, player.y, player.x + (dx/dist)*moveDist, player.y + (dy/dist)*moveDist) < e.size/2 + 20) applyDamage(e, dmg, 'phantom_dash', pDashAngle);
             }
             player.x += (dx/dist)*moveDist; player.y += (dy/dist)*moveDist; clampToBounds(player, player.radius);
+            
+            player.iFrames = 0.4; 
+
             if (sk.selectedUpg === 'B') {
                 if (!player.phantomChargeUsed) { player.phantomChargeUsed = true; cooldowns.s3 = 0.5; } 
                 else { player.phantomChargeUsed = false; }
             }
         },
         4: (sk, dmg) => {
-            effects.push({ type: 'circle', x: player.x, y: player.y, radius: 600, color: 'rgba(156, 39, 176, 0.3)', life: 0.5, maxLife: 0.5 });
-            for(let i=0; i<enemies.length; i++) { if (Math.hypot(player.x - enemies[i].x, player.y - enemies[i].y) <= 600) enemies[i].markAngle = Math.random() * Math.PI * 2; }
+            effects.push({ type: 'circle', x: player.x, y: player.y, radius: 600, color: 'rgba(74, 20, 140, 0.4)', life: 0.5, maxLife: 0.5 });
+            
+            let targets = enemies.filter(e => Math.hypot(player.x - e.x, player.y - e.y) <= 600);
+            
+            targets.forEach(e => e.markAngle = Math.random() * Math.PI * 2);
             buffs.deathMarkActive = 5.0;
+
+            targets.forEach((target, index) => {
+                let delay = Math.min(index * 80, 1500); 
+                
+                setTimeout(() => {
+                    if (gameState !== STATE.PLAYING || target.hp <= 0 || target.dead) return;
+                    
+                    let markAng = target.markAngle !== undefined ? target.markAngle : Math.random() * Math.PI * 2;
+                    let startX = target.x + Math.cos(markAng) * 200;
+                    let startY = target.y + Math.sin(markAng) * 200;
+                    let dashAngle = Math.atan2(target.y - startY, target.x - startX);
+                    
+                    effects.push({ type: 'line', x1: startX, y1: startY, x2: target.x, y2: target.y, color: '#e1bee7', life: 0.2, maxLife: 0.2, lineWidth: 8 });
+                    effects.push({ type: 'circle', x: target.x, y: target.y, radius: 40, color: '#9c27b0', life: 0.2, maxLife: 0.2 });
+                    
+                    let ultDmg = dmg * 3; 
+                    
+                    if (sk.selectedUpg === 'A') player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.05);
+                    
+                    applyDamage(target, ultDmg, 'assassin_skill', dashAngle);
+                }, delay);
+            });
         },
         'rmb': () => {
             let target = getNearestEnemyFromPoint(mouseX, mouseY, 150);
@@ -200,6 +239,178 @@ var SkillRegistry = {
                 applyDamage(target, calcDmg(150), 'execute', execAngle);
                 if (target.hp <= 0 || target.dead) cooldowns.rmb = 0;
             }
+        }
+    },
+    'Machinist': {
+        1: (sk, dmg) => {
+            const tx = mouseX; const ty = mouseY;
+            let isLaser = sk.selectedUpg === 'A';
+            let isVolatile = sk.selectedUpg === 'B';
+            projectiles.push({
+                x: tx, y: ty, vx: 0, vy: 0, radius: 12, color: '#ff9800', life: 10.0, type: 'turret', damage: dmg, isEnemy: false, volatile: isVolatile, isLaser: isLaser, attackTimer: 0, angle: 0,
+                customUpdate: function(dt, p) {
+                    this.attackTimer -= dt * (buffs.overclockTimer > 0 ? 2.0 : 1.0);
+                    let target = getNearestEnemyFromPoint(this.x, this.y, 500);
+                    if (target) {
+                        this.angle = Math.atan2(target.y - this.y, target.x - this.x);
+                        if (this.attackTimer <= 0) {
+                            if (this.isLaser) {
+                                effects.push({ type: 'line', x1: this.x, y1: this.y, x2: target.x, y2: target.y, color: '#ff9800', life: 0.2, maxLife: 0.2, lineWidth: 4 });
+                                applyDamage(target, this.damage * 1.5, 'magic');
+                                this.attackTimer = 1.0;
+                            } else {
+                                projectiles.push({ x: this.x + Math.cos(this.angle)*15, y: this.y + Math.sin(this.angle)*15, vx: Math.cos(this.angle)*800, vy: Math.sin(this.angle)*800, radius: 4, color: '#ffb74d', life: 1.5, type: 'basic', damage: this.damage, pierce: false, isEnemy: false });
+                                this.attackTimer = 0.4;
+                            }
+                        }
+                    }
+                }
+            });
+        },
+        2: (sk, dmg) => {
+            const [dx, dy, dist] = getVector(player.x, player.y, mouseX, mouseY);
+            let tx = player.x + (dx/dist)*Math.min(dist, 400); let ty = player.y + (dy/dist)*Math.min(dist, 400);
+            let isRoot = sk.selectedUpg === 'A'; let isNetwork = sk.selectedUpg === 'B';
+            projectiles.push({
+                x: tx, y: ty, vx: 0, vy: 0, radius: 15, color: '#00e5ff', life: 8.0, type: 'tesla_coil_trap', damage: dmg, isEnemy: false, tickTimer: 0,
+                customUpdate: function(dt, p) {
+                    this.tickTimer -= dt;
+                    if (this.tickTimer <= 0) {
+                        effects.push({ type: 'circle', x: this.x, y: this.y, radius: isRoot ? 200 : 150, color: 'rgba(0, 229, 255, 0.2)', life: 0.2, maxLife: 0.2 });
+                        for (let e of enemies) {
+                            if (Math.hypot(e.x - this.x, e.y - this.y) < (isRoot ? 200 : 150) + e.size/2) {
+                                applyDamage(e, this.damage, 'magic');
+                                e.speed = e.baseSpeed * 0.5;
+                                if (isRoot && !e.teslaRooted) { e.frozenTimer = 1.0; e.teslaRooted = true; }
+                            }
+                        }
+                        if (isNetwork) {
+                            for (let t of projectiles) {
+                                if (t.type === 'turret' && Math.hypot(t.x - this.x, t.y - this.y) < 400) {
+                                    effects.push({ type: 'lightning', x1: this.x, y1: this.y, x2: t.x, y2: t.y, color: '#00e5ff', life: 0.2, maxLife: 0.2 });
+                                    for(let e of enemies) { if (distToSegment(e.x, e.y, this.x, this.y, t.x, t.y) < e.size/2 + 20) applyDamage(e, this.damage * 2, 'magic'); }
+                                }
+                            }
+                        }
+                        this.tickTimer = 0.5;
+                    }
+                }
+            });
+        },
+        3: (sk, dmg) => {
+            let targetX = mouseX; let targetY = mouseY;
+            let foundTarget = false;
+            for (let p of projectiles) {
+                if ((p.type === 'turret' || p.type === 'tesla_coil_trap') && Math.hypot(p.x - mouseX, p.y - mouseY) < 50) {
+                    targetX = p.x; targetY = p.y; foundTarget = true; break;
+                }
+            }
+            if (!foundTarget) cooldowns.s3 += 2.0; 
+            
+            if (sk.selectedUpg === 'A') { player.shield += 100; player.shieldTimer = 4.0; }
+            if (sk.selectedUpg === 'B') {
+                let decoyX = player.x; let decoyY = player.y;
+                effects.push({ type: 'circle', x: decoyX, y: decoyY, radius: player.radius, color: 'rgba(255, 152, 0, 0.5)', life: 2.0, maxLife: 2.0 });
+                for(let e of enemies) {
+                    if (Math.hypot(e.x - decoyX, e.y - decoyY) < 300 && !e.type.startsWith('boss')) { e.x += (decoyX - e.x)*0.05; e.y += (decoyY - e.y)*0.05; }
+                }
+            }
+            
+            effects.push({ type: 'line', x1: player.x, y1: player.y, x2: targetX, y2: targetY, color: '#757575', life: 0.2, maxLife: 0.2, lineWidth: 4 });
+            player.x = targetX; player.y = targetY; clampToBounds(player, player.radius);
+            player.iFrames = 0.3;
+        },
+        4: (sk, dmg) => {
+            buffs.overclockTimer = 6.0;
+            for(let p of projectiles) { if (p.type === 'turret' || p.type === 'tesla_coil_trap') p.life = p.type === 'turret' ? 10.0 : 8.0; }
+            if (sk.selectedUpg === 'B') {
+                SkillRegistry['Machinist'][1]({ selectedUpg: activeClass.skills[1].selectedUpg }, calcDmg(activeClass.skills[1].baseDmg));
+                mouseX += 40; SkillRegistry['Machinist'][1]({ selectedUpg: activeClass.skills[1].selectedUpg }, calcDmg(activeClass.skills[1].baseDmg));
+            }
+            if (sk.selectedUpg === 'A') {
+                setTimeout(() => {
+                    if (gameState !== STATE.PLAYING) return;
+                    for (let p of projectiles) {
+                        if (p.type === 'turret' || p.type === 'tesla_coil_trap') {
+                            p.life = 0; p.volatile = true; p.damage = dmg * 3;
+                        }
+                    }
+                }, 6000);
+            }
+        },
+        'rmb': () => {
+            const angle = Math.atan2(mouseY - player.y, mouseX - player.x);
+            for(let i=0; i<3; i++) {
+                let tx = player.x + Math.cos(angle - 0.4 + i*0.4) * 200;
+                let ty = player.y + Math.sin(angle - 0.4 + i*0.4) * 200;
+                projectiles.push({ x: tx, y: ty, vx: 0, vy: 0, radius: 10, color: '#f44336', life: 10.0, type: 'trap_throw', damage: calcDmg(100), isEnemy: false });
+            }
+        }
+    },
+    'Magic Knight': {
+        1: (sk, dmg) => {
+            let mult = getBladeConsumeMult();
+            player.blade.state = 'orbit'; player.blade.timer = 3.0; player.blade.orbitAngle = 0; player.blade.hitList = [];
+            player.blade.baseRadius = 100; player.blade.expanding = sk.selectedUpg === 'A'; player.blade.armorBuff = sk.selectedUpg === 'B'; player.blade.orbitDmg = dmg * mult;
+        },
+        2: (sk, dmg) => {
+            let mult = getBladeConsumeMult();
+            player.blade.state = 'cleave'; player.blade.timer = 4.0;
+            player.blade.radius = 120 * mult; player.blade.cleaveDmg = dmg * mult; player.blade.deflect = sk.selectedUpg === 'A';
+            buffs.fractureCleave = sk.selectedUpg === 'B' ? 4.0 : 0;
+        },
+        3: (sk, dmg) => {
+            let tempX = player.x; let tempY = player.y;
+            let bx = player.blade.x; let by = player.blade.y;
+            
+            if (sk.selectedUpg === 'A') {
+                effects.push({ type: 'lightning', x1: tempX, y1: tempY, x2: bx, y2: by, color: '#00e5ff', life: 2.0, maxLife: 2.0 });
+                for(let e of enemies) { if (distToSegment(e.x, e.y, tempX, tempY, bx, by) < e.size/2 + 20) applyDamage(e, dmg, 'magic'); }
+            }
+            if (sk.selectedUpg === 'B') buffs.evade100 = 1.5;
+
+            effects.push({ type: 'circle', x: tempX, y: tempY, radius: 80, color: 'rgba(0, 229, 255, 0.4)', life: 0.3, maxLife: 0.3 });
+            effects.push({ type: 'circle', x: bx, y: by, radius: 80, color: 'rgba(0, 229, 255, 0.4)', life: 0.3, maxLife: 0.3 });
+
+            for(let e of enemies) {
+                if (Math.hypot(e.x - tempX, e.y - tempY) < 80 + e.size/2 || Math.hypot(e.x - bx, e.y - by) < 80 + e.size/2) {
+                    applyDamage(e, dmg*0.5, 'magic'); e.isStaggered = true; e.staggerTimer = 1.0;
+                }
+            }
+            player.x = bx; player.y = by; player.blade.x = tempX; player.blade.y = tempY; clampToBounds(player, player.radius);
+        },
+        4: (sk, dmg) => {
+            let mult = getBladeConsumeMult();
+            buffs.bladeCascade = sk.selectedUpg === 'A' ? 10.0 : 6.0;
+            player.blade.cascadeDmg = dmg * mult;
+            
+            if (sk.selectedUpg === 'B') {
+                buffs.bladeCascade = 0; 
+                let cx = mouseX; let cy = mouseY;
+                effects.push({ type: 'circle', x: cx, y: cy, radius: 250, color: 'rgba(0, 0, 0, 0.8)', life: 3.0, maxLife: 3.0 });
+                let t = 0;
+                let pullInterval = setInterval(() => {
+                    if (gameState !== STATE.PLAYING) return;
+                    t += 0.1;
+                    effects.push({ type: 'circle', x: cx, y: cy, radius: 250 - (t*80), color: '#00e5ff', life: 0.1, maxLife: 0.1 });
+                    for(let e of enemies) {
+                        let [dx, dy, d] = getVector(e.x, e.y, cx, cy);
+                        if (d < 300 && !e.type.startsWith('boss')) { e.x += (dx/d)*300*0.1; e.y += (dy/d)*300*0.1; clampToBounds(e, e.size/2); }
+                    }
+                    if (t >= 3.0) {
+                        clearInterval(pullInterval);
+                        effects.push({ type: 'circle', x: cx, y: cy, radius: 350, color: '#fff', life: 0.5, maxLife: 0.5 });
+                        for(let e of enemies) { if (Math.hypot(e.x - cx, e.y - cy) < 350 + e.size/2) applyDamage(e, dmg * mult * 4, 'magic'); }
+                    }
+                }, 100);
+            }
+        },
+        'rmb': () => {
+            const angle = Math.atan2(mouseY - player.y, mouseX - player.x);
+            player.x += Math.cos(angle) * 300; player.y += Math.sin(angle) * 300; clampToBounds(player, player.radius);
+            player.iFrames = 0.5;
+            effects.push({ type: 'line', x1: player.x - Math.cos(angle)*300, y1: player.y - Math.sin(angle)*300, x2: player.x, y2: player.y, color: '#00e5ff', life: 0.2, maxLife: 0.2, lineWidth: 8 });
+            for(let e of enemies) { if (distToSegment(e.x, e.y, player.x - Math.cos(angle)*300, player.y - Math.sin(angle)*300, player.x, player.y) < e.size/2 + 20) applyDamage(e, calcDmg(100), 'magic'); }
         }
     }
 };
@@ -229,6 +440,14 @@ var EnemyAI = {
     'slime_melee': MeleeAI, 'thief': MeleeAI, 'shield': MeleeAI, 'voltaic_ooze': MeleeAI, 'toxic_sludge': MeleeAI, 'queen_guard': MeleeAI,
     'slime_ranged': RangedAI, 'archer': RangedAI,
     
+    'valerius_archer': (e, dt, curSpd, edx, edy, edist, i) => {
+        e.attackTimer -= dt;
+        if (e.attackTimer <= 0 && e.frozenTimer <= 0) {
+            projectiles.push({ x: e.x, y: e.y, vx: (edx/edist)*400, vy: (edy/edist)*400, radius: 6, color: '#ff5722', life: 5.0, isEnemy: true, damage: e.dmg });
+            e.attackTimer = 1.2; 
+        }
+    },
+
     'caster': (e, dt, curSpd, edx, edy, edist, i) => {
         if (edist > 400) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; } else if (edist < 250) { e.x -= (edx/edist)*curSpd*dt; e.y -= (edy/edist)*curSpd*dt; } 
         effects.push({ type: 'circle', x: e.x, y: e.y, radius: 400, color: 'rgba(255, 235, 59, 0.05)', life: 0.1, maxLife: 0.1 });
@@ -445,38 +664,147 @@ var EnemyAI = {
         }
     },
     'boss_valerius': (e, dt, curSpd, edx, edy, edist, i) => {
+        let hpPercent = e.hp / e.maxHp;
+
         if (e.state === 'jump_in') {
             e.stateTimer -= dt;
             e.y += ((e.targetY - e.y) * 10 * dt);
             if (e.stateTimer <= 0) {
-                e.y = e.targetY; e.state = 'yank'; e.stateTimer = 2.0; 
+                e.y = e.targetY; e.state = 'idle'; e.stateTimer = 2.0;
                 effects.push({ type: 'circle', x: e.x, y: e.y, radius: 100, color: '#4e342e', life: 0.5, maxLife: 0.5 });
             }
             return;
         }
 
-        e.stateTimer -= dt;
-        if (e.isStaggered) { e.renderColor = '#ffeb3b'; e.staggerTimer -= dt; if (e.staggerTimer <= 0) e.isStaggered = false; return; }
+        if (e.isStaggered) {
+            e.renderColor = '#ffeb3b'; e.staggerTimer -= dt;
+            if (e.staggerTimer <= 0) {
+                e.isStaggered = false; e.shieldHp = 0;
+            }
+            return;
+        }
         e.renderColor = e.color;
 
+        let phase = 1;
+        if (hpPercent <= 0.65 && hpPercent > 0.3) phase = 2;
+        if (hpPercent <= 0.3) phase = 3;
+
+        e.stateTimer -= dt;
+
         if (!e.state || e.state === 'idle') {
-            if (edist > 100) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
-            if (e.stateTimer <= 0) { const moves = ['lunge', 'yank', 'spin', 'slam']; e.state = moves[Math.floor(Math.random()*moves.length)]; e.stateTimer = e.state === 'lunge' ? 1.0 : (e.state === 'spin' ? 2.0 : 2.0); }
-        } else if (e.state === 'lunge') {
-            if (e.stateTimer > 0.5) { effects.push({ type: 'line', x1: e.x, y1: e.y, x2: e.x + edx*3, y2: e.y + edy*3, color: 'rgba(255,0,0,0.5)', life: 0.1, maxLife: 0.1 }); } 
-            else { e.x += (edx/edist)*curSpd*5*dt; e.y += (edy/edist)*curSpd*5*dt; if (edist < 50) { takeDamage(e.dmg * 2); e.state = 'idle'; e.isStaggered = true; e.staggerTimer = 2.0; e.stateTimer = 2.0; } }
-        } else if (e.state === 'yank') {
-            if (e.stateTimer > 1.0) { effects.push({ type: 'line', x1: e.x, y1: e.y, x2: player.x, y2: player.y, color: '#757575', life: 0.1, maxLife: 0.1 }); } 
-            else if (e.stateTimer > 0) { effects.push({ type: 'line', x1: e.x, y1: e.y, x2: player.x, y2: player.y, color: '#fff', life: 0.1, maxLife: 0.1 }); player.x -= (edx/edist)*800*dt; player.y -= (edy/edist)*800*dt; clampToBounds(player, player.radius); } 
-            else { e.state = 'idle'; e.stateTimer = 1.0; }
-        } else if (e.state === 'spin') {
-            e.spinAngle = (e.spinAngle || 0) + dt * 15;
-            effects.push({ type: 'line', x1: e.x, y1: e.y, x2: e.x + Math.cos(e.spinAngle)*200, y2: e.y + Math.sin(e.spinAngle)*200, color: '#ff9800', life: 0.1, maxLife: 0.1 });
-            effects.push({ type: 'circle', x: e.x, y: e.y, radius: 200, color: 'rgba(255, 152, 0, 0.1)', life: 0.1, maxLife: 0.1 });
-            if (edist < 200) takeDamage(e.dmg * 0.5 * dt, true);
-            if (e.stateTimer <= 0) { e.state = 'idle'; e.isStaggered = true; e.staggerTimer = 2.0; e.stateTimer = 2.0; }
-        } else if (e.state === 'slam') {
-            effects.push({ type: 'puddle', x: e.x, y: e.y, radius: 70, color: '#5d4037', life: 5.0, maxLife: 5.0 }); e.state = 'idle'; e.stateTimer = 1.0;
+            if (phase === 1) {
+                if (edist > 100) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
+                if (e.stateTimer <= 0) {
+                    e.state = (edist > 200) ? 'lunge' : (Math.random() < 0.4 ? 'sunder' : 'lunge');
+                    e.stateTimer = e.state === 'lunge' ? 1.0 : 1.5;
+                    if (e.state === 'lunge') {
+                        e.dashVx = (edx/edist) * curSpd * 6.0;
+                        e.dashVy = (edy/edist) * curSpd * 6.0;
+                    }
+                }
+            } else if (phase === 2) {
+                let cx = (currentMap.left + currentMap.right)/2;
+                let cy = (currentMap.top + currentMap.bottom)/2;
+                let [cdx, cdy, cdist] = getVector(e.x, e.y, cx, cy);
+                if (cdist > 10) { e.x += (cdx/cdist)*curSpd*3*dt; e.y += (cdy/cdist)*curSpd*3*dt; }
+
+                if (!e.archersSpawned) {
+                    e.archersSpawned = true; e.shieldHp = 2000; e.facingAngle = Math.PI; 
+                    enemies.push({ x: currentMap.left + 50, y: cy - 100, size: 24, color: '#8d6e63', speed: 0, hp: 300, maxHp: 300, type: 'valerius_archer', dmg: e.dmg*0.6, xp: 0, attackTimer: 0.5, ammo: 999, isValeriusMinion: true, frozenTimer: 0 });
+                    enemies.push({ x: currentMap.right - 50, y: cy + 100, size: 24, color: '#8d6e63', speed: 0, hp: 300, maxHp: 300, type: 'valerius_archer', dmg: e.dmg*0.6, xp: 0, attackTimer: 0.5, ammo: 999, isValeriusMinion: true, frozenTimer: 0 });
+                    activeEnemies += 2;
+                }
+
+                if (e.shieldHp <= 0 && !e.phase2Broken) {
+                    e.phase2Broken = true; e.isStaggered = true; e.staggerTimer = 3.0; e.state = 'idle'; e.stateTimer = 3.0;
+                    for(let j=enemies.length-1; j>=0; j--) {
+                        if (enemies[j].isValeriusMinion) { enemies[j].hp = 0; checkEnemyDeath(enemies[j]); }
+                    }
+                    return;
+                }
+
+                if (e.stateTimer <= 0 && !e.isStaggered) {
+                    e.state = 'javelin_volley'; e.stateTimer = 2.0; e.volleyAngle = e.facingAngle - 1.0;
+                }
+            } else if (phase === 3) {
+                if (edist > 150) { e.x += (edx/edist)*curSpd*1.5*dt; e.y += (edy/edist)*curSpd*1.5*dt; }
+                if (e.stateTimer <= 0) { 
+                    let moves = ['chain_hook', 'frenzy_lunge', 'slam'];
+                    e.state = moves[Math.floor(Math.random() * moves.length)];
+                    if (e.state === 'chain_hook') { e.stateTimer = 1.0; e.hookFired = false; }
+                    else if (e.state === 'frenzy_lunge') { 
+                        e.stateTimer = 0.8; 
+                        e.dashVx = (edx/edist) * curSpd * 8.0; 
+                        e.dashVy = (edy/edist) * curSpd * 8.0; 
+                    }
+                    else if (e.state === 'slam') { e.stateTimer = 1.0; }
+                }
+            }
+        } 
+        else if (e.state === 'lunge') {
+            if (e.stateTimer > 0.4) {
+                e.dashVx = (edx/edist) * curSpd * 10.0;
+                e.dashVy = (edy/edist) * curSpd * 10.0;
+                effects.push({ type: 'line', x1: e.x, y1: e.y, x2: e.x + e.dashVx*0.4, y2: e.y + e.dashVy*0.4, color: 'rgba(255,0,0,0.5)', life: 0.1, maxLife: 0.1, lineWidth: 8 });
+            } else { 
+                e.x += e.dashVx * dt; e.y += e.dashVy * dt; 
+                if (Math.hypot(player.x - e.x, player.y - e.y) < e.size/2 + player.radius) { takeDamage(e.dmg * 2); e.state = 'idle'; e.stateTimer = 1.5; } 
+            }
+            if (e.stateTimer <= 0) { e.state = 'idle'; e.stateTimer = 1.0; }
+        }
+        else if (e.state === 'sunder') {
+            if (e.stateTimer > 0.5) { effects.push({ type: 'circle', x: e.x, y: e.y, radius: 100, color: 'rgba(93, 64, 55, 0.3)', life: 0.1, maxLife: 0.1 }); }
+            else {
+                effects.push({ type: 'puddle', x: e.x, y: e.y, radius: 100, color: '#5d4037', life: 4.0, maxLife: 4.0, dmg: e.dmg });
+                e.state = 'idle'; e.stateTimer = 1.5;
+            }
+        }
+        else if (e.state === 'javelin_volley') {
+            e.volleyAngle += dt * 1.5; 
+            if (e.stateTimer > 0 && e.stateTimer % 0.2 < 0.05) {
+                projectiles.push({ x: e.x, y: e.y, vx: Math.cos(e.volleyAngle)*600, vy: Math.sin(e.volleyAngle)*600, radius: 8, color: '#ff9800', life: 3.0, isEnemy: true, damage: e.dmg });
+            }
+            if (e.stateTimer <= 0) { e.state = 'idle'; e.stateTimer = 2.0; e.facingAngle = Math.atan2(player.y - e.y, player.x - e.x); }
+        }
+        else if (e.state === 'chain_hook') {
+            if (e.stateTimer > 0.5) {
+                effects.push({ type: 'line', x1: e.x, y1: e.y, x2: player.x, y2: player.y, color: 'rgba(117, 117, 117, 0.5)', life: 0.1, maxLife: 0.1 });
+                e.hookTargetX = player.x; e.hookTargetY = player.y;
+            } else if (!e.hookFired) {
+                e.hookFired = true;
+                const [hx, hy, hdist] = getVector(e.x, e.y, e.hookTargetX, e.hookTargetY);
+                projectiles.push({ x: e.x, y: e.y, vx: (hx/hdist)*1200, vy: (hy/hdist)*1200, radius: 15, color: '#757575', life: 2.0, isEnemy: true, damage: e.dmg, type: 'chain_hook', sourceBoss: e });
+            }
+            if (e.stateTimer <= 0 && e.hookFired) { e.stateTimer = 0.1; } 
+        }
+        else if (e.state === 'hook_pull') {
+            const [px, py, pdist] = getVector(e.x, e.y, e.pullTargetX, e.pullTargetY);
+            if (pdist > 50) { e.x += (px/pdist)*2500*dt; e.y += (py/pdist)*2500*dt; }
+            else {
+                e.x = e.pullTargetX; e.y = e.pullTargetY;
+                effects.push({ type: 'circle', x: e.x, y: e.y, radius: 200, color: '#5d4037', life: 0.3, maxLife: 0.3 });
+                if (Math.hypot(player.x - e.x, player.y - e.y) <= 200 + player.radius) { takeDamage(e.dmg * 2); buffs.rooted = 1.0; }
+                e.state = 'idle'; e.stateTimer = 2.0;
+            }
+        }
+        else if (e.state === 'frenzy_lunge') {
+            if (e.stateTimer > 0.4) {
+                e.dashVx = (edx/edist) * curSpd * 12.0;
+                e.dashVy = (edy/edist) * curSpd * 12.0;
+                effects.push({ type: 'line', x1: e.x, y1: e.y, x2: e.x + e.dashVx*0.3, y2: e.y + e.dashVy*0.3, color: 'rgba(255,87,34,0.6)', life: 0.1, maxLife: 0.1, lineWidth: 10 });
+            } else { 
+                e.x += e.dashVx * dt; e.y += e.dashVy * dt; 
+                if (Math.hypot(player.x - e.x, player.y - e.y) < e.size/2 + player.radius) { takeDamage(e.dmg * 2.5); e.state = 'idle'; e.stateTimer = 1.0; } 
+            }
+            if (e.stateTimer <= 0) { e.state = 'idle'; e.stateTimer = 0.5; }
+        }
+        else if (e.state === 'slam') {
+            if (e.stateTimer > 0.4) { effects.push({ type: 'circle', x: e.x, y: e.y, radius: 140, color: 'rgba(78, 52, 46, 0.3)', life: 0.1, maxLife: 0.1 }); }
+            else {
+                effects.push({ type: 'circle', x: e.x, y: e.y, radius: 140, color: '#4e342e', life: 0.3, maxLife: 0.3 });
+                if (edist <= 140 + player.radius) takeDamage(e.dmg * 3);
+                e.state = 'idle'; e.stateTimer = 1.5;
+            }
         }
     },
     'amalgam_minion': (e, dt, curSpd, edx, edy, edist, i) => { 
@@ -520,7 +848,12 @@ var BasicAttackRegistry = {
     },
     'dagger': (dmg, isResonance) => {
         const angle = Math.atan2(mouseY - player.y, mouseX - player.x);
-        player.x += Math.cos(angle) * 30; player.y += Math.sin(angle) * 30; clampToBounds(player, player.radius);
+        
+        // Proximity check: Don't dash if an enemy is already in our face
+        let closest = getNearestEnemyFromPoint(player.x, player.y, 50);
+        let dashDist1 = closest ? 0 : 30;
+        
+        player.x += Math.cos(angle) * dashDist1; player.y += Math.sin(angle) * dashDist1; clampToBounds(player, player.radius);
         
         let startX1 = player.x + Math.cos(angle - 0.5)*15; let startY1 = player.y + Math.sin(angle - 0.5)*15;
         let endX1 = startX1 + Math.cos(angle) * 80; let endY1 = startY1 + Math.sin(angle) * 80;
@@ -533,7 +866,12 @@ var BasicAttackRegistry = {
         
         setTimeout(() => {
             if (gameState !== STATE.PLAYING) return;
-            player.x += Math.cos(angle) * 15; player.y += Math.sin(angle) * 15; clampToBounds(player, player.radius);
+            
+            // Second proximity check for the follow-up strike
+            closest = getNearestEnemyFromPoint(player.x, player.y, 50);
+            let dashDist2 = closest ? 0 : 15;
+            
+            player.x += Math.cos(angle) * dashDist2; player.y += Math.sin(angle) * dashDist2; clampToBounds(player, player.radius);
             
             let startX2 = player.x + Math.cos(angle + 0.5)*15; let startY2 = player.y + Math.sin(angle + 0.5)*15;
             let endX2 = startX2 + Math.cos(angle) * 80; let endY2 = startY2 + Math.sin(angle) * 80;
@@ -544,5 +882,25 @@ var BasicAttackRegistry = {
                 if (distToSegment(e.x, e.y, startX2, startY2, endX2, endY2) <= e.size/2 + 15) applyDamage(e, dmg, 'melee_basic', angle);
             }
         }, 150);
+    },
+    'scattergun': (dmg) => {
+        const angle = Math.atan2(mouseY - player.y, mouseX - player.x);
+        let isPierce = buffs.overclockTimer > 0;
+        
+        // Fires 5 pellets in a spread arc
+        for(let i=-2; i<=2; i++) {
+            let spreadAngle = angle + (i*0.1);
+            projectiles.push({ x: player.x, y: player.y, vx: Math.cos(spreadAngle)*900, vy: Math.sin(spreadAngle)*900, radius: 4, color: '#ffb74d', life: 0.4, type: 'scattergun', damage: dmg, pierce: isPierce, hitList: [], isEnemy: false });
+        }
+    },
+    'phantom_blade': (dmg) => {
+        if (!player.blade) return;
+        
+        // Triggers the blade to fly from its current location to the target location
+        player.blade.state = 'flying';
+        player.blade.targetX = mouseX;
+        player.blade.targetY = mouseY;
+        player.blade.hitList = [];
+        player.blade.baseDmg = dmg;
     }
 };

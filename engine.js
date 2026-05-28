@@ -10,7 +10,7 @@ let gameState = STATE.MENU;
 
 let lastTime = performance.now();
 let score = 0; let wave = 1; let enemiesToSpawn = 0; let enemySpawnTimer = 0; let activeEnemies = 0; let isBossWave = false; let bossSpawned = false;
-let hitStopTimer = 0; let isEndlessMode = false;
+let hitStopTimer = 0; let isEndlessMode = false; let devNoCooldowns = false;
 
 const keys = { w: false, a: false, s: false, d: false };
 let isMouseDown = false; let mouseX = canvas.width / 2; let mouseY = canvas.height / 2;
@@ -20,7 +20,8 @@ const player = {
     level: 1, xp: 0, maxXp: 50,
     baseHp: 100, hp: 100, maxHp: 100, shield: 0, shieldTimer: 0,
     gold: 0, bonusDmg: 0.0, skillPoints: 0, armor: 0,
-    frenzyStacks: 0, frenzyTimer: 0, momentum: 0, arcaneResonance: false
+    frenzyStacks: 0, frenzyTimer: 0, momentum: 0, arcaneResonance: false, iFrames: 0,
+    blade: null 
 };
 
 let classDataConfig = {}; let enemyDataConfig = {}; let itemDataConfig = {};
@@ -30,7 +31,7 @@ let inventory = []; let shopItems = [];
 let evolvingSkillId = null; let isProcessingClick = false; 
 
 const cooldowns = { basic: 0, s1: 0, s2: 0, s3: 0, s4: 0, rmb: 0 };
-const buffs = { rapidFire: 0, msBoost: 0, slowed: 0, ironBulwark: 0, rooted: 0, powerSurgeStacks: 0, powerSurgeTimer: 0, weakened: 0, evade100: 0, deathMarkActive: 0 };
+const buffs = { rapidFire: 0, msBoost: 0, slowed: 0, ironBulwark: 0, rooted: 0, powerSurgeStacks: 0, powerSurgeTimer: 0, weakened: 0, evade100: 0, deathMarkActive: 0, overclockTimer: 0, bladeCascade: 0, cascadeTimer: 0 };
 const enemies = []; const projectiles = []; const effects = []; const drops = [];
 const el = (id) => document.getElementById(id);
 
@@ -83,8 +84,12 @@ function startGame(className) {
     wave = 0; equipment = { weapon: null, armor: null, amulet: null, boots: null, gloves: null }; inventory = [];
     isEndlessMode = false;
     
-    recalcStats(); player.hp = player.maxHp; player.shield = 0; player.shieldTimer = 0; player.markTimer = 0; player.cowlCooldown = 0;
-    buffs.rooted = 0; buffs.powerSurgeStacks = 0; buffs.powerSurgeTimer = 0; buffs.weakened = 0; buffs.evade100 = 0; buffs.deathMarkActive = 0;
+    if (activeClass.name === 'Magic Knight') {
+        player.blade = { x: player.x, y: player.y, state: 'idle', timer: 0, charges: 0, angle: -Math.PI/2, targetX: player.x, targetY: player.y, hitList: [], orbitAngle: 0, baseDmg: 0 };
+    } else { player.blade = null; }
+
+    recalcStats(); player.hp = player.maxHp; player.shield = 0; player.shieldTimer = 0; player.markTimer = 0; player.cowlCooldown = 0; player.iFrames = 0;
+    buffs.rooted = 0; buffs.powerSurgeStacks = 0; buffs.powerSurgeTimer = 0; buffs.weakened = 0; buffs.evade100 = 0; buffs.deathMarkActive = 0; buffs.overclockTimer = 0; buffs.bladeCascade = 0;
     enemies.length = 0; projectiles.length = 0; effects.length = 0; drops.length = 0;
     
     el('start-screen').classList.add('hidden'); el('hud').classList.remove('hidden');
@@ -154,7 +159,7 @@ function applyDamage(enemy, amount, source = 'player', projAngle = null) {
     if (enemy.type === 'thief' && Math.random() < 0.20) {
         effects.push({ type: 'text', text: 'Evaded!', x: enemy.x, y: enemy.y - 20, color: '#fff', life: 0.6, maxLife: 0.6 }); return;
     }
-    if (enemy.type === 'shield' && enemy.shieldHp > 0) {
+    if ((enemy.type === 'shield' || enemy.type === 'boss_valerius') && enemy.shieldHp > 0) {
         const angleToPlayer = Math.atan2(player.y - enemy.y, player.x - enemy.x);
         let diff = enemy.facingAngle - angleToPlayer; while(diff < -Math.PI) diff += Math.PI*2; while(diff > Math.PI) diff -= Math.PI*2;
         if (Math.abs(diff) < Math.PI / 2.5) { 
@@ -194,9 +199,15 @@ function applyDamage(enemy, amount, source = 'player', projAngle = null) {
             if (buffs.deathMarkActive > 0) {
                 if (isNightblade && activeClass.skills[4].selectedUpg === 'A') player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.1);
                 effects.push({ type: 'circle', x: enemy.x, y: enemy.y, radius: 100, color: 'rgba(156, 39, 176, 0.4)', life: 0.3, maxLife: 0.3 });
+                
                 for(let k=enemies.length-1; k>=0; k--) {
-                    if (enemies[k] !== enemy && Math.hypot(enemy.x - enemies[k].x, enemy.y - enemies[k].y) <= 100 + enemies[k].size/2) {
-                        enemies[k].hp -= (trueDmg * 0.5); checkEnemyDeath(enemies[k]);
+                    let et = enemies[k];
+                    if (et !== enemy && Math.hypot(enemy.x - et.x, enemy.y - et.y) <= 100 + et.size/2) {
+                        et.aoeResistStacks = (et.aoeResistStacks || 0) + 1;
+                        et.aoeResistTimer = 2.0; 
+                        let splashDmg = (trueDmg * 0.5) / et.aoeResistStacks; 
+                        et.hp -= splashDmg; 
+                        checkEnemyDeath(et);
                     }
                 }
             }
@@ -216,6 +227,7 @@ function applyDamage(enemy, amount, source = 'player', projAngle = null) {
 }
 
 function takeDamage(amount, isContinuous = false) {
+    if (player.iFrames > 0) return;
     if (buffs.evade100 > 0) {
         if (!isContinuous) effects.push({ type: 'text', text: 'Evaded!', x: player.x, y: player.y - 30, color: '#e1bee7', life: 0.6, maxLife: 0.6 });
         return;
@@ -227,6 +239,10 @@ function takeDamage(amount, isContinuous = false) {
 
     if (buffs.ironBulwark > 0) amount *= 0.5;
     if (equipment.boots && equipment.boots.name === 'Ethereal Treads' && player.isMoving) amount *= 0.5;
+    
+    // Hazard Suit for Machinist
+    if (equipment.armor && equipment.armor.name === 'Hazard Suit' && (isContinuous || amount < 5)) return;
+
     if (!isContinuous) amount = Math.max(1, amount - player.armor); 
     
     if (player.shield > 0) {
@@ -328,7 +344,15 @@ function finishLevelUp() {
         if (wave === 0) startNextWave(); 
         else if (enemiesToSpawn === 0 && activeEnemies === 0) {
             gameState = STATE.INTERMISSION; el('intermission-title').innerText = isBossWave ? "Boss Defeated!" : "Wave Cleared"; el('intermission-title').style.color = "#ffca28"; el('btn-shop').classList.toggle('hidden', !isBossWave); el('intermission-screen').classList.remove('hidden');
-        } else { gameState = STATE.PLAYING; lastTime = performance.now(); }
+        } else { 
+            // DEV MODE FIX: Don't forcefully close dev mode if we were using it to warp/level up
+            if (!el('dev-screen').classList.contains('hidden')) {
+                gameState = STATE.DEV;
+            } else {
+                gameState = STATE.PLAYING; 
+            }
+            lastTime = performance.now(); 
+        }
     }
 }
 
@@ -370,6 +394,7 @@ function startNextWave() {
     if (player.skillPoints > 0) triggerLevelUp();
 }
 
+// --- DEV MODE ENHANCEMENTS ---
 window.devJumpWave = function() {
     const w = parseInt(el('dev-wave-input').value);
     if (!isNaN(w) && w > 0) {
@@ -379,12 +404,22 @@ window.devJumpWave = function() {
         closeDevMenu(); startNextWave();
     }
 }
-
-window.devLevelUp = function() { gainXP(player.maxXp - player.xp); closeDevMenu(); }
+window.devLevelUp = function() { 
+    // Yield to Level Up modal without closing Dev mode visually
+    gainXP(player.maxXp - player.xp); 
+}
 window.devAddGold = function() { player.gold += 1000; updateHUD(); }
 window.devKillAll = function() { 
     for(let i = enemies.length - 1; i >= 0; i--) { enemies[i].hp = 0; checkEnemyDeath(enemies[i]); }
     closeDevMenu(); 
+}
+window.devToggleCooldowns = function() {
+    devNoCooldowns = !devNoCooldowns;
+    el('btn-dev-cd').innerText = devNoCooldowns ? "Cooldowns: OFF" : "Cooldowns: Normal";
+}
+window.devOpenShop = function() {
+    closeDevMenu();
+    openShop();
 }
 window.closeDevMenu = function() { el('dev-screen').classList.add('hidden'); gameState = STATE.PLAYING; lastTime = performance.now(); }
 
@@ -440,6 +475,7 @@ function collectAllDrops() {
         else if (d.type === 'dmg') { player.bonusDmg += 0.05; } 
         else if (d.type === 'gold') { player.gold += d.val; } 
         else if (d.type === 'item') { inventory.push(d.itemData); }
+        else if (d.type === 'scrap') { player.hp = Math.min(player.maxHp, player.hp + 5); for(let i=1; i<=4; i++) cooldowns[`s${i}`] = Math.max(0, cooldowns[`s${i}`] - 0.5); }
     } drops.length = 0; updateHUD();
 }
 
@@ -487,6 +523,11 @@ function checkEnemyDeath(e) {
             else if (roll < rates.item + rates.orb + rates.gold) drops.push({ x: e.x, y: e.y, type: 'gold', val: 5 + wave, radius: 8, life: 10.0 });
         }
         
+        // Machinist Salvage Economy
+        if (activeClass.name === 'Machinist' && Math.random() < 0.25) {
+            drops.push({ x: e.x, y: e.y, type: 'scrap', radius: 10, life: 15.0 });
+        }
+        
         gainXP(e.xp); const idx = enemies.indexOf(e); if (idx > -1) enemies.splice(idx, 1);
         activeEnemies--; score++; updateHUD();
 
@@ -527,7 +568,7 @@ function renderInventory() {
 function generateShop() {
     shopItems = []; for(let i=0; i<3; i++) shopItems.push(generateItem(wave + 2)); 
     shopItems.push({ id: 'rare_wep', name: activeClass.rareWeapon.name, type: 'weapon', val: 1.0, desc: activeClass.rareWeapon.desc, price: 250, rarity: 'rare' });
-    shopItems.push({ id: 'rare_arm', name: activeClass.rareArmor.name, type: 'armor', val: activeClass.name==='Dragonknight'?200:activeClass.name==='Ranger'?120:100, desc: activeClass.rareArmor.desc, price: 200, rarity: 'rare' });
+    shopItems.push({ id: 'rare_arm', name: activeClass.rareArmor.name, type: 'armor', val: 240, desc: activeClass.rareArmor.desc, price: 200, rarity: 'rare' });
     shopItems.push({ id: 'rare_amu', name: activeClass.rareAmulet.name, type: 'amulet', val: 0.20, desc: activeClass.rareAmulet.desc, price: 200, rarity: 'rare' });
     shopItems.push({ id: 'rare_bot', name: activeClass.rareBoots.name, type: 'boots', val: 50, desc: activeClass.rareBoots.desc, price: 150, rarity: 'rare' });
     shopItems.push({ id: 'rare_glv', name: activeClass.rareGloves.name, type: 'gloves', val: 0.25, desc: activeClass.rareGloves.desc, price: 150, rarity: 'rare' });
@@ -579,6 +620,8 @@ function updateHUD() {
     if (activeClass.name === 'Ranger' && player.momentum > 0) passives.push(`Momentum: +${Math.round(player.momentum * 100)}%`);
     if (buffs.powerSurgeStacks > 0) passives.push(`Power Surge: ${buffs.powerSurgeStacks}`);
     if (buffs.weakened > 0) passives.push(`WEAKENED`);
+    if (activeClass.name === 'Magic Knight' && player.blade && player.blade.charges > 0) passives.push(`Resonance: ${player.blade.charges}`);
+    if (activeClass.name === 'Machinist' && buffs.overclockTimer > 0) passives.push(`OVERCLOCK: ${buffs.overclockTimer.toFixed(1)}s`);
     el('perm-display').innerText = passives.join(' | ');
 }
 
@@ -587,9 +630,13 @@ function updateHUD() {
 window.addEventListener('mousemove', e => { mouseX = e.clientX; mouseY = e.clientY; });
 window.addEventListener('mousedown', e => { 
     if (e.button === 0) isMouseDown = true; 
-    if (e.button === 2 && equipment.weapon && equipment.weapon.rarity === 'rare' && cooldowns.rmb <= 0 && gameState === STATE.PLAYING) {
-        cooldowns.rmb = 4.0 * getCDR();
+    if (e.button === 2 && equipment.weapon && equipment.weapon.rarity === 'rare' && (cooldowns.rmb <= 0 || devNoCooldowns) && gameState === STATE.PLAYING) {
+        cooldowns.rmb = devNoCooldowns ? 0 : 4.0 * getCDR();
         window.SkillRegistry[activeClass.name]['rmb']();
+    }
+    // Magic Knight Ultimate - Blade Cascade Click Trigger
+    if (e.button === 0 && buffs.bladeCascade > 0 && activeClass.skills[4].selectedUpg !== 'A' && gameState === STATE.PLAYING) {
+        window.spawnBladeDrop(mouseX + (Math.random()-0.5)*80, mouseY + (Math.random()-0.5)*80, player.blade.cascadeDmg);
     }
 });
 window.addEventListener('mouseup', e => { if (e.button === 0) isMouseDown = false; });
@@ -614,11 +661,11 @@ window.addEventListener('keydown', e => {
     const keyMap = { 'q': 1, 'e': 2, 'space': 3, 'r': 4 };
     if (keyMap[k]) {
         let i = keyMap[k];
-        if (cooldowns[`s${i}`] <= 0 && activeClass.skills[i].level > 0) {
+        if ((cooldowns[`s${i}`] <= 0 || devNoCooldowns) && activeClass.skills[i].level > 0) {
             const sk = activeClass.skills[i];
             let cdReduction = getCDR();
             if (activeClass.name === 'Dragonknight' && i === 3 && equipment.boots && equipment.boots.name === 'Earthshaker Treads') sk.maxCd = Math.max(1, sk.maxCd - 2.0);
-            cooldowns[`s${i}`] = sk.maxCd * cdReduction;
+            cooldowns[`s${i}`] = devNoCooldowns ? 0 : sk.maxCd * cdReduction;
             
             if (equipment.amulet && equipment.amulet.name === 'Amulet of Power') {
                 buffs.powerSurgeStacks = Math.min(5, buffs.powerSurgeStacks + 1);
@@ -654,7 +701,7 @@ function getNearestEnemyFromPoint(x, y, range, excludeList = []) {
 function castBasic() {
     const ANIM_LOCK = 0.15;
     let gloveBonus = equipment.gloves ? equipment.gloves.val : 0; 
-    cooldowns.basic = ANIM_LOCK + ((activeClass.basicAttackCD * getCDR()) / (1.0 + gloveBonus));
+    cooldowns.basic = devNoCooldowns ? 0 : ANIM_LOCK + ((activeClass.basicAttackCD * getCDR()) / (1.0 + gloveBonus));
     let dmg = calcDmg(activeClass.basicDmg, 1);
     
     let isResonance = false;
@@ -677,6 +724,7 @@ function update(dt) {
     if (buffs.evade100 > 0) buffs.evade100 -= dt;
     if (buffs.deathMarkActive > 0) buffs.deathMarkActive -= dt;
     if (player.cowlCooldown > 0) player.cowlCooldown -= dt;
+    if (player.iFrames > 0) player.iFrames -= dt;
 
     if (buffs.powerSurgeTimer > 0) { buffs.powerSurgeTimer -= dt; if (buffs.powerSurgeTimer <= 0) buffs.powerSurgeStacks = 0; }
     if (player.shield > 0) { player.shieldTimer -= dt; if (player.shieldTimer <= 0) { player.shield = 0; updateHUD(); } }
@@ -692,6 +740,70 @@ function update(dt) {
                 let idx = Math.floor(Math.random() * unmarked.length);
                 unmarked[idx].markAngle = Math.random() * Math.PI * 2;
                 unmarked.splice(idx, 1);
+            }
+        }
+    }
+
+    if (activeClass && activeClass.name === 'Machinist' && buffs.overclockTimer > 0) {
+        buffs.overclockTimer -= dt;
+    }
+
+    if (activeClass && activeClass.name === 'Magic Knight') {
+        if (buffs.bladeCascade > 0) {
+            buffs.bladeCascade -= dt;
+            if (activeClass.skills[4].selectedUpg === 'A' && isMouseDown) {
+                buffs.cascadeTimer = (buffs.cascadeTimer || 0) - dt;
+                if (buffs.cascadeTimer <= 0) {
+                    window.spawnBladeDrop(mouseX + (Math.random()-0.5)*150, mouseY + (Math.random()-0.5)*150, player.blade.cascadeDmg);
+                    buffs.cascadeTimer = 0.15;
+                }
+            }
+        }
+
+        if (player.blade) {
+            let b = player.blade;
+            if (b.state === 'flying') {
+                let [dx, dy, dist] = getVector(b.x, b.y, b.targetX, b.targetY);
+                if (dist > 20) {
+                    b.x += (dx/dist) * 2000 * dt; b.y += (dy/dist) * 2000 * dt; b.angle = Math.atan2(dy, dx);
+                    effects.push({ type: 'circle', x: b.x, y: b.y, radius: 10, color: '#00e5ff', life: 0.15, maxLife: 0.15 });
+                } else {
+                    b.x = b.targetX; b.y = b.targetY; b.state = 'idle';
+                }
+                for(let e of enemies) {
+                    if (Math.hypot(e.x - b.x, e.y - b.y) < e.size/2 + 25 && !b.hitList.includes(e)) {
+                        applyDamage(e, b.baseDmg, 'magic', b.angle); b.hitList.push(e); b.charges = Math.min(5, b.charges + 1);
+                    }
+                }
+            } else if (b.state === 'orbit') {
+                b.timer -= dt; b.orbitAngle = (b.orbitAngle || 0) + dt * 5;
+                b.radius = b.baseRadius + (b.expanding ? (3.0 - b.timer)*40 : 0);
+                b.x = player.x + Math.cos(b.orbitAngle) * b.radius; b.y = player.y + Math.sin(b.orbitAngle) * b.radius; b.angle = b.orbitAngle + Math.PI/2;
+                effects.push({ type: 'circle', x: b.x, y: b.y, radius: 15, color: '#00e5ff', life: 0.1, maxLife: 0.1 });
+                for(let e of enemies) {
+                    if (Math.hypot(e.x - b.x, e.y - b.y) < e.size/2 + 25 && !b.hitList.includes(e)) {
+                        applyDamage(e, b.orbitDmg, 'magic'); b.hitList.push(e);
+                        if (b.armorBuff) { player.armor += 0.1; } 
+                    }
+                }
+                if (b.timer <= 0) b.state = 'idle';
+            } else if (b.state === 'cleave') {
+                b.timer -= dt; b.angle += dt * 15;
+                effects.push({ type: 'circle', x: b.x, y: b.y, radius: b.radius, color: 'rgba(0, 229, 255, 0.2)', life: 0.1, maxLife: 0.1 });
+                for(let e of enemies) {
+                    let edist = Math.hypot(e.x - b.x, e.y - b.y);
+                    if (edist < b.radius) {
+                        applyDamage(e, b.cleaveDmg * dt, 'magic');
+                        if (!e.type.startsWith('boss')) {
+                            let [px, py, pd] = getVector(e.x, e.y, b.x, b.y);
+                            if (pd > 10) { e.x += (px/pd)*100*dt; e.y += (py/pd)*100*dt; clampToBounds(e, e.size/2); }
+                        }
+                    }
+                }
+                if (b.deflect) {
+                    for(let p of projectiles) { if (p.isEnemy && Math.hypot(p.x - b.x, p.y - b.y) < b.radius) { p.life = 0; } }
+                }
+                if (b.timer <= 0) b.state = 'idle';
             }
         }
     }
@@ -736,6 +848,7 @@ function update(dt) {
             else if (d.type === 'gold') { player.gold += d.val; }
             else if (d.type === 'item') { inventory.push(d.itemData); }
             else if (d.type === 'shield_catch') { let shieldAmt = d.skill && d.skill.selectedUpg === 'B' ? 100 : 50; player.shield += shieldAmt; player.shieldTimer = 5.0; }
+            else if (d.type === 'scrap') { player.hp = Math.min(player.maxHp, player.hp + 5); for(let j=1; j<=4; j++) cooldowns[`s${j}`] = Math.max(0, cooldowns[`s${j}`] - 0.5); }
             drops.splice(i, 1); updateHUD();
         }
     }
@@ -781,6 +894,8 @@ function update(dt) {
     for (let i = projectiles.length - 1; i >= 0; i--) {
         const p = projectiles[i]; 
         
+        if (p.customUpdate) { p.customUpdate(dt, p); }
+        
         if (p.source === 'fan_of_knives' && p.returnDmg && p.life <= 0.5 && !p.returning) {
             p.returning = true; p.hitList = [];
         }
@@ -802,7 +917,7 @@ function update(dt) {
         } else if (p.type === 'trap_throw' || p.type === 'spore') {
             const [tx, ty, td] = getVector(p.x, p.y, p.targetX, p.targetY); const spd = p.speed || 400;
             if (td > 10) { p.x += (tx/td)*spd*dt; p.y += (ty/td)*spd*dt; }
-        } else {
+        } else if (p.type !== 'turret' && p.type !== 'tesla_coil_trap') {
             p.x += p.vx * dt; p.y += p.vy * dt; 
         }
         
@@ -812,12 +927,31 @@ function update(dt) {
             if (p.type === 'boss_slimeball') { effects.push({ type: 'puddle', x: p.x, y: p.y, radius: 30, color: '#009688', life: 1.5, maxLife: 1.5 }); }
             if (p.type === 'trap_throw') { effects.push({ type: 'bear_trap', x: p.x, y: p.y, radius: 15, color: '#5d4037', life: 8.0, maxLife: 8.0, dmg: p.damage }); }
             if (p.type === 'spore') { effects.push({ type: 'spore_cloud', x: p.x, y: p.y, radius: 100, color: 'rgba(205, 220, 57, 0.4)', life: 3.0, maxLife: 3.0 }); }
+            if (p.type === 'chain_hook' && p.sourceBoss) { 
+                p.sourceBoss.state = 'hook_pull'; 
+                p.sourceBoss.pullTargetX = Math.max(currentMap.left + 20, Math.min(currentMap.right - 20, p.x)); 
+                p.sourceBoss.pullTargetY = Math.max(currentMap.top + 20, Math.min(currentMap.bottom - 20, p.y)); 
+            }
+            if (p.type === 'turret' && p.volatile) {
+                effects.push({ type: 'circle', x: p.x, y: p.y, radius: 150, color: '#ff5722', life: 0.3, maxLife: 0.3 });
+                for(let e of enemies) { if (Math.hypot(e.x - p.x, e.y - p.y) < e.size/2 + 150) applyDamage(e, p.damage * 3, 'magic'); }
+            }
+            if (p.type === 'phantom_blade_drop') {
+                effects.push({ type: 'circle', x: p.x, y: p.y, radius: 60, color: '#00e5ff', life: 0.2, maxLife: 0.2 });
+                for(let e of enemies) { if (Math.hypot(e.x - p.x, e.y - p.y) < e.size/2 + 60) applyDamage(e, p.damage, 'magic'); }
+            }
             projectiles.splice(i, 1); continue; 
         }
 
         if (p.isEnemy) {
             if (p.type !== 'trap_throw' && p.type !== 'spore' && Math.hypot(p.x - player.x, p.y - player.y) < player.radius + p.radius) { 
                 takeDamage(p.damage); 
+                if (p.type === 'chain_hook') {
+                    buffs.rooted = 1.0;
+                    let [bx, by, bdist] = getVector(player.x, player.y, p.sourceBoss.x, p.sourceBoss.y);
+                    player.x += (bx/bdist)*(bdist - 50); player.y += (by/bdist)*(bdist - 50); clampToBounds(player, player.radius);
+                    p.sourceBoss.state = 'idle'; p.sourceBoss.stateTimer = 1.5; 
+                }
                 if (p.type === 'boss_slimeball') { effects.push({ type: 'puddle', x: p.x, y: p.y, radius: 30, color: '#009688', life: 1.5, maxLife: 1.5 }); }
                 if (p.type === 'bolas') { 
                     buffs.rooted = 1.0; const boss = enemies.find(e => e.type === 'boss_beastmaster');
@@ -826,6 +960,8 @@ function update(dt) {
                 projectiles.splice(i, 1); 
             }
         } else {
+            if (p.type === 'turret' || p.type === 'tesla_coil_trap') continue; 
+            
             if (p.type === 'shield_throw') {
                 if (!p.returning && (p.life <= 1.0 || p.x<=currentMap.left+20 || p.x>=currentMap.right-20 || p.y<=currentMap.top+20 || p.y>=currentMap.bottom-20)) { p.returning = true; p.hitList = []; }
                 if (p.returning) {
@@ -841,7 +977,7 @@ function update(dt) {
             for (let j = enemies.length - 1; j >= 0; j--) {
                 const e = enemies[j];
                 if (Math.hypot(p.x - e.x, p.y - e.y) < e.size/2 + p.radius) {
-                    if ((p.pierce || p.type === 'shield_throw' || p.type === 'fan_of_knives') && p.hitList.includes(e)) continue;
+                    if ((p.pierce || p.type === 'shield_throw' || p.type === 'fan_of_knives' || p.type === 'scattergun') && p.hitList.includes(e)) continue;
 
                     if (p.type === 'fireball' || p.resonance) {
                         let explRadius = p.sourceSkill && p.sourceSkill.selectedUpg === 'B' ? 100 : 70;
@@ -870,9 +1006,13 @@ function update(dt) {
                             if (nextT) { const [nx, ny, nd] = getVector(p.x, p.y, nextT.x, nextT.y); p.vx = (nx/nd)*900; p.vy = (ny/nd)*900; } 
                             else { hit = true; } 
                         } else { hit = true; }
+                    } else if (p.type === 'scattergun') {
+                        applyDamage(e, p.damage, 'ranged');
+                        let [ebx, eby, ebd] = getVector(player.x, player.y, e.x, e.y);
+                        if (!e.type.startsWith('boss') && ebd > 0) { e.x += (ebx/ebd)*15; e.y += (eby/ebd)*15; clampToBounds(e, e.size/2); }
                     } else { applyDamage(e, p.damage, activeClass.name === 'Ranger' ? 'ranged' : (p.source === 'fan_of_knives' ? 'assassin_skill' : 'magic'), Math.atan2(p.vy, p.vx)); }
                     
-                    if (p.pierce || p.type === 'shield_throw' || p.type === 'ricochet' || p.type === 'fan_of_knives') { if (p.type !== 'ricochet') p.hitList.push(e); } else { hit = true; break; }
+                    if (p.pierce || p.type === 'shield_throw' || p.type === 'ricochet' || p.type === 'fan_of_knives' || p.type === 'scattergun') { if (p.type !== 'ricochet') p.hitList.push(e); } else { hit = true; break; }
                 }
             }
             if (hit) projectiles.splice(i, 1);
@@ -888,6 +1028,11 @@ function update(dt) {
         if (e.bleedTimer > 0) {
             e.bleedTimer -= dt; applyDamage(e, e.bleedDmg * dt, 'dot');
             if (Math.random() < 0.1) effects.push({ type: 'circle', x: e.x, y: e.y, radius: 4, color: '#f44336', life: 0.2, maxLife: 0.2 });
+        }
+        
+        if (e.aoeResistTimer > 0) {
+            e.aoeResistTimer -= dt;
+            if (e.aoeResistTimer <= 0) e.aoeResistStacks = 0;
         }
 
         let curSpd = (e.speed === 0 || e.frozenTimer > 0) ? (e.speed === 0 ? 0 : e.speed * 0.3) : e.speed;
@@ -909,7 +1054,7 @@ function update(dt) {
 
         if (edist > 0) {
             let targetAngle = Math.atan2(edy, edx);
-            if (e.type === 'shield') {
+            if (e.type === 'shield' || e.type === 'boss_valerius') {
                 let diff = targetAngle - (e.facingAngle || 0); while(diff < -Math.PI) diff += Math.PI*2; while(diff > Math.PI) diff -= Math.PI*2; e.facingAngle = (e.facingAngle || 0) + diff * 3.0 * dt; 
             } else { e.facingAngle = targetAngle; }
         }
@@ -944,6 +1089,11 @@ function draw() {
 
     for (const d of drops) {
         if (d.type === 'shield_catch') { ctx.strokeStyle = '#78909c'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(d.x, d.y, d.radius, 0, Math.PI*2); ctx.stroke(); }
+        else if (d.type === 'scrap') {
+            ctx.fillStyle = '#ff9800'; ctx.beginPath();
+            for(let j=0; j<6; j++) { let a = (Math.PI*2/6)*j; ctx.lineTo(d.x + Math.cos(a)*d.radius, d.y + Math.sin(a)*d.radius); }
+            ctx.closePath(); ctx.fill(); ctx.fillStyle = '#fff'; ctx.font = '10px monospace'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('⚙', d.x, d.y);
+        }
         else {
             if (d.type === 'item') ctx.fillStyle = '#4caf50'; else if (d.type === 'gold') ctx.fillStyle = '#ffd54f'; else ctx.fillStyle = d.type === 'hp' ? '#e53935' : '#ab47bc';
             ctx.beginPath(); ctx.arc(d.x, d.y, d.radius, 0, Math.PI * 2); ctx.fill();
@@ -971,7 +1121,7 @@ function draw() {
         if (e.type === 'slime_ranged' || e.type.startsWith('boss') || e.type === 'voltaic_ooze' || e.type === 'toxic_sludge' || e.type === 'amalgam_minion' || e.type === 'caster' || e.type === 'spore_slime' || e.type === 'crystal_slime' || e.type === 'slime_warden' || e.type === 'queen_guard') { ctx.beginPath(); ctx.arc(e.x, e.y, e.size/2, 0, Math.PI*2); ctx.fill(); } 
         else { ctx.fillRect(e.x - e.size/2, e.y - e.size/2, e.size, e.size); }
         
-        if (e.type === 'shield' && e.shieldHp > 0) {
+        if ((e.type === 'shield' || e.type === 'boss_valerius') && e.shieldHp > 0) {
             ctx.strokeStyle = '#fff'; ctx.lineWidth = 4; ctx.beginPath();
             ctx.arc(e.x, e.y, e.size/2 + 2, e.facingAngle - Math.PI/2.5, e.facingAngle + Math.PI/2.5); 
             ctx.stroke();
@@ -992,8 +1142,36 @@ function draw() {
     }
 
     for (const p of projectiles) {
-        ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI*2); ctx.fill();
-        ctx.shadowBlur = 10; ctx.shadowColor = p.color; ctx.fill(); ctx.shadowBlur = 0;
+        if (p.type === 'turret') {
+            ctx.fillStyle = '#424242'; ctx.fillRect(p.x - 12, p.y - 12, 24, 24);
+            ctx.strokeStyle = '#ff9800'; ctx.lineWidth = 2; ctx.strokeRect(p.x - 12, p.y - 12, 24, 24);
+            ctx.fillStyle = '#9e9e9e'; ctx.beginPath(); ctx.arc(p.x, p.y, 8, 0, Math.PI*2); ctx.fill();
+            ctx.strokeStyle = '#e0e0e0'; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x + Math.cos(p.angle)*18, p.y + Math.sin(p.angle)*18); ctx.stroke();
+        } else if (p.type === 'tesla_coil_trap') {
+            ctx.fillStyle = '#1a237e'; ctx.beginPath(); ctx.arc(p.x, p.y, 10, 0, Math.PI*2); ctx.fill();
+            ctx.strokeStyle = '#00e5ff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(p.x, p.y, 14, 0, Math.PI*2); ctx.stroke();
+            if (Math.random() < 0.3) { ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x + (Math.random()-0.5)*20, p.y + (Math.random()-0.5)*20); ctx.stroke(); }
+        } else if (p.type === 'phantom_blade_drop') {
+            ctx.fillStyle = '#00e5ff'; ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI*2); ctx.fill();
+            ctx.shadowBlur = 10; ctx.shadowColor = '#00e5ff'; ctx.fill(); ctx.shadowBlur = 0;
+        } else {
+            ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI*2); ctx.fill();
+            ctx.shadowBlur = 10; ctx.shadowColor = p.color; ctx.fill(); ctx.shadowBlur = 0;
+        }
+    }
+
+    if (activeClass && activeClass.name === 'Magic Knight' && player.blade) {
+        let b = player.blade;
+        ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.angle);
+        
+        if (b.charges > 0) { ctx.shadowBlur = 15; ctx.shadowColor = '#ffd54f'; ctx.strokeStyle = '#ffd54f'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, 20 + b.charges*2, 0, Math.PI*2); ctx.stroke(); ctx.shadowBlur = 0; }
+        
+        ctx.fillStyle = '#00e5ff'; ctx.beginPath(); ctx.moveTo(0, -30); ctx.lineTo(10, 10); ctx.lineTo(-10, 10); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(0, -25); ctx.lineTo(4, 5); ctx.lineTo(-4, 5); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#1976d2'; ctx.fillRect(-12, 10, 24, 4);
+        ctx.fillStyle = '#ffd54f'; ctx.fillRect(-4, 14, 8, 12);
+        
+        ctx.restore();
     }
 
     if (player.hp > 0 && gameState !== STATE.MENU && gameState !== STATE.DEAD) {
@@ -1012,6 +1190,9 @@ function draw() {
             ctx.strokeStyle = equipment.weapon && equipment.weapon.rarity === 'rare' ? '#2196f3' : '#bdbdbd'; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(player.x + Math.cos(angle)*10, player.y + Math.sin(angle)*10); ctx.lineTo(player.x + Math.cos(angle)*40, player.y + Math.sin(angle)*40); ctx.stroke();
             ctx.strokeStyle = '#ffca28'; ctx.lineWidth = 4; ctx.beginPath(); const cx = player.x + Math.cos(angle)*15; const cy = player.y + Math.sin(angle)*15; const perp = angle + Math.PI/2;
             ctx.moveTo(cx + Math.cos(perp)*12, cy + Math.sin(perp)*12); ctx.lineTo(cx - Math.cos(perp)*12, cy - Math.sin(perp)*12); ctx.stroke();
+        } else if (activeClass && activeClass.weapon === 'scattergun') {
+            ctx.strokeStyle = '#ff9800'; ctx.lineWidth = 8; ctx.beginPath(); ctx.moveTo(player.x + Math.cos(angle)*10, player.y + Math.sin(angle)*10); ctx.lineTo(player.x + Math.cos(angle)*25, player.y + Math.sin(angle)*25); ctx.stroke();
+            ctx.strokeStyle = '#757575'; ctx.lineWidth = 12; ctx.beginPath(); ctx.moveTo(player.x + Math.cos(angle)*25, player.y + Math.sin(angle)*25); ctx.lineTo(player.x + Math.cos(angle)*40, player.y + Math.sin(angle)*40); ctx.stroke();
         } else if (activeClass && activeClass.weapon === 'dagger') {
             const isRare = equipment.weapon && equipment.weapon.rarity === 'rare';
             const handleColor = isRare ? '#4a148c' : '#9c27b0';

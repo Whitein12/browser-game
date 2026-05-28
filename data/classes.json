@@ -55,8 +55,38 @@
     "skills": {
       "1": { "name": "Fan of Knives", "level": 0, "maxCd": 3.0, "baseDmg": 5, "selectedUpg": null, "upgA": { "name": "Surgical Steel", "desc": "Daggers pierce multiple enemies" }, "upgB": { "name": "Returning Blades", "desc": "Daggers instantly return, hitting twice" } },
       "2": { "name": "Smoke Bomb", "level": 0, "maxCd": 8.0, "baseDmg": 0, "selectedUpg": null, "upgA": { "name": "Toxic Fumes", "desc": "Enemies in smoke take heavy continuous poison damage" }, "upgB": { "name": "Thick Fog", "desc": "Larger radius; cleanses all negative debuffs on cast" } },
-      "3": { "name": "Phantom Dash", "level": 0, "maxCd": 4.0, "baseDmg": 30, "selectedUpg": null, "upgA": { "name": "Assassination", "desc": "Doubles range; deals 200% more damage to marked targets" }, "upgB": { "name": "Acrobatics", "desc": "Grants a second stored charge" } },
-      "4": { "name": "Death Mark", "level": 0, "maxCd": 15.0, "baseDmg": 0, "selectedUpg": null, "upgA": { "name": "Bloodlust", "desc": "Popping a Weak Point while active heals 10% Max HP" }, "upgB": { "name": "Chain Reaction", "desc": "When a marked enemy dies, they explode and spread the mark" } }
+      "3": { "name": "Phantom Dash", "level": 0, "maxCd": 4.0, "baseDmg": 5, "selectedUpg": null, "upgA": { "name": "Assassination", "desc": "Doubles range; deals 200% more damage to marked targets" }, "upgB": { "name": "Acrobatics", "desc": "Grants a second stored charge" } },
+      "4": { "name": "Death Mark", "level": 0, "maxCd": 15.0, "baseDmg": 80, "selectedUpg": null, "upgA": { "name": "Bloodlust", "desc": "Popping a Weak Point while active heals 10% Max HP" }, "upgB": { "name": "Chain Reaction", "desc": "When a marked enemy dies, they explode and spread the mark" } }
+    }
+  },
+  "machinist": {
+    "name": "Machinist", "color": "#ff9800", "weapon": "scattergun", "baseMaxHp": 140, "baseArmor": 3, "dmgMult": 1.0, "basicAttackCD": 0.4, "basicDmg": 10,
+    "passive": "Salvage Economy: 25% chance for enemies to drop Scrap on death. Scrap heals 5 HP and reduces all cooldowns by 0.5s.",
+    "rareWeapon": { "name": "Heavy Flak Cannon", "desc": "+100% DMG | RMB: Deploy Minefield", "rmbSkill": "Minefield" },
+    "rareArmor": { "name": "Hazard Suit", "desc": "+240 Max HP | Immune to poison and slow effects" },
+    "rareAmulet": { "name": "Amulet of Power", "desc": "+20% CDR | Skill cast grants +10% DMG (Stacks 5x)" },
+    "rareBoots": { "name": "Ethereal Treads", "desc": "+50 Move Speed | No collision & 50% less DMG while moving" },
+    "rareGloves": { "name": "Vampiric Grips", "desc": "+25% Attack Speed | Heal 2% of damage dealt" },
+    "skills": {
+      "1": { "name": "Sentry Turret", "level": 0, "maxCd": 6.0, "baseDmg": 15, "selectedUpg": null, "upgA": { "name": "Laser Optics", "desc": "Turret fires piercing laser beams" }, "upgB": { "name": "Volatile Casing", "desc": "Explodes massively when its duration expires" } },
+      "2": { "name": "Tesla Coil", "level": 0, "maxCd": 8.0, "baseDmg": 10, "selectedUpg": null, "upgA": { "name": "High Voltage", "desc": "Roots enemies for 1s upon entering the field" }, "upgB": { "name": "Arc Network", "desc": "Draws lightning to nearby Sentry Turrets" } },
+      "3": { "name": "Magnetic Grapple", "level": 0, "maxCd": 5.0, "baseDmg": 0, "selectedUpg": null, "upgA": { "name": "Kinetic Shield", "desc": "Gain a heavy shield upon grappling" }, "upgB": { "name": "Decoy Projection", "desc": "Leaves a distracting hologram at the launch point" } },
+      "4": { "name": "Overclock Protocol", "level": 0, "maxCd": 20.0, "baseDmg": 0, "selectedUpg": null, "upgA": { "name": "Nuclear Payload", "desc": "When Overclock ends, all active turrets violently detonate" }, "upgB": { "name": "Automated Assembly", "desc": "Casting instantly spawns two free Sentry Turrets at your location" } }
+    }
+  },
+  "magicknight": {
+    "name": "Magic Knight", "color": "#00e5ff", "weapon": "phantom_blade", "baseMaxHp": 100, "baseArmor": 1, "dmgMult": 1.1, "basicAttackCD": 0.5, "basicDmg": 20,
+    "passive": "Resonant Charge: Passing the Phantom Blade through enemies builds charges (Max 5). Skills 1, 2, and 4 consume charges for +20% radius/damage per charge.",
+    "rareWeapon": { "name": "Soulreaver Edge", "desc": "+100% DMG | RMB: Spectral Dash", "rmbSkill": "Spectral Dash" },
+    "rareArmor": { "name": "Aegis Cloak", "desc": "+240 Max HP | +5 Base Armor" },
+    "rareAmulet": { "name": "Amulet of Power", "desc": "+20% CDR | Skill cast grants +10% DMG (Stacks 5x)" },
+    "rareBoots": { "name": "Ethereal Treads", "desc": "+50 Move Speed | No collision & 50% less DMG while moving" },
+    "rareGloves": { "name": "Vampiric Grips", "desc": "+25% Attack Speed | Heal 2% of damage dealt" },
+    "skills": {
+      "1": { "name": "Orbit", "level": 0, "maxCd": 5.0, "baseDmg": 15, "selectedUpg": null, "upgA": { "name": "Repulsion Field", "desc": "Orbit radius expands continuously over 3s" }, "upgB": { "name": "Aegis Guard", "desc": "Gain +1 temporary Armor per enemy struck" } },
+      "2": { "name": "Dimensional Cleave", "level": 0, "maxCd": 8.0, "baseDmg": 25, "selectedUpg": null, "upgA": { "name": "Deflection", "desc": "The spinning blade destroys incoming enemy projectiles" }, "upgB": { "name": "Fracture", "desc": "Command Striking through the cleave splits it into 3 projectiles" } },
+      "3": { "name": "Aether Swap", "level": 0, "maxCd": 6.0, "baseDmg": 40, "selectedUpg": null, "upgA": { "name": "Wormhole", "desc": "Leaves a damaging lightning trail between swap points" }, "upgB": { "name": "Tactical Retreat", "desc": "Grants 1.5s of Invincibility upon swapping" } },
+      "4": { "name": "Blade Cascade", "level": 0, "maxCd": 18.0, "baseDmg": 45, "selectedUpg": null, "upgA": { "name": "Infinite Rain", "desc": "Duration extended to 10s; hold click to continuously cast" }, "upgB": { "name": "Singularity Convergence", "desc": "Blades form a black hole that pulls enemies, then detonates" } }
     }
   }
 }
