@@ -32,8 +32,7 @@
         .class-card { background: #222; border: 2px solid; padding: 20px; border-radius: 8px; cursor: pointer; transition: transform 0.2s; position: relative; }
         .class-card:hover { transform: scale(1.05); }
         .class-title { font-size: 24px; font-weight: bold; margin-bottom: 10px; text-shadow: 1px 1px 0 #000; }
-        .diff-tag { position: absolute; top: 10px; right: 10px; font-size: 12px; padding: 4px 8px; border-radius: 4px; background: rgba(0,0,0,0.5); border: 1px solid; }
-        
+        .diff-tag { position: absolute; bottom: 15px; right: 15px; font-size: 12px; padding: 4px 8px; border-radius: 4px; background: rgba(0,0,0,0.8); border: 1px solid; }        
         .inventory-grid { display: flex; gap: 20px; max-width: 1000px; width: 100%; padding: 20px; box-sizing: border-box; }
         .inv-column { flex: 1; background: #222; border: 2px solid #555; border-radius: 8px; padding: 15px; display: flex; flex-direction: column; gap: 10px; }
         .item-slot { background: #111; border: 1px solid #444; padding: 10px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
@@ -235,7 +234,12 @@
         </div>
     </div>
 
-    <script src="registries.js"></script>
-    <script src="engine.js"></script>
+    <script src="js/globals.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/skills.js"></script>
+    <script src="js/ai.js"></script>
+    <script src="js/combat.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/main.js"></script>
 </body>
 </html>
