@@ -3,7 +3,7 @@
     "name": "Dragonknight", "color": "#e53935", "weapon": "sword", "baseMaxHp": 200, "baseArmor": 5, "dmgMult": 0.8, "basicAttackCD": 0.4, "basicDmg": 15,
     "passive": "Frenzy: Melee hits grant +2% DMG and +2% Attack Speed (Max 10 stacks). Fades after 3s out of combat.",
     "rareWeapon": { "name": "Wyrmbane Greatsword", "desc": "+100% DMG | RMB: Wyrm Strike", "rmbSkill": "Wyrm Strike" },
-    "rareArmor": { "name": "Dragon Scale Plate", "desc": "+150 Max HP | Heals 5 HP on kill" },
+    "rareArmor": { "name": "Dragon Scale Plate", "desc": "+240 Max HP | Heals 5 HP on kill" },
     "rareAmulet": { "name": "Amulet of Power", "desc": "+20% CDR | Skill cast grants +10% DMG (Stacks 5x)" },
     "rareBoots": { "name": "Ethereal Treads", "desc": "+50 Move Speed | No collision & 50% less DMG while moving" },
     "rareGloves": { "name": "Vampiric Grips", "desc": "+25% Attack Speed | Heal 2% of damage dealt" },
@@ -18,7 +18,7 @@
     "name": "Spellweaver", "color": "#4fc3f7", "weapon": "staff", "baseMaxHp": 80, "baseArmor": 0, "dmgMult": 1.2, "basicAttackCD": 0.3, "basicDmg": 10,
     "passive": "Arcane Resonance: Casting spells empowers your next basic attack to explode in an AoE.",
     "rareWeapon": { "name": "Archmagus Staff", "desc": "+100% DMG | RMB: Arcane Beam", "rmbSkill": "Arcane Beam" },
-    "rareArmor": { "name": "Robes of the Magi", "desc": "+60 Max HP | Basic attacks pierce 1 enemy" },
+    "rareArmor": { "name": "Robes of the Magi", "desc": "+240 Max HP | Basic attacks pierce 1 enemy" },
     "rareAmulet": { "name": "Amulet of Power", "desc": "+20% CDR | Skill cast grants +10% DMG (Stacks 5x)" },
     "rareBoots": { "name": "Ethereal Treads", "desc": "+50 Move Speed | No collision & 50% less DMG while moving" },
     "rareGloves": { "name": "Vampiric Grips", "desc": "+25% Attack Speed | Heal 2% of damage dealt" },
@@ -33,7 +33,7 @@
     "name": "Ranger", "color": "#81c784", "weapon": "bow", "baseMaxHp": 120, "baseArmor": 2, "dmgMult": 1.0, "basicAttackCD": 0.25, "basicDmg": 8,
     "passive": "Fleetfoot: Continuous movement builds up momentum, granting up to +20% Damage. Stopping clears it.",
     "rareWeapon": { "name": "Stormcaller Bow", "desc": "+100% DMG | RMB: Lightning Volley", "rmbSkill": "Lightning Volley" },
-    "rareArmor": { "name": "Windrunner Tunic", "desc": "+80 Max HP | +30% Base Move Speed" },
+    "rareArmor": { "name": "Windrunner Tunic", "desc": "+240 Max HP | +30% Base Move Speed" },
     "rareAmulet": { "name": "Amulet of Power", "desc": "+20% CDR | Skill cast grants +10% DMG (Stacks 5x)" },
     "rareBoots": { "name": "Ethereal Treads", "desc": "+50 Move Speed | No collision & 50% less DMG while moving" },
     "rareGloves": { "name": "Vampiric Grips", "desc": "+25% Attack Speed | Heal 2% of damage dealt" },
@@ -42,6 +42,21 @@
       "2": { "name": "Nature's Stride", "level": 0, "maxCd": 8.0, "baseDmg": 0, "selectedUpg": null, "upgA": { "name": "Mending Winds", "desc": "Increases healing amount" }, "upgB": { "name": "Tailwind", "desc": "Increases movement speed boost" } },
       "3": { "name": "Vault", "level": 0, "maxCd": 5.0, "baseDmg": 30, "selectedUpg": null, "upgA": { "name": "Parting Shot", "desc": "Launches an attack toward nearest enemy" }, "upgB": { "name": "Acrobatics", "desc": "Bigger jump range" } },
       "4": { "name": "Volley", "level": 0, "maxCd": 10.0, "baseDmg": 30, "selectedUpg": null, "upgA": { "name": "Heavy Shafts", "desc": "Arrows pierce 1 enemy" }, "upgB": { "name": "Rain of Arrows", "desc": "Fires +2 additional arrows" } }
+    }
+  },
+  "nightblade": {
+    "name": "Nightblade", "color": "#9c27b0", "weapon": "dagger", "baseMaxHp": 60, "baseArmor": 1, "dmgMult": 1.5, "basicAttackCD": 0.3, "basicDmg": 12,
+    "passive": "Expose Weakness: Periodically marks random nearby enemies. Hitting a marked enemy consumes the mark, dealing massive True Damage and granting a brief MS burst.",
+    "rareWeapon": { "name": "Shadowstrike Daggers", "desc": "+100% DMG | RMB: Execute (Resets on kill)", "rmbSkill": "Execute" },
+    "rareArmor": { "name": "Nightblade's Cowl", "desc": "+240 Max HP | 100% Evade for 2s when dropping below 30% HP" },
+    "rareAmulet": { "name": "Amulet of Power", "desc": "+20% CDR | Skill cast grants +10% DMG (Stacks 5x)" },
+    "rareBoots": { "name": "Ethereal Treads", "desc": "+50 Move Speed | No collision & 50% less DMG while moving" },
+    "rareGloves": { "name": "Vampiric Grips", "desc": "+25% Attack Speed | Heal 2% of damage dealt" },
+    "skills": {
+      "1": { "name": "Fan of Knives", "level": 0, "maxCd": 3.0, "baseDmg": 5, "selectedUpg": null, "upgA": { "name": "Surgical Steel", "desc": "Daggers pierce multiple enemies" }, "upgB": { "name": "Returning Blades", "desc": "Daggers instantly return, hitting twice" } },
+      "2": { "name": "Smoke Bomb", "level": 0, "maxCd": 8.0, "baseDmg": 0, "selectedUpg": null, "upgA": { "name": "Toxic Fumes", "desc": "Enemies in smoke take heavy continuous poison damage" }, "upgB": { "name": "Thick Fog", "desc": "Larger radius; cleanses all negative debuffs on cast" } },
+      "3": { "name": "Phantom Dash", "level": 0, "maxCd": 4.0, "baseDmg": 30, "selectedUpg": null, "upgA": { "name": "Assassination", "desc": "Doubles range; deals 200% more damage to marked targets" }, "upgB": { "name": "Acrobatics", "desc": "Grants a second stored charge" } },
+      "4": { "name": "Death Mark", "level": 0, "maxCd": 15.0, "baseDmg": 0, "selectedUpg": null, "upgA": { "name": "Bloodlust", "desc": "Popping a Weak Point while active heals 10% Max HP" }, "upgB": { "name": "Chain Reaction", "desc": "When a marked enemy dies, they explode and spread the mark" } }
     }
   }
 }

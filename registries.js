@@ -9,8 +9,7 @@ var SkillRegistry = {
             if(dist>0) projectiles.push({ x: player.x, y: player.y, vx: (dx/dist)*600, vy: (dy/dist)*600, radius: 14, color: '#e0e0e0', life: 2.0, type: 'shield_throw', damage: dmg, pierce: true, hitList: [], isEnemy: false, returning: false, sourceSkill: sk, startX: player.x, startY: player.y });
         },
         2: (sk, dmg) => {
-            player.shield += 50;
-            player.shieldTimer = 5.0;
+            player.shield += 50; player.shieldTimer = 5.0;
             if (sk.selectedUpg === 'A') {
                 effects.push({ type: 'circle', x: player.x, y: player.y, radius: 120, color: '#78909c', life: 0.3, maxLife: 0.3 });
                 for(let i=enemies.length-1; i>=0; i--) if (Math.hypot(player.x-enemies[i].x, player.y-enemies[i].y) <= 120 + enemies[i].size/2) applyDamage(enemies[i], dmg, 'melee');
@@ -19,9 +18,7 @@ var SkillRegistry = {
         },
         3: (sk, dmg) => {
             const [dx, dy, dist] = getVector(player.x, player.y, mouseX, mouseY);
-            const moveDist = Math.min(dist, 400); 
-            player.x += (dx / dist) * moveDist; player.y += (dy / dist) * moveDist;
-            clampToBounds(player, player.radius);
+            const moveDist = Math.min(dist, 400); player.x += (dx / dist) * moveDist; player.y += (dy / dist) * moveDist; clampToBounds(player, player.radius);
             if (sk.selectedUpg === 'A') {
                 const tx = player.x; const ty = player.y;
                 effects.push({ type: 'circle', x: tx, y: ty, radius: 100, color: 'rgba(229, 57, 53, 0.3)', life: 1.0, maxLife: 1.0, isWarning: true });
@@ -65,28 +62,22 @@ var SkillRegistry = {
     },
     'Spellweaver': {
         1: (sk, dmg) => {
-            player.arcaneResonance = true;
-            const [dx, dy, dist] = getVector(player.x, player.y, mouseX, mouseY);
+            player.arcaneResonance = true; const [dx, dy, dist] = getVector(player.x, player.y, mouseX, mouseY);
             let speed = sk.selectedUpg === 'A' ? 800 : 500;
             if(dist>0) projectiles.push({ x: player.x, y: player.y, vx: (dx/dist)*speed, vy: (dy/dist)*speed, radius: 12, color: '#ff5722', life: 2.0, type: 'fireball', damage: dmg, pierce: false, isEnemy: false, sourceSkill: sk });
         },
         2: (sk, dmg) => {
-            player.arcaneResonance = true;
-            effects.push({ type: 'circle', x: player.x, y: player.y, radius: 180, color: '#81d4fa', life: 0.4, maxLife: 0.4 });
+            player.arcaneResonance = true; effects.push({ type: 'circle', x: player.x, y: player.y, radius: 180, color: '#81d4fa', life: 0.4, maxLife: 0.4 });
             if (sk.selectedUpg === 'B') { player.shield += 40; player.shieldTimer = 5.0; }
             for(let i=enemies.length-1; i>=0; i--) {
-                if (Math.hypot(player.x-enemies[i].x, player.y-enemies[i].y) <= 180 + enemies[i].size/2) {
-                    applyDamage(enemies[i], dmg, 'magic'); if(sk.selectedUpg === 'A') enemies[i].speed = 0; enemies[i].frozenTimer = 3.0; 
-                }
+                if (Math.hypot(player.x-enemies[i].x, player.y-enemies[i].y) <= 180 + enemies[i].size/2) { applyDamage(enemies[i], dmg, 'magic'); if(sk.selectedUpg === 'A') enemies[i].speed = 0; enemies[i].frozenTimer = 3.0; }
             }
         },
         3: (sk, dmg) => {
-            player.arcaneResonance = true;
-            const [dx, dy, dist] = getVector(player.x, player.y, mouseX, mouseY);
+            player.arcaneResonance = true; const [dx, dy, dist] = getVector(player.x, player.y, mouseX, mouseY);
             const moveDist = Math.min(dist, 350); const startX = player.x; const startY = player.y;
             effects.push({ type: 'circle', x: player.x, y: player.y, radius: player.radius, color: player.color, life: 0.2, maxLife: 0.2 });
-            player.x += (dx / dist) * moveDist; player.y += (dy / dist) * moveDist;
-            clampToBounds(player, player.radius);
+            player.x += (dx / dist) * moveDist; player.y += (dy / dist) * moveDist; clampToBounds(player, player.radius);
             if (sk.selectedUpg === 'A') {
                 let target = getNearestEnemyFromPoint(player.x, player.y, 400);
                 if (target) {
@@ -132,21 +123,18 @@ var SkillRegistry = {
     },
     'Ranger': {
         1: (sk, dmg) => {
-            const [dx, dy, dist] = getVector(player.x, player.y, mouseX, mouseY);
-            let bounces = sk.selectedUpg === 'A' ? 5 : 3; 
+            const [dx, dy, dist] = getVector(player.x, player.y, mouseX, mouseY); let bounces = sk.selectedUpg === 'A' ? 5 : 3; 
             if(dist>0) projectiles.push({ x: player.x, y: player.y, vx: (dx/dist)*900, vy: (dy/dist)*900, radius: 6, color: '#ffeb3b', life: 3.0, type: 'ricochet', damage: dmg, pierce: false, isEnemy: false, bounces: bounces, hitList: [], sourceSkill: sk });
         },
         2: (sk, dmg) => {
-            let healAmt = sk.selectedUpg === 'A' ? 30 : 15; player.hp = Math.min(player.maxHp, player.hp + healAmt);
-            buffs.msBoost = sk.selectedUpg === 'B' ? 4.0 : 2.0;
+            let healAmt = sk.selectedUpg === 'A' ? 30 : 15; player.hp = Math.min(player.maxHp, player.hp + healAmt); buffs.msBoost = sk.selectedUpg === 'B' ? 4.0 : 2.0;
             effects.push({ type: 'circle', x: player.x, y: player.y, radius: 40, color: '#4caf50', life: 0.5, maxLife: 0.5 }); updateHUD();
         },
         3: (sk, dmg) => {
             const [dx, dy, dist] = getVector(player.x, player.y, mouseX, mouseY);
             const moveDist = Math.min(dist, sk.selectedUpg === 'B' ? 500 : 300);
             let steps = 10; for(let s=0; s<=steps; s++) effects.push({ type: 'circle', x: player.x + (dx/dist)*(moveDist*(s/steps)), y: player.y + (dy/dist)*(moveDist*(s/steps)), radius: player.radius, color: 'rgba(129, 199, 132, 0.4)', life: 0.2, maxLife: 0.2 });
-            player.x += (dx / dist) * moveDist; player.y += (dy / dist) * moveDist;
-            clampToBounds(player, player.radius);
+            player.x += (dx / dist) * moveDist; player.y += (dy / dist) * moveDist; clampToBounds(player, player.radius);
             if (sk.selectedUpg === 'A') {
                 let target = getNearestEnemyFromPoint(player.x, player.y, 400);
                 if (target) {
@@ -167,6 +155,52 @@ var SkillRegistry = {
             const baseAngle = Math.atan2(mouseY - player.y, mouseX - player.x);
             for(let i = -1; i <= 1; i++) projectiles.push({ x: player.x, y: player.y, vx: Math.cos(baseAngle+(i*0.2))*1500, vy: Math.sin(baseAngle+(i*0.2))*1500, radius: 8, color: '#2196f3', life: 1.5, type: 'pierce', damage: calcDmg(60), pierce: true, hitList: [], isEnemy: false });
         }
+    },
+    'Nightblade': {
+        1: (sk, dmg) => {
+            const baseAngle = Math.atan2(mouseY - player.y, mouseX - player.x);
+            let count = 5; let pierce = sk.selectedUpg === 'A'; let returnDmg = sk.selectedUpg === 'B';
+            for(let i=0; i<count; i++) {
+                let angle = baseAngle - 0.4 + (i * 0.2);
+                projectiles.push({ x: player.x, y: player.y, vx: Math.cos(angle)*800, vy: Math.sin(angle)*800, radius: 5, color: '#e1bee7', life: 1.0, type: pierce?'pierce':'fan_of_knives', damage: dmg, pierce: pierce, hitList: [], isEnemy: false, source: 'fan_of_knives', returning: false, returnDmg: returnDmg });
+            }
+        },
+        2: (sk, dmg) => {
+            let radius = sk.selectedUpg === 'B' ? 250 : 150; let poison = sk.selectedUpg === 'A';
+            effects.push({ type: 'smoke_bomb', x: player.x, y: player.y, radius: radius, color: 'rgba(80, 80, 80, 0.7)', life: 5.0, maxLife: 5.0, poison: poison, dmg: dmg });
+            if (sk.selectedUpg === 'B') { buffs.slowed = 0; buffs.rooted = 0; }
+        },
+        3: (sk, dmg) => {
+            const [dx, dy, dist] = getVector(player.x, player.y, mouseX, mouseY);
+            let moveDist = sk.selectedUpg === 'A' ? Math.min(dist, 600) : Math.min(dist, 300);
+            let pDashAngle = Math.atan2(dy, dx);
+            effects.push({ type: 'line', x1: player.x, y1: player.y, x2: player.x + (dx/dist)*moveDist, y2: player.y + (dy/dist)*moveDist, color: '#9c27b0', life: 0.2, maxLife: 0.2 });
+            for(let i=enemies.length-1; i>=0; i--) {
+                const e = enemies[i];
+                if (distToSegment(e.x, e.y, player.x, player.y, player.x + (dx/dist)*moveDist, player.y + (dy/dist)*moveDist) < e.size/2 + 20) applyDamage(e, dmg, 'phantom_dash', pDashAngle);
+            }
+            player.x += (dx/dist)*moveDist; player.y += (dy/dist)*moveDist; clampToBounds(player, player.radius);
+            if (sk.selectedUpg === 'B') {
+                if (!player.phantomChargeUsed) { player.phantomChargeUsed = true; cooldowns.s3 = 0.5; } 
+                else { player.phantomChargeUsed = false; }
+            }
+        },
+        4: (sk, dmg) => {
+            effects.push({ type: 'circle', x: player.x, y: player.y, radius: 600, color: 'rgba(156, 39, 176, 0.3)', life: 0.5, maxLife: 0.5 });
+            for(let i=0; i<enemies.length; i++) { if (Math.hypot(player.x - enemies[i].x, player.y - enemies[i].y) <= 600) enemies[i].markAngle = Math.random() * Math.PI * 2; }
+            buffs.deathMarkActive = 5.0;
+        },
+        'rmb': () => {
+            let target = getNearestEnemyFromPoint(mouseX, mouseY, 150);
+            if (!target) target = getNearestEnemyFromPoint(player.x, player.y, 400);
+            if (target) {
+                let execAngle = Math.atan2(target.y - player.y, target.x - player.x);
+                effects.push({ type: 'line', x1: player.x, y1: player.y, x2: target.x, y2: target.y, color: '#4a148c', life: 0.2, maxLife: 0.2 });
+                player.x = target.x - 20; player.y = target.y - 20; clampToBounds(player, player.radius);
+                applyDamage(target, calcDmg(150), 'execute', execAngle);
+                if (target.hp <= 0 || target.dead) cooldowns.rmb = 0;
+            }
+        }
     }
 };
 
@@ -177,9 +211,7 @@ var MeleeAI = (e, dt, curSpd, edx, edy, edist, i) => {
         if (e.type === 'slime_melee') buffs.slowed = 0.5; 
     }
     if (e.type === 'toxic_sludge') {
-        e.puddleTimer -= dt; if (e.puddleTimer <= 0) {
-            effects.push({ type: 'puddle', x: e.x, y: e.y, radius: 25, color: '#009688', life: 1.5, maxLife: 1.5 }); e.puddleTimer = 0.8;
-        }
+        e.puddleTimer -= dt; if (e.puddleTimer <= 0) { effects.push({ type: 'puddle', x: e.x, y: e.y, radius: 25, color: '#009688', life: 1.5, maxLife: 1.5 }); e.puddleTimer = 0.8; }
     }
 };
 
@@ -198,19 +230,14 @@ var EnemyAI = {
     'slime_ranged': RangedAI, 'archer': RangedAI,
     
     'caster': (e, dt, curSpd, edx, edy, edist, i) => {
-        if (edist > 400) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
-        else if (edist < 250) { e.x -= (edx/edist)*curSpd*dt; e.y -= (edy/edist)*curSpd*dt; } 
+        if (edist > 400) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; } else if (edist < 250) { e.x -= (edx/edist)*curSpd*dt; e.y -= (edy/edist)*curSpd*dt; } 
         effects.push({ type: 'circle', x: e.x, y: e.y, radius: 400, color: 'rgba(255, 235, 59, 0.05)', life: 0.1, maxLife: 0.1 });
     },
     'trapper': (e, dt, curSpd, edx, edy, edist, i) => {
-        if (edist > 300) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
-        else if (edist < 200) { e.x -= (edx/edist)*curSpd*dt; e.y -= (edy/edist)*curSpd*dt; } 
+        if (edist > 300) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; } else if (edist < 200) { e.x -= (edx/edist)*curSpd*dt; e.y -= (edy/edist)*curSpd*dt; } 
         e.attackTimer -= dt;
         if (e.attackTimer <= 0 && edist <= 450 && e.frozenTimer <= 0) {
-            for(let r=0; r<3; r++) {
-                const offX = (Math.random() - 0.5) * 150; const offY = (Math.random() - 0.5) * 150;
-                projectiles.push({ x: e.x, y: e.y, targetX: player.x + offX, targetY: player.y + offY, vx: 0, vy: 0, radius: 8, color: '#5d4037', life: 1.0, isEnemy: true, damage: 0, type: 'trap_throw' });
-            }
+            for(let r=0; r<3; r++) { const offX = (Math.random() - 0.5) * 150; const offY = (Math.random() - 0.5) * 150; projectiles.push({ x: e.x, y: e.y, targetX: player.x + offX, targetY: player.y + offY, vx: 0, vy: 0, radius: 8, color: '#5d4037', life: 1.0, isEnemy: true, damage: 0, type: 'trap_throw' }); }
             e.attackTimer = 4.0;
         }
     },
@@ -222,22 +249,16 @@ var EnemyAI = {
             if (edist < 350 && e.stateTimer <= 0 && e.frozenTimer <= 0) { 
                 e.state = 'telegraph'; e.stateTimer = 0.75; 
                 const [dx, dy, d] = getVector(e.x, e.y, player.x, player.y);
-                e.dashVx = (dx/d) * curSpd * 7.0; 
-                e.dashVy = (dy/d) * curSpd * 7.0;
-                e.dashTargetX = e.x + (dx/d)*800;
-                e.dashTargetY = e.y + (dy/d)*800;
+                e.dashVx = (dx/d) * curSpd * 7.0; e.dashVy = (dy/d) * curSpd * 7.0;
+                e.dashTargetX = e.x + (dx/d)*800; e.dashTargetY = e.y + (dy/d)*800;
             }
         } else if (e.state === 'telegraph') {
             effects.push({ type: 'line', x1: e.x, y1: e.y, x2: e.dashTargetX, y2: e.dashTargetY, color: 'rgba(255, 0, 0, 0.3)', life: 0.1, maxLife: 0.1 });
             if (e.stateTimer <= 0) { e.state = 'charge'; e.stateTimer = 1.0; e.dashHit = false; }
         } else if (e.state === 'charge') {
             e.x += e.dashVx * dt; e.y += e.dashVy * dt;
-            if (Math.hypot(e.x - player.x, e.y - player.y) < e.size/2 + player.radius && !e.dashHit) {
-                takeDamage(e.dmg * 2); e.dashHit = true; buffs.slowed = 1.0;
-            }
-            if (e.stateTimer <= 0 || (e.x <= currentMap.left || e.x >= currentMap.right || e.y <= currentMap.top || e.y >= currentMap.bottom)) {
-                e.state = 'idle'; e.stateTimer = 2.0;
-            }
+            if (Math.hypot(e.x - player.x, e.y - player.y) < e.size/2 + player.radius && !e.dashHit) { takeDamage(e.dmg * 2); e.dashHit = true; buffs.slowed = 1.0; }
+            if (e.stateTimer <= 0 || (e.x <= currentMap.left || e.x >= currentMap.right || e.y <= currentMap.top || e.y >= currentMap.bottom)) { e.state = 'idle'; e.stateTimer = 2.0; }
         }
     },
     'spore_slime': (e, dt, curSpd, edx, edy, edist, i) => {
@@ -251,31 +272,17 @@ var EnemyAI = {
     'crystal_slime': (e, dt, curSpd, edx, edy, edist, i) => {
         e.stateTimer -= dt;
         if (e.stateTimer <= 0) {
-            e.reflective = !e.reflective;
-            e.stateTimer = e.reflective ? 3.0 : 4.0;
-            if (e.reflective) {
-                for(let r=0; r<8; r++) {
-                    const angle = (Math.PI*2/8) * r;
-                    projectiles.push({ x: e.x, y: e.y, vx: Math.cos(angle)*200, vy: Math.sin(angle)*200, radius: 6, color: '#9c27b0', life: 2.0, isEnemy: true, damage: e.dmg });
-                }
-            }
+            e.reflective = !e.reflective; e.stateTimer = e.reflective ? 3.0 : 4.0;
+            if (e.reflective) { for(let r=0; r<8; r++) { const angle = (Math.PI*2/8) * r; projectiles.push({ x: e.x, y: e.y, vx: Math.cos(angle)*200, vy: Math.sin(angle)*200, radius: 6, color: '#9c27b0', life: 2.0, isEnemy: true, damage: e.dmg }); } }
         }
-        if (e.reflective) {
-            e.renderColor = '#9c27b0';
-            effects.push({ type: 'circle', x: e.x, y: e.y, radius: e.size/2 + 5, color: 'rgba(156, 39, 176, 0.4)', life: 0.1, maxLife: 0.1 });
-        } else { 
-            e.renderColor = e.color; 
-            MeleeAI(e, dt, curSpd, edx, edy, edist, i);
-        }
+        if (e.reflective) { e.renderColor = '#9c27b0'; effects.push({ type: 'circle', x: e.x, y: e.y, radius: e.size/2 + 5, color: 'rgba(156, 39, 176, 0.4)', life: 0.1, maxLife: 0.1 }); } 
+        else { e.renderColor = e.color; MeleeAI(e, dt, curSpd, edx, edy, edist, i); }
     },
     'slime_warden': (e, dt, curSpd, edx, edy, edist, i) => {
         e.invulnTimer = (e.invulnTimer || 0) - dt;
         if (e.orbs > 0) {
             e.orbitAngle = (e.orbitAngle || 0) + dt * 3;
-            for(let k=0; k<e.orbs; k++) {
-                const angle = e.orbitAngle + (Math.PI * 2 / e.orbs) * k;
-                effects.push({ type: 'circle', x: e.x + Math.cos(angle)*40, y: e.y + Math.sin(angle)*40, radius: 8, color: '#ffca28', life: 0.1, maxLife: 0.1 });
-            }
+            for(let k=0; k<e.orbs; k++) { const angle = e.orbitAngle + (Math.PI * 2 / e.orbs) * k; effects.push({ type: 'circle', x: e.x + Math.cos(angle)*40, y: e.y + Math.sin(angle)*40, radius: 8, color: '#ffca28', life: 0.1, maxLife: 0.1 }); }
             effects.push({ type: 'circle', x: e.x, y: e.y, radius: e.size/2 + 8, color: 'rgba(255, 202, 40, 0.3)', life: 0.1, maxLife: 0.1 });
         }
         if (e.stunTimer > 0) { e.stunTimer -= dt; return; }
@@ -286,9 +293,7 @@ var EnemyAI = {
         e.stateTimer -= dt;
         if (e.state === 'idle') {
             if (edist > 50) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
-            if (e.stateTimer <= 0 && e.frozenTimer <= 0) {
-                if (Math.random() < 0.5) { e.state = 'bounce_telegraph'; e.stateTimer = 0.6; e.dashTargetX = player.x; e.dashTargetY = player.y; } else { e.state = 'fireball'; e.stateTimer = 0.5; }
-            }
+            if (e.stateTimer <= 0 && e.frozenTimer <= 0) { if (Math.random() < 0.5) { e.state = 'bounce_telegraph'; e.stateTimer = 0.6; e.dashTargetX = player.x; e.dashTargetY = player.y; } else { e.state = 'fireball'; e.stateTimer = 0.5; } }
         } else if (e.state === 'fireball') {
             if (e.stateTimer <= 0) {
                 for(let r=0; r<4; r++) { const angle = (Math.PI*2/4) * r + (Math.PI/4); projectiles.push({ x: e.x, y: e.y, vx: Math.cos(angle)*300, vy: Math.sin(angle)*300, radius: 10, color: '#ff3d00', life: 4.0, isEnemy: true, damage: e.dmg }); }
@@ -306,80 +311,41 @@ var EnemyAI = {
     },
     'boss_slime_queen': (e, dt, curSpd, edx, edy, edist, i) => {
         if (e.state === 'death_throes') {
-            e.stateTimer -= dt;
-            e.size = Math.max(0, e.originalSize * (e.stateTimer / 5.0));
-            e.bulletAngle = (e.bulletAngle || 0) + dt * 10; 
-
-            if (Math.random() < 0.5) { 
-                for(let j=0; j<3; j++) {
-                    let angle = e.bulletAngle + (Math.PI*2/3)*j;
-                    projectiles.push({ x: e.x, y: e.y, vx: Math.cos(angle)*350, vy: Math.sin(angle)*350, radius: 8, color: '#f06292', life: 3.0, isEnemy: true, damage: e.dmg });
-                }
-            }
+            e.stateTimer -= dt; e.size = Math.max(0, e.originalSize * (e.stateTimer / 5.0)); e.bulletAngle = (e.bulletAngle || 0) + dt * 10; 
+            if (Math.random() < 0.5) { for(let j=0; j<3; j++) { let angle = e.bulletAngle + (Math.PI*2/3)*j; projectiles.push({ x: e.x, y: e.y, vx: Math.cos(angle)*350, vy: Math.sin(angle)*350, radius: 8, color: '#f06292', life: 3.0, isEnemy: true, damage: e.dmg }); } }
             if (e.stateTimer <= 0) { e.invulnerable = false; e.hp = 0; checkEnemyDeath(e); }
             return; 
         }
-
-        let hpPercent = e.hp / e.maxHp;
-        e.stateTimer -= dt;
-        
+        let hpPercent = e.hp / e.maxHp; e.stateTimer -= dt;
         if (hpPercent > 0.6) {
             if (edist > 150) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
             if (e.stateTimer <= 0) {
-                if (Math.random() < 0.5) {
-                    for(let k=0; k<2; k++) {
-                        const offX = (Math.random() - 0.5) * 100; const offY = (Math.random() - 0.5) * 100;
-                        enemies.push({ x: e.x + offX, y: e.y + offY, size: 28, color: '#8bc34a', speed: 115, hp: 40, maxHp: 40, type: 'slime_melee', dmg: 10, xp: 0, meleeTimer: 0 });
-                        activeEnemies++;
-                    }
-                } else {
-                    for(let k=-1; k<=1; k++) {
-                        let angle = Math.atan2(edy, edx) + k*0.3;
-                        projectiles.push({ x: e.x, y: e.y, vx: Math.cos(angle)*400, vy: Math.sin(angle)*400, radius: 12, color: '#cddc39', life: 3.0, isEnemy: true, damage: e.dmg, type: 'boss_slimeball' });
-                    }
-                }
+                if (Math.random() < 0.5) { for(let k=0; k<2; k++) { const offX = (Math.random() - 0.5) * 100; const offY = (Math.random() - 0.5) * 100; enemies.push({ x: e.x + offX, y: e.y + offY, size: 28, color: '#8bc34a', speed: 115, hp: 40, maxHp: 40, type: 'slime_melee', dmg: 10, xp: 0, meleeTimer: 0 }); activeEnemies++; } } 
+                else { for(let k=-1; k<=1; k++) { let angle = Math.atan2(edy, edx) + k*0.3; projectiles.push({ x: e.x, y: e.y, vx: Math.cos(angle)*400, vy: Math.sin(angle)*400, radius: 12, color: '#cddc39', life: 3.0, isEnemy: true, damage: e.dmg, type: 'boss_slimeball' }); } }
                 e.stateTimer = 2.5;
             }
         } else if (hpPercent > 0.3) {
             if (!e.guardsSpawned) {
                 e.guardsSpawned = true; e.guards = [];
-                for(let k=0; k<4; k++) {
-                    let guard = { x: e.x, y: e.y, size: 30, color: '#03a9f4', speed: 100, hp: 200 + (wave*10), maxHp: 200 + (wave*10), type: 'queen_guard', dmg: 15, xp: 0, meleeTimer: 0, angleOffset: (Math.PI/2)*k };
-                    enemies.push(guard); activeEnemies++; e.guards.push(guard);
-                }
+                for(let k=0; k<4; k++) { let guard = { x: e.x, y: e.y, size: 30, color: '#03a9f4', speed: 100, hp: 200 + (wave*10), maxHp: 200 + (wave*10), type: 'queen_guard', dmg: 15, xp: 0, meleeTimer: 0, angleOffset: (Math.PI/2)*k }; enemies.push(guard); activeEnemies++; e.guards.push(guard); }
             }
             let guardsAlive = 0;
             for(let g of e.guards) {
-                if (enemies.includes(g)) {
-                    guardsAlive++; g.angleOffset += dt * 1.5; 
-                    g.x = e.x + Math.cos(g.angleOffset)*150; g.y = e.y + Math.sin(g.angleOffset)*150;
-                    effects.push({type: 'lightning', x1: e.x, y1: e.y, x2: g.x, y2: g.y, color: '#03a9f4', life: 0.1, maxLife: 0.1});
-                    if (distToSegment(player.x, player.y, e.x, e.y, g.x, g.y) < player.radius + 5) takeDamage(15*dt, true);
-                }
+                if (enemies.includes(g)) { guardsAlive++; g.angleOffset += dt * 1.5; g.x = e.x + Math.cos(g.angleOffset)*150; g.y = e.y + Math.sin(g.angleOffset)*150; effects.push({type: 'lightning', x1: e.x, y1: e.y, x2: g.x, y2: g.y, color: '#03a9f4', life: 0.1, maxLife: 0.1}); if (distToSegment(player.x, player.y, e.x, e.y, g.x, g.y) < player.radius + 5) takeDamage(15*dt, true); }
             }
             e.invulnerable = guardsAlive > 0;
             if (e.invulnerable) effects.push({ type: 'circle', x: e.x, y: e.y, radius: e.size/2 + 10, color: 'rgba(3, 169, 244, 0.4)', life: 0.1, maxLife: 0.1 });
-            
             if (e.stateTimer <= 0) {
-                effects.push({ type: 'circle', x: player.x, y: player.y, radius: 60, color: 'rgba(3, 169, 244, 0.3)', life: 0.5, maxLife: 0.5, isWarning: true });
-                let tx = player.x, ty = player.y;
-                setTimeout(() => {
-                    if(gameState!==STATE.PLAYING) return;
-                    effects.push({ type: 'circle', x: tx, y: ty, radius: 60, color: '#03a9f4', life: 0.3, maxLife: 0.3 });
-                    if (Math.hypot(tx-player.x, ty-player.y) <= 60 + player.radius) { takeDamage(e.dmg * 1.5); buffs.slowed = 1.0; }
-                }, 500);
+                effects.push({ type: 'circle', x: player.x, y: player.y, radius: 60, color: 'rgba(3, 169, 244, 0.3)', life: 0.5, maxLife: 0.5, isWarning: true }); let tx = player.x, ty = player.y;
+                setTimeout(() => { if(gameState!==STATE.PLAYING) return; effects.push({ type: 'circle', x: tx, y: ty, radius: 60, color: '#03a9f4', life: 0.3, maxLife: 0.3 }); if (Math.hypot(tx-player.x, ty-player.y) <= 60 + player.radius) { takeDamage(e.dmg * 1.5); buffs.slowed = 1.0; } }, 500);
                 e.stateTimer = 1.0;
             }
         } else {
             e.invulnerable = false;
             if (e.stateTimer <= 0) {
-                e.x = currentMap.left + Math.random() * (currentMap.right - currentMap.left - 200) + 100; 
-                e.y = currentMap.top + Math.random() * (currentMap.bottom - currentMap.top - 200) + 100;
+                e.x = currentMap.left + Math.random() * (currentMap.right - currentMap.left - 200) + 100; e.y = currentMap.top + Math.random() * (currentMap.bottom - currentMap.top - 200) + 100;
                 effects.push({ type: 'puddle', x: e.x, y: e.y, radius: 200, color: 'rgba(0, 150, 136, 0.5)', life: 2.0, maxLife: 2.0 });
-                for(let r=0; r<16; r++) { 
-                    const angle = (Math.PI*2/16) * r; 
-                    projectiles.push({ x: e.x, y: e.y, vx: Math.cos(angle)*300, vy: Math.sin(angle)*300, radius: 8, color: '#ff3d00', life: 4.0, isEnemy: true, damage: e.dmg }); 
-                }
+                for(let r=0; r<16; r++) { const angle = (Math.PI*2/16) * r; projectiles.push({ x: e.x, y: e.y, vx: Math.cos(angle)*300, vy: Math.sin(angle)*300, radius: 8, color: '#ff3d00', life: 4.0, isEnemy: true, damage: e.dmg }); }
                 e.stateTimer = 1.5;
             }
         }
@@ -399,8 +365,7 @@ var EnemyAI = {
             let chaseSpd = curSpd * 2.2;
             if (edist > 0) { e.x += (edx/edist)*chaseSpd*dt; e.y += (edy/edist)*chaseSpd*dt; }
             if (edist < player.radius + e.size / 2 + 5 && e.meleeTimer <= 0) { takeDamage(e.dmg * 1.5); e.meleeTimer = 1.0; }
-            e.puddleTimer -= dt;
-            if (e.puddleTimer <= 0) { effects.push({ type: 'puddle', x: e.x, y: e.y, radius: 30, color: '#009688', life: 2.0, maxLife: 2.0 }); e.puddleTimer = 0.3; }
+            e.puddleTimer -= dt; if (e.puddleTimer <= 0) { effects.push({ type: 'puddle', x: e.x, y: e.y, radius: 30, color: '#009688', life: 2.0, maxLife: 2.0 }); e.puddleTimer = 0.3; }
             if (e.stateTimer <= 0) { e.state = 'idle'; e.stateTimer = 1.5; }
         } else if (e.state === 'nova') {
             if (e.stateTimer <= 0) {
@@ -410,8 +375,7 @@ var EnemyAI = {
         } else if (e.state === 'summon') {
             if (e.stateTimer <= 0) {
                 for(let k=0; k<4; k++) {
-                    const angle = (Math.PI*2/4) * k + Math.random();
-                    let mx = e.x + Math.cos(angle)*250; let my = e.y + Math.sin(angle)*250;
+                    const angle = (Math.PI*2/4) * k + Math.random(); let mx = e.x + Math.cos(angle)*250; let my = e.y + Math.sin(angle)*250;
                     mx = Math.max(currentMap.left + 24, Math.min(currentMap.right - 24, mx)); my = Math.max(currentMap.top + 24, Math.min(currentMap.bottom - 24, my));
                     enemies.push({ x: mx, y: my, size: 24, color: '#4db6ac', speed: curSpd * 1.5, hp: 60, maxHp: 60, type: 'amalgam_minion', dmg: e.dmg, xp: 0, frozenTimer: 0, facingAngle: 0, meleeTimer: 0 });
                     activeEnemies++;
@@ -420,11 +384,7 @@ var EnemyAI = {
             }
         } else if (e.state === 'devastate') {
             if (e.stateTimer > 0) { effects.push({ type: 'circle', x: e.x, y: e.y, radius: 300, color: 'rgba(0, 150, 136, 0.3)', life: 0.1, maxLife: 0.1 }); } 
-            else {
-                effects.push({ type: 'circle', x: e.x, y: e.y, radius: 300, color: '#004d40', life: 0.5, maxLife: 0.5 });
-                if (edist <= 300 + player.radius) takeDamage(e.dmg * 3);
-                e.state = 'idle'; e.stateTimer = 2.0;
-            }
+            else { effects.push({ type: 'circle', x: e.x, y: e.y, radius: 300, color: '#004d40', life: 0.5, maxLife: 0.5 }); if (edist <= 300 + player.radius) takeDamage(e.dmg * 3); e.state = 'idle'; e.stateTimer = 2.0; }
         }
     },
     'boss_warlord': (e, dt, curSpd, edx, edy, edist, i) => {
@@ -451,9 +411,7 @@ var EnemyAI = {
         }
     },
     'boss_beastmaster': (e, dt, curSpd, edx, edy, edist, i) => {
-        e.stateTimer -= dt;
-        let enrageMult = (e.hp < e.maxHp * 0.5) ? 0.6 : 1.0; 
-
+        e.stateTimer -= dt; let enrageMult = (e.hp < e.maxHp * 0.5) ? 0.6 : 1.0; 
         if (e.state === 'idle' || !e.state) {
             if (edist > 150) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
             if (edist < player.radius + e.size/2 + 5 && e.meleeTimer <= 0) { takeDamage(e.dmg); e.meleeTimer = 1.0; }
@@ -466,10 +424,7 @@ var EnemyAI = {
         } else if (e.state === 'bolas') {
             if (e.stateTimer <= 0) {
                 const baseAngle = Math.atan2(edy, edx);
-                for(let r=-1; r<=1; r++) { 
-                    const angle = baseAngle + (r*0.2);
-                    projectiles.push({ x: e.x, y: e.y, vx: Math.cos(angle)*700, vy: Math.sin(angle)*700, radius: 15, color: '#795548', life: 2.0, isEnemy: true, damage: e.dmg, type: 'bolas' }); 
-                }
+                for(let r=-1; r<=1; r++) { const angle = baseAngle + (r*0.2); projectiles.push({ x: e.x, y: e.y, vx: Math.cos(angle)*700, vy: Math.sin(angle)*700, radius: 15, color: '#795548', life: 2.0, isEnemy: true, damage: e.dmg, type: 'bolas' }); }
                 e.state = 'idle'; e.stateTimer = 2.5 * enrageMult;
             }
         } else if (e.state === 'hounds') {
@@ -481,18 +436,12 @@ var EnemyAI = {
             }
         } else if (e.state === 'joust_prep') {
             effects.push({ type: 'circle', x: e.x, y: e.y, radius: e.size, color: 'rgba(255, 87, 34, 0.3)', life: 0.1, maxLife: 0.1 });
-            if (e.stateTimer <= 0) {
-                e.state = 'jousting'; e.stateTimer = 0.5; e.dashHit = false; e.joustCount++;
-                e.dashVx = (edx/edist) * curSpd * 5.0; e.dashVy = (edy/edist) * curSpd * 5.0;
-            }
+            if (e.stateTimer <= 0) { e.state = 'jousting'; e.stateTimer = 0.5; e.dashHit = false; e.joustCount++; e.dashVx = (edx/edist) * curSpd * 5.0; e.dashVy = (edy/edist) * curSpd * 5.0; }
         } else if (e.state === 'jousting') {
             e.x += e.dashVx * dt; e.y += e.dashVy * dt;
             if (Math.random() < 0.1) effects.push({ type: 'bear_trap', x: e.x, y: e.y, radius: 10, color: '#795548', life: 5.0, maxLife: 5.0, dmg: e.dmg });
             if (Math.hypot(e.x - player.x, e.y - player.y) < e.size/2 + player.radius && !e.dashHit) { takeDamage(e.dmg * 2); e.dashHit = true; buffs.rooted = 0.5; }
-            if (e.stateTimer <= 0) {
-                if (e.joustCount < 3) { e.state = 'joust_prep'; e.stateTimer = 0.4 * enrageMult; }
-                else { e.state = 'idle'; e.stateTimer = 3.0 * enrageMult; }
-            }
+            if (e.stateTimer <= 0) { if (e.joustCount < 3) { e.state = 'joust_prep'; e.stateTimer = 0.4 * enrageMult; } else { e.state = 'idle'; e.stateTimer = 3.0 * enrageMult; } }
         }
     },
     'boss_valerius': (e, dt, curSpd, edx, edy, edist, i) => {
@@ -500,47 +449,26 @@ var EnemyAI = {
             e.stateTimer -= dt;
             e.y += ((e.targetY - e.y) * 10 * dt);
             if (e.stateTimer <= 0) {
-                e.y = e.targetY;
-                e.state = 'yank'; e.stateTimer = 2.0; 
+                e.y = e.targetY; e.state = 'yank'; e.stateTimer = 2.0; 
                 effects.push({ type: 'circle', x: e.x, y: e.y, radius: 100, color: '#4e342e', life: 0.5, maxLife: 0.5 });
             }
             return;
         }
 
         e.stateTimer -= dt;
-        
-        if (e.isStaggered) {
-            e.renderColor = '#ffeb3b';
-            e.staggerTimer -= dt;
-            if (e.staggerTimer <= 0) e.isStaggered = false;
-            return; 
-        }
-
+        if (e.isStaggered) { e.renderColor = '#ffeb3b'; e.staggerTimer -= dt; if (e.staggerTimer <= 0) e.isStaggered = false; return; }
         e.renderColor = e.color;
 
         if (!e.state || e.state === 'idle') {
             if (edist > 100) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
-            if (e.stateTimer <= 0) {
-                const moves = ['lunge', 'yank', 'spin', 'slam'];
-                e.state = moves[Math.floor(Math.random()*moves.length)];
-                e.stateTimer = e.state === 'lunge' ? 1.0 : (e.state === 'spin' ? 2.0 : 2.0);
-            }
+            if (e.stateTimer <= 0) { const moves = ['lunge', 'yank', 'spin', 'slam']; e.state = moves[Math.floor(Math.random()*moves.length)]; e.stateTimer = e.state === 'lunge' ? 1.0 : (e.state === 'spin' ? 2.0 : 2.0); }
         } else if (e.state === 'lunge') {
-            if (e.stateTimer > 0.5) { 
-                effects.push({ type: 'line', x1: e.x, y1: e.y, x2: e.x + edx*3, y2: e.y + edy*3, color: 'rgba(255,0,0,0.5)', life: 0.1, maxLife: 0.1 }); 
-            } else { 
-                e.x += (edx/edist)*curSpd*5*dt; e.y += (edy/edist)*curSpd*5*dt; 
-                if (edist < 50) { takeDamage(e.dmg * 2); e.state = 'idle'; e.isStaggered = true; e.staggerTimer = 2.0; e.stateTimer = 2.0; }
-            }
+            if (e.stateTimer > 0.5) { effects.push({ type: 'line', x1: e.x, y1: e.y, x2: e.x + edx*3, y2: e.y + edy*3, color: 'rgba(255,0,0,0.5)', life: 0.1, maxLife: 0.1 }); } 
+            else { e.x += (edx/edist)*curSpd*5*dt; e.y += (edy/edist)*curSpd*5*dt; if (edist < 50) { takeDamage(e.dmg * 2); e.state = 'idle'; e.isStaggered = true; e.staggerTimer = 2.0; e.stateTimer = 2.0; } }
         } else if (e.state === 'yank') {
-            if (e.stateTimer > 1.0) { 
-                effects.push({ type: 'line', x1: e.x, y1: e.y, x2: player.x, y2: player.y, color: '#757575', life: 0.1, maxLife: 0.1 }); 
-            } else if (e.stateTimer > 0) { 
-                effects.push({ type: 'line', x1: e.x, y1: e.y, x2: player.x, y2: player.y, color: '#fff', life: 0.1, maxLife: 0.1 }); 
-                player.x -= (edx/edist)*800*dt; player.y -= (edy/edist)*800*dt; clampToBounds(player, player.radius); 
-            } else {
-                e.state = 'idle'; e.stateTimer = 1.0;
-            }
+            if (e.stateTimer > 1.0) { effects.push({ type: 'line', x1: e.x, y1: e.y, x2: player.x, y2: player.y, color: '#757575', life: 0.1, maxLife: 0.1 }); } 
+            else if (e.stateTimer > 0) { effects.push({ type: 'line', x1: e.x, y1: e.y, x2: player.x, y2: player.y, color: '#fff', life: 0.1, maxLife: 0.1 }); player.x -= (edx/edist)*800*dt; player.y -= (edy/edist)*800*dt; clampToBounds(player, player.radius); } 
+            else { e.state = 'idle'; e.stateTimer = 1.0; }
         } else if (e.state === 'spin') {
             e.spinAngle = (e.spinAngle || 0) + dt * 15;
             effects.push({ type: 'line', x1: e.x, y1: e.y, x2: e.x + Math.cos(e.spinAngle)*200, y2: e.y + Math.sin(e.spinAngle)*200, color: '#ff9800', life: 0.1, maxLife: 0.1 });
@@ -548,8 +476,18 @@ var EnemyAI = {
             if (edist < 200) takeDamage(e.dmg * 0.5 * dt, true);
             if (e.stateTimer <= 0) { e.state = 'idle'; e.isStaggered = true; e.staggerTimer = 2.0; e.stateTimer = 2.0; }
         } else if (e.state === 'slam') {
-            effects.push({ type: 'puddle', x: e.x, y: e.y, radius: 70, color: '#5d4037', life: 5.0, maxLife: 5.0 });
-            e.state = 'idle'; e.stateTimer = 1.0;
+            effects.push({ type: 'puddle', x: e.x, y: e.y, radius: 70, color: '#5d4037', life: 5.0, maxLife: 5.0 }); e.state = 'idle'; e.stateTimer = 1.0;
+        }
+    },
+    'amalgam_minion': (e, dt, curSpd, edx, edy, edist, i) => { 
+        const boss = enemies.find(en => en.type === 'boss_amalgam');
+        if (boss) {
+            const [bx, by, bdist] = getVector(e.x, e.y, boss.x, boss.y);
+            if (bdist > boss.size/2) { e.x += (bx/bdist)*curSpd*dt; e.y += (by/bdist)*curSpd*dt; } 
+            else { boss.state = 'devastate'; boss.stateTimer = 1.0; boss.hp = Math.min(boss.maxHp, boss.hp + boss.maxHp * 0.1); effects.push({ type: 'text', text: 'ABSORBED!', x: boss.x, y: boss.y - 40, color: '#ff5252', life: 1.0, maxLife: 1.0 }); if (i !== undefined) { enemies.splice(i, 1); activeEnemies--; } }
+        } else {
+            if (edist > 0) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
+            if (edist < player.radius + e.size / 2 + 5 && e.meleeTimer <= 0) { takeDamage(e.dmg); e.meleeTimer = 1.0; }
         }
     }
 };
@@ -562,10 +500,7 @@ var BasicAttackRegistry = {
             const e = enemies[i];
             if (Math.hypot(player.x-e.x, player.y-e.y) <= 110 + e.size/2) {
                 let diff = Math.atan2(e.y-player.y, e.x-player.x) - attackAngle; while(diff < -Math.PI) diff += Math.PI*2; while(diff > Math.PI) diff -= Math.PI*2;
-                if (Math.abs(diff) <= (Math.PI/1.5)/2) {
-                    applyDamage(e, dmg, 'melee_basic');
-                    if (equipment.gloves && equipment.gloves.name === 'Titan Gauntlets') { e.x += Math.cos(attackAngle) * 30; e.y += Math.sin(attackAngle) * 30; }
-                }
+                if (Math.abs(diff) <= (Math.PI/1.5)/2) { applyDamage(e, dmg, 'melee_basic'); if (equipment.gloves && equipment.gloves.name === 'Titan Gauntlets') { e.x += Math.cos(attackAngle) * 30; e.y += Math.sin(attackAngle) * 30; clampToBounds(e, e.size/2); } }
             }
         }
     },
@@ -579,13 +514,35 @@ var BasicAttackRegistry = {
     'bow': (dmg) => {
         const [dx, dy, dist] = getVector(player.x, player.y, mouseX, mouseY);
         if (dist > 0) {
-            let isPierce = (equipment.gloves && equipment.gloves.name === "Sniper's Grips");
-            let numArrows = (equipment.amulet && equipment.amulet.name === 'Pendant of the Hunt') ? 2 : 1;
-            const baseAngle = Math.atan2(dy, dx);
-            for(let i=0; i<numArrows; i++) {
-                let angle = numArrows > 1 ? baseAngle - 0.1 + (i*0.2) : baseAngle;
-                projectiles.push({ x: player.x, y: player.y, vx: Math.cos(angle)*700, vy: Math.sin(angle)*700, radius: 4, color: '#e0e0e0', life: 1.5, type: isPierce ? 'pierce' : 'basic', damage: dmg, pierce: isPierce, hitList: [], isEnemy: false, resonance: false });
-            }
+            let isPierce = (equipment.gloves && equipment.gloves.name === "Sniper's Grips"); let numArrows = (equipment.amulet && equipment.amulet.name === 'Pendant of the Hunt') ? 2 : 1; const baseAngle = Math.atan2(dy, dx);
+            for(let i=0; i<numArrows; i++) { let angle = numArrows > 1 ? baseAngle - 0.1 + (i*0.2) : baseAngle; projectiles.push({ x: player.x, y: player.y, vx: Math.cos(angle)*700, vy: Math.sin(angle)*700, radius: 4, color: '#e0e0e0', life: 1.5, type: isPierce ? 'pierce' : 'basic', damage: dmg, pierce: isPierce, hitList: [], isEnemy: false, resonance: false }); }
         }
+    },
+    'dagger': (dmg, isResonance) => {
+        const angle = Math.atan2(mouseY - player.y, mouseX - player.x);
+        player.x += Math.cos(angle) * 30; player.y += Math.sin(angle) * 30; clampToBounds(player, player.radius);
+        
+        let startX1 = player.x + Math.cos(angle - 0.5)*15; let startY1 = player.y + Math.sin(angle - 0.5)*15;
+        let endX1 = startX1 + Math.cos(angle) * 80; let endY1 = startY1 + Math.sin(angle) * 80;
+        effects.push({ type: 'line', x1: startX1, y1: startY1, x2: endX1, y2: endY1, color: '#9c27b0', life: 0.1, maxLife: 0.1, lineWidth: 4 });
+        
+        for(let i=enemies.length-1; i>=0; i--) {
+            const e = enemies[i];
+            if (distToSegment(e.x, e.y, startX1, startY1, endX1, endY1) <= e.size/2 + 15) applyDamage(e, dmg, 'melee_basic', angle);
+        }
+        
+        setTimeout(() => {
+            if (gameState !== STATE.PLAYING) return;
+            player.x += Math.cos(angle) * 15; player.y += Math.sin(angle) * 15; clampToBounds(player, player.radius);
+            
+            let startX2 = player.x + Math.cos(angle + 0.5)*15; let startY2 = player.y + Math.sin(angle + 0.5)*15;
+            let endX2 = startX2 + Math.cos(angle) * 80; let endY2 = startY2 + Math.sin(angle) * 80;
+            effects.push({ type: 'line', x1: startX2, y1: startY2, x2: endX2, y2: endY2, color: '#e1bee7', life: 0.1, maxLife: 0.1, lineWidth: 4 });
+            
+            for(let i=enemies.length-1; i>=0; i--) {
+                const e = enemies[i];
+                if (distToSegment(e.x, e.y, startX2, startY2, endX2, endY2) <= e.size/2 + 15) applyDamage(e, dmg, 'melee_basic', angle);
+            }
+        }, 150);
     }
-}
+};
