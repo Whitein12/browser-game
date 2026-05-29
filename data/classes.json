@@ -74,19 +74,19 @@
       "4": { "name": "Overclock Protocol", "level": 0, "maxCd": 20.0, "baseDmg": 0, "selectedUpg": null, "upgA": { "name": "Nuclear Payload", "desc": "When Overclock ends, all active turrets violently detonate" }, "upgB": { "name": "Automated Assembly", "desc": "Casting instantly spawns two free Sentry Turrets at your location" } }
     }
   },
-  "magicknight": {
-    "name": "Magic Knight", "color": "#00e5ff", "weapon": "phantom_blade", "baseMaxHp": 100, "baseArmor": 1, "dmgMult": 1.1, "basicAttackCD": 0.5, "basicDmg": 20,
-    "passive": "Resonant Charge: Passing the Phantom Blade through enemies builds charges (Max 5). Skills 1, 2, and 4 consume charges for +20% radius/damage per charge.",
-    "rareWeapon": { "name": "Soulreaver Edge", "desc": "+100% DMG | RMB: Spectral Dash", "rmbSkill": "Spectral Dash" },
-    "rareArmor": { "name": "Aegis Cloak", "desc": "+240 Max HP | +5 Base Armor" },
-    "rareAmulet": { "name": "Amulet of Power", "desc": "+20% CDR | Skill cast grants +10% DMG (Stacks 5x)" },
-    "rareBoots": { "name": "Ethereal Treads", "desc": "+50 Move Speed | No collision & 50% less DMG while moving" },
-    "rareGloves": { "name": "Vampiric Grips", "desc": "+25% Attack Speed | Heal 2% of damage dealt" },
+  "swordsaint": {
+    "name": "Swordsaint", "color": "#00bcd4", "weapon": "phantom_blade", "baseMaxHp": 100, "baseArmor": 1, "dmgMult": 1.2, "basicAttackCD": 0.3, "basicDmg": 12,
+    "passive": "Flow & Stance: Toggle stances with E. Melee strikes build Flow, boosting Airborne Blade power.",
+    "rareWeapon": { "name": "Shattered Reality", "desc": "Airborne attacks leave Residual Blades (2s). Swapping to Handheld detonates them." },
+    "rareArmor": { "name": "Saint's Silk Shroud", "desc": "Taking Handheld damage grants 5% Flow. Airborne damage grants 2.5% Flow + 10% Dodge." },
+    "rareAmulet": { "name": "Prismatic Core", "desc": "+25% Max Flow | 15% CDR" },
+    "rareBoots": { "name": "Windwalker Steps", "desc": "+60 Move Speed | Shadow Step distance +30%" },
+    "rareGloves": { "name": "Aether Grips", "desc": "+30% Attack Speed | Basic attacks generate 10% more Flow" },
     "skills": {
-      "1": { "name": "Orbit", "level": 0, "maxCd": 5.0, "baseDmg": 15, "selectedUpg": null, "upgA": { "name": "Repulsion Field", "desc": "Orbit radius expands continuously over 3s" }, "upgB": { "name": "Aegis Guard", "desc": "Gain +1 temporary Armor per enemy struck" } },
-      "2": { "name": "Dimensional Cleave", "level": 0, "maxCd": 8.0, "baseDmg": 25, "selectedUpg": null, "upgA": { "name": "Deflection", "desc": "The spinning blade destroys incoming enemy projectiles" }, "upgB": { "name": "Fracture", "desc": "Command Striking through the cleave splits it into 3 projectiles" } },
-      "3": { "name": "Aether Swap", "level": 0, "maxCd": 6.0, "baseDmg": 40, "selectedUpg": null, "upgA": { "name": "Wormhole", "desc": "Leaves a damaging lightning trail between swap points" }, "upgB": { "name": "Tactical Retreat", "desc": "Grants 1.5s of Invincibility upon swapping" } },
-      "4": { "name": "Blade Cascade", "level": 0, "maxCd": 18.0, "baseDmg": 45, "selectedUpg": null, "upgA": { "name": "Infinite Rain", "desc": "Duration extended to 10s; hold click to continuously cast" }, "upgB": { "name": "Singularity Convergence", "desc": "Blades form a black hole that pulls enemies, then detonates" } }
+      "1": { "name": "Parry Thrust / Blade Surge", "level": 0, "maxCd": 4.0, "baseDmg": 50, "selectedUpg": null, "upgA": { "name": "Perfect Counter", "desc": "Success grants massive Flow. (Handheld)" }, "upgB": { "name": "Chaining Surge", "desc": "Blade Surge chains to 3 targets on kill. (Airborne)" } },
+      "2": { "name": "Deploy / Recall (Toggle)", "level": 0, "maxCd": 1.0, "baseDmg": 0, "selectedUpg": null, "upgA": { "name": "Aegis Return", "desc": "Recalling grants 0.5s Invulnerability. (Handheld)" }, "upgB": { "name": "Instant Flow", "desc": "Deploying grants 30% Max Flow. (Airborne)" } },
+      "3": { "name": "Shadow Step / Spatial Swap", "level": 0, "maxCd": 5.0, "baseDmg": 0, "selectedUpg": null, "upgA": { "name": "Phantom Decoy", "desc": "Leaves a phantom that absorbs 1 projectile. (Handheld)" }, "upgB": { "name": "Surge Reset", "desc": "Spatial Swap resets Blade Surge (Q) cooldown. (Airborne)" } },
+      "4": { "name": "Blade Whirlwind / Shatter Storm", "level": 0, "maxCd": 12.0, "baseDmg": 60, "selectedUpg": null, "upgA": { "name": "Vortex", "desc": "Whirlwind pulls enemies in aggressively. (Handheld)" }, "upgB": { "name": "Piercing Shrapnel", "desc": "Shatter Storm knives pierce multiple enemies. (Airborne)" } }
     }
   }
 }

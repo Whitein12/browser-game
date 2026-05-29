@@ -9,6 +9,15 @@ function updateHUD() {
     el('shield-bar').style.width = Math.min(100, (player.shield / player.maxHp * 100)) + '%'; 
     el('hp-text').innerText = player.shield > 0 ? `${Math.ceil(player.hp)} (+${Math.ceil(player.shield)}) / ${player.maxHp}` : `${Math.ceil(player.hp)} / ${player.maxHp}`;
     el('xp-bar').style.width = Math.max(0, (player.xp / player.maxXp * 100)) + '%'; el('xp-text').innerText = `${player.xp} / ${player.maxXp} XP`;
+    
+    if (activeClass.name === 'Swordsaint') {
+        el('flow-bar-container').style.display = 'block';
+        el('flow-bar').style.width = Math.max(0, (player.flow / player.maxFlow * 100)) + '%';
+        el('flow-text').innerText = `${Math.floor(player.flow)} / ${player.maxFlow} Flow`;
+    } else {
+        el('flow-bar-container').style.display = 'none';
+    }
+
     el('wave-display').innerText = `Wave ${wave}`; el('wave-subtext').innerText = `Enemies Left: ${enemiesToSpawn + activeEnemies}`; el('gold-display').innerText = `Gold: ${player.gold}`;
 
     let cdText = [];
@@ -26,9 +35,10 @@ function updateHUD() {
     if (player.bonusDmg > 0) passives.push(`Perm DMG: +${Math.round(player.bonusDmg * 100)}%`);
     if (activeClass.name === 'Dragonknight' && player.frenzyStacks > 0) passives.push(`Frenzy: ${player.frenzyStacks}`);
     if (activeClass.name === 'Ranger' && player.momentum > 0) passives.push(`Momentum: +${Math.round(player.momentum * 100)}%`);
+    if (activeClass.name === 'Swordsaint') passives.push(player.stance === 'handheld' ? `Handheld (Flow: DMG)` : `Airborne (Flow: ATK SPD)`);
     if (buffs.powerSurgeStacks > 0) passives.push(`Power Surge: ${buffs.powerSurgeStacks}`);
     if (buffs.weakened > 0) passives.push(`WEAKENED`);
-    if (activeClass.name === 'Magic Knight' && player.blade && player.blade.charges > 0) passives.push(`Resonance: ${player.blade.charges}`);
+
     if (activeClass.name === 'Machinist' && buffs.overclockTimer > 0) passives.push(`OVERCLOCK: ${buffs.overclockTimer.toFixed(1)}s`);
     el('perm-display').innerText = passives.join(' | ');
 }

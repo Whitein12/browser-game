@@ -21,7 +21,7 @@ const player = {
     baseHp: 100, hp: 100, maxHp: 100, shield: 0, shieldTimer: 0,
     gold: 0, bonusDmg: 0.0, skillPoints: 0, armor: 0,
     frenzyStacks: 0, frenzyTimer: 0, momentum: 0, arcaneResonance: false, iFrames: 0,
-    blade: null 
+    blade: null, flow: 0, maxFlow: 100, stance: 'handheld', parryTimer: 0, airborneBlade: null
 };
 
 let classDataConfig = {}; let enemyDataConfig = {}; let itemDataConfig = {};

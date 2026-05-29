@@ -1,0 +1,55 @@
+            ctx.strokeStyle = '#ff9800'; ctx.lineWidth = 8; ctx.beginPath(); ctx.moveTo(player.x + Math.cos(aimAngle)*10, player.y + Math.sin(aimAngle)*10); ctx.lineTo(player.x + Math.cos(aimAngle)*25, player.y + Math.sin(aimAngle)*25); ctx.stroke();
+            ctx.strokeStyle = '#757575'; ctx.lineWidth = 12; ctx.beginPath(); ctx.moveTo(player.x + Math.cos(aimAngle)*25, player.y + Math.sin(aimAngle)*25); ctx.lineTo(player.x + Math.cos(aimAngle)*40, player.y + Math.sin(aimAngle)*40); ctx.stroke();
+        } else if (activeClass && activeClass.weapon === 'phantom_blade') {
+            let ab = player.airborneBlade;
+            let ang = (player.stance === 'handheld') ? aimAngle : ab.angle;
+            let bx = (player.stance === 'handheld') ? player.x : ab.x;
+            let by = (player.stance === 'handheld') ? player.y : ab.y;
+            
+            if (player.stance === 'handheld' && cooldowns.basic > 0) {
+                let progress = 1.0 - (cooldowns.basic / activeClass.basicAttackCD);
+                let eased = Math.min(1, progress * 4);
+                ang = aimAngle - Math.PI/1.5 + (Math.PI * 1.5) * eased;
+            } else if (player.stance === 'handheld') {
+                ang = aimAngle;
+            }
+
+            let flowRatio = player.flow / player.maxFlow;
+            
+            // Aura wrapping the blade
+            ctx.globalAlpha = 0.3 + (0.4 * flowRatio);
+            ctx.fillStyle = '#00e5ff';
+            ctx.beginPath();
+            ctx.arc(bx + Math.cos(ang)*45, by + Math.sin(ang)*45, 15 + (10 * flowRatio), 0, Math.PI*2);
+            ctx.fill();
+            ctx.globalAlpha = 1.0;
+
+            // Blade Gradient
+            let grad = ctx.createLinearGradient(bx + Math.cos(ang)*20, by + Math.sin(ang)*20, bx + Math.cos(ang)*70, by + Math.sin(ang)*70);
+            grad.addColorStop(0, '#ffffff');
+            grad.addColorStop(1, '#00bcd4');
+            
+            // Hilt
+            ctx.strokeStyle = '#bcaaa4'; ctx.lineWidth = 6; ctx.lineCap = 'butt';
+            ctx.beginPath(); ctx.moveTo(bx + Math.cos(ang)*10, by + Math.sin(ang)*10); ctx.lineTo(bx + Math.cos(ang)*20, by + Math.sin(ang)*20); ctx.stroke();
+            
+            // Winged Guards
+            ctx.strokeStyle = '#311b92'; ctx.lineWidth = 4;
+            const perp = ang + Math.PI/2;
+            let cx = bx + Math.cos(ang)*20; let cy = by + Math.sin(ang)*20;
+            ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(perp)*15 - Math.cos(ang)*10, cy + Math.sin(perp)*15 - Math.sin(ang)*10); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx - Math.cos(perp)*15 - Math.cos(ang)*10, cy - Math.sin(perp)*15 - Math.sin(ang)*10); ctx.stroke();
+            
+            // Blade body
+            ctx.strokeStyle = grad; ctx.lineWidth = 7; ctx.lineCap = 'round';
+            ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(bx + Math.cos(ang)*70, by + Math.sin(ang)*70); ctx.stroke();
+            
+            // Diamond Center
+            ctx.fillStyle = '#18ffff';
+            ctx.beginPath();
+            ctx.moveTo(cx + Math.cos(ang)*10, cy + Math.sin(ang)*10);
+            ctx.lineTo(cx + Math.cos(perp)*4 + Math.cos(ang)*14, cy + Math.sin(perp)*4 + Math.sin(ang)*14);
+            ctx.lineTo(cx + Math.cos(ang)*18, cy + Math.sin(ang)*18);
+            ctx.lineTo(cx - Math.cos(perp)*4 + Math.cos(ang)*14, cy - Math.sin(perp)*4 + Math.sin(ang)*14);
+            ctx.fill();
+        } else if (activeClass && activeClass.weapon === 'dagger') {

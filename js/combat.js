@@ -5,8 +5,8 @@
 function calcDmg(baseAmount, skillLevel = 1) {
     let scaledBase = baseAmount + (skillLevel > 1 ? (skillLevel - 1) * (baseAmount * 0.3) : 0);
     let mult = activeClass.dmgMult + (equipment.weapon ? equipment.weapon.val : 0);
-    if (activeClass.name === 'Dragonknight') mult += (player.frenzyStacks * 0.02);
-    if (activeClass.name === 'Ranger') mult += player.momentum;
+    if (activeClass && activeClass.name === 'Dragonknight') mult += (player.frenzyStacks * 0.02);
+    if (activeClass && activeClass.name === 'Ranger') mult += player.momentum;
     mult += (buffs.powerSurgeStacks * 0.1); 
     
     let finalDmg = scaledBase * mult * (1.0 + player.bonusDmg);
@@ -18,6 +18,7 @@ function getCDR() {
     let cdr = 1.0;
     if (equipment.amulet && equipment.amulet.type === 'amulet' && equipment.amulet.rarity !== 'rare') cdr -= equipment.amulet.val;
     if (equipment.amulet && equipment.amulet.name === 'Amulet of Power') cdr -= 0.20;
+    if (equipment.amulet && equipment.amulet.name === 'Prismatic Core') cdr -= 0.15;
     return Math.max(0.2, cdr); 
 }
 
@@ -138,6 +139,19 @@ function takeDamage(amount, isContinuous = false) {
         if (!isContinuous) effects.push({ type: 'text', text: 'Evaded!', x: player.x, y: player.y - 30, color: '#e1bee7', life: 0.6, maxLife: 0.6 });
         return;
     }
+    
+    if (activeClass && activeClass.name === 'Swordsaint' && player.parryTimer > 0 && !isContinuous) {
+        player.parryTimer = 0; // consumed
+        player.flow = Math.min(player.maxFlow, player.flow + 30);
+        effects.push({ type: 'text', text: 'Parry!', x: player.x, y: player.y - 40, color: '#00bcd4', life: 1.0, maxLife: 1.0 });
+        effects.push({ type: 'circle_outline', x: player.x, y: player.y, radius: 100, color: '#00bcd4', life: 0.3, maxLife: 0.3 });
+        for (let e of enemies) {
+            if (Math.hypot(e.x - player.x, e.y - player.y) <= 100 + player.radius) {
+                applyDamage(e, player.stats.dmg * (player.skills[3] ? 1 + player.skills[3].level*0.5 : 3), 'physical');
+            }
+        }
+        return;
+    }
 
     if (buffs.ironBulwark > 0) amount *= 0.5;
     if (equipment.boots && equipment.boots.name === 'Ethereal Treads' && player.isMoving) amount *= 0.5;
@@ -150,6 +164,19 @@ function takeDamage(amount, isContinuous = false) {
         else { amount -= player.shield; player.shield = 0; }
     }
     
+    // Saint's Silk Shroud override
+    if (activeClass && activeClass.name === 'Swordsaint' && equipment.armor && equipment.armor.name === "Saint's Silk Shroud") {
+        if (player.stance === 'handheld') {
+            player.flow = Math.min(player.maxFlow, player.flow + player.maxFlow * 0.05);
+        } else {
+            player.flow = Math.min(player.maxFlow, player.flow + player.maxFlow * 0.025);
+            if (Math.random() < 0.10) {
+                if (!isContinuous) effects.push({ type: 'text', text: 'Evaded!', x: player.x, y: player.y - 30, color: '#e1bee7', life: 0.6, maxLife: 0.6 });
+                return;
+            }
+        }
+    }
+
     player.hp -= amount;
     
     if (equipment.armor && equipment.armor.name === "Nightblade's Cowl" && player.hp / player.maxHp < 0.3 && (player.cowlCooldown || 0) <= 0) {

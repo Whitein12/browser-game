@@ -2,21 +2,15 @@
 // skills.js - Class Abilities & Attacks
 // ==========================================
 
-function getBladeConsumeMult() {
-    if (!player.blade) return 1.0;
-    let mult = 1.0 + (player.blade.charges * 0.2);
-    player.blade.charges = 0;
-    return mult;
-}
-
-window.spawnBladeDrop = function(x, y, dmg) {
-    projectiles.push({ x: x, y: y - 500, vx: 0, vy: 2000, radius: 10, color: '#00e5ff', life: 1.0, type: 'phantom_blade_drop', damage: dmg, targetY: y });
-}
-
 function castBasic() {
     const ANIM_LOCK = 0.15;
     let gloveBonus = equipment.gloves ? equipment.gloves.val : 0; 
-    cooldowns.basic = devNoCooldowns ? 0 : ANIM_LOCK + ((activeClass.basicAttackCD * getCDR()) / (1.0 + gloveBonus));
+    if (activeClass && activeClass.name === 'Swordsaint' && equipment.gloves && equipment.gloves.name === 'Aether Grips') {
+        gloveBonus += 0.3; // +30% attack speed
+    }
+    let stanceBonus = (activeClass && activeClass.name === 'Swordsaint' && player.stance === 'airborne') ? (player.flow / player.maxFlow) * 0.5 : 0; // up to +50% atk speed in airborne
+
+    cooldowns.basic = devNoCooldowns ? 0 : ANIM_LOCK + ((activeClass.basicAttackCD * getCDR()) / (1.0 + gloveBonus + stanceBonus));
     let dmg = calcDmg(activeClass.basicDmg, 1);
     
     let isResonance = false;
@@ -31,6 +25,111 @@ function castBasic() {
 }
 
 var SkillRegistry = {
+    'Swordsaint': {
+        1: (sk, dmg) => { // Parry Thrust / Blade Surge
+            if (player.stance === 'handheld') {
+                player.parryTimer = 0.5; // active parry frames handled in combat
+                player.parryDamage = dmg * 2; // used for counter
+                player.parrySkill = sk;
+            } else {
+                let ab = player.airborneBlade;
+                let target = getNearestEnemyFromPoint(mouseX, mouseY, 300);
+                if (target) {
+                    ab.x = target.x; ab.y = target.y; // instant surge onto target
+                    effects.push({ type: 'slash', x: target.x, y: target.y, radius: 80, angle: 0, color: '#00e5ff', life: 0.15, maxLife: 0.15 });
+                    applyDamage(target, dmg * 1.5, 'slash');
+                    // Chaining Surge (Path B handled in enemies death logic later or right here if killed) Wait, path B triggers "on kill/completion". 
+                    // Let's implement immediate chain if it dies, or just chain anyway.
+                    if (sk.selectedUpg === 'B') {
+                        let chained = 0; let delay = 200;
+                        let lastTarget = target;
+                        for(let i=0; i<3; i++) {
+                            setTimeout(() => {
+                                if (gameState !== STATE.PLAYING) return;
+                                let nextT = getNearestEnemyFromPoint(lastTarget.x, lastTarget.y, 250);
+                                if (nextT) {
+                                    ab.x = nextT.x; ab.y = nextT.y;
+                                    effects.push({ type: 'slash', x: nextT.x, y: nextT.y, radius: 80, angle: 0, color: '#00e5ff', life: 0.15, maxLife: 0.15 });
+                                    applyDamage(nextT, dmg * 1.5, 'slash');
+                                    lastTarget = nextT;
+                                }
+                            }, delay);
+                            delay += 200;
+                        }
+                    }
+                }
+            }
+        },
+        2: (sk, dmg) => { // Deploy / Recall (Toggle)
+            if (player.stance === 'handheld') {
+                player.stance = 'airborne';
+                if (sk.selectedUpg === 'B') player.flow = Math.min(player.maxFlow, player.flow + (player.maxFlow * 0.30));
+            } else {
+                player.stance = 'handheld';
+                player.airborneBlade.x = player.x; player.airborneBlade.y = player.y;
+                if (sk.selectedUpg === 'A') player.iFrames = 0.5;
+                
+                // Unique Weapon logic: Detonate Residual Blades
+                if (equipment.weapon && equipment.weapon.name === 'Shattered Reality') {
+                    for (let i = effects.length - 1; i >= 0; i--) {
+                        if (effects[i].type === 'residual_blade') {
+                            effects.push({ type: 'slash', x: effects[i].x, y: effects[i].y, radius: 100, angle: 0, color: '#00bcd4', life: 0.15, maxLife: 0.15 });
+                            for (let e of enemies) {
+                                if (Math.hypot(e.x - effects[i].x, e.y - effects[i].y) < 100 + e.size/2) {
+                                    applyDamage(e, activeClass.skills[2].baseDmg * 2 + player.bonusDmg, 'slash');
+                                }
+                            }
+                            effects[i].life = 0; // Destroy
+                        }
+                    }
+                }
+            }
+        },
+        3: (sk, dmg) => { // Shadow Step / Spatial Swap
+            if (player.stance === 'handheld') {
+                const [dx, dy, dist] = getVector(player.x, player.y, mouseX, mouseY);
+                let moveDist = Math.min(dist, equipment.boots && equipment.boots.name === 'Windwalker Steps' ? 400 : 300);
+                
+                if (sk.selectedUpg === 'A') {
+                    // Leaves phantom
+                    player.phantomDecoy = { x: player.x, y: player.y, life: 3.0 }; 
+                    effects.push({ type: 'circle', x: player.x, y: player.y, radius: player.radius, color: 'rgba(0, 188, 212, 0.4)', life: 3.0, maxLife: 3.0 });
+                }
+                player.x += (dx/dist)*moveDist; player.y += (dy/dist)*moveDist; clampToBounds(player, player.radius);
+                player.iFrames = 0.3;
+            } else {
+                // Swap places with Airborne Blade
+                let tmpX = player.x; let tmpY = player.y;
+                player.x = player.airborneBlade.x; player.y = player.airborneBlade.y;
+                player.airborneBlade.x = tmpX; player.airborneBlade.y = tmpY;
+                effects.push({ type: 'line', x1: tmpX, y1: tmpY, x2: player.x, y2: player.y, color: '#00bcd4', life: 0.2, maxLife: 0.2, lineWidth: 4 });
+                if (sk.selectedUpg === 'B') cooldowns.s1 = 0; // Reset Q (Blade Surge)
+            }
+        },
+        4: (sk, dmg) => { // Blade Whirlwind / Shatter Storm
+            if (player.stance === 'handheld') {
+                effects.push({ type: 'slash', x: player.x, y: player.y, radius: 200, angle: 0, color: '#00e5ff', life: 0.3, maxLife: 0.3 });
+                effects.push({ type: 'slash', x: player.x, y: player.y, radius: 200, angle: Math.PI, color: '#00e5ff', life: 0.3, maxLife: 0.3 });
+                for(let i=enemies.length-1; i>=0; i--) {
+                    let e = enemies[i];
+                    if (Math.hypot(player.x - e.x, player.y - e.y) < 200 + e.size/2) {
+                        applyDamage(e, dmg, 'slash');
+                        if (sk.selectedUpg === 'A') {
+                            let [edx, edy, edist] = getVector(e.x, e.y, player.x, player.y);
+                            e.x += (edx/edist) * Math.min(edist, 100); e.y += (edy/edist) * Math.min(edist, 100);
+                        }
+                    }
+                }
+            } else {
+                let ab = player.airborneBlade;
+                let isPierce = sk.selectedUpg === 'B';
+                for(let i=0; i<8; i++) {
+                    let ang = (Math.PI*2 / 8) * i;
+                    projectiles.push({ x: ab.x, y: ab.y, vx: Math.cos(ang)*800, vy: Math.sin(ang)*800, radius: 5, color: '#18ffff', life: 1.5, type: isPierce ? 'pierce' : 'basic', shape: 'knife', damage: dmg, pierce: isPierce, hitList: [], isEnemy: false });
+                }
+            }
+        }
+    },
     'Dragonknight': {
         1: (sk, dmg) => {
             const [dx, dy, dist] = getVector(player.x, player.y, mouseX, mouseY);
@@ -222,7 +321,18 @@ var SkillRegistry = {
         },
         2: (sk, dmg) => {
             let radius = sk.selectedUpg === 'B' ? 250 : 150; let poison = sk.selectedUpg === 'A';
-            effects.push({ type: 'smoke_bomb', x: player.x, y: player.y, radius: radius, color: 'rgba(80, 80, 80, 0.7)', life: 5.0, maxLife: 5.0, poison: poison, dmg: dmg });
+            let particles = [];
+            for (let i = 0; i < 20; i++) {
+                particles.push({
+                    xOffset: (Math.random() - 0.5) * radius * 0.8,
+                    yOffset: (Math.random() - 0.5) * radius * 0.8,
+                    r: radius * (0.3 + Math.random() * 0.5),
+                    rotSpeed: (Math.random() - 0.5) * 1.5,
+                    startAng: Math.random() * Math.PI * 2
+                });
+            }
+            let smokeColor = poison ? 'rgba(76, 175, 80, 0.7)' : 'rgba(80, 80, 80, 0.7)';
+            effects.push({ type: 'smoke_bomb', x: player.x, y: player.y, radius: radius, color: smokeColor, life: 5.0, maxLife: 5.0, poison: poison, dmg: dmg, particles: particles });
             if (sk.selectedUpg === 'B') { buffs.slowed = 0; buffs.rooted = 0; }
         },
         3: (sk, dmg) => {
@@ -254,7 +364,7 @@ var SkillRegistry = {
                     let startX = target.x + Math.cos(markAng) * 200;
                     let startY = target.y + Math.sin(markAng) * 200;
                     let dashAngle = Math.atan2(target.y - startY, target.x - startX);
-                    effects.push({ type: 'thrust_edge', x: target.x, y: target.y, angle: dashAngle, color: '#e1bee7', life: 0.2, maxLife: 0.2 });
+                    effects.push({ type: 'thrust_edge', x: startX, y: startY, x2: target.x, y2: target.y, angle: dashAngle, color: '#e1bee7', life: 0.2, maxLife: 0.2 });
                     let ultDmg = dmg * 3; 
                     if (sk.selectedUpg === 'A') player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.05);
                     applyDamage(target, ultDmg, 'assassin_skill', dashAngle);
@@ -266,7 +376,7 @@ var SkillRegistry = {
             if (!target) target = getNearestEnemyFromPoint(player.x, player.y, 400);
             if (target) {
                 let execAngle = Math.atan2(target.y - player.y, target.x - player.x);
-                effects.push({ type: 'thrust_edge', x: target.x, y: target.y, angle: execAngle, color: '#4a148c', life: 0.2, maxLife: 0.2 });
+                effects.push({ type: 'thrust_edge', x: player.x, y: player.y, x2: target.x, y2: target.y, angle: execAngle, color: '#4a148c', life: 0.2, maxLife: 0.2 });
                 player.x = target.x - 20; player.y = target.y - 20; clampToBounds(player, player.radius);
                 applyDamage(target, calcDmg(150), 'execute', execAngle);
                 if (target.hp <= 0 || target.dead) cooldowns.rmb = 0;
@@ -313,7 +423,7 @@ var SkillRegistry = {
                             let e = enemies[i];
                             if (Math.hypot(e.x - this.x, e.y - this.y) < (isRoot ? 200 : 150) + e.size/2) {
                                 applyDamage(e, this.damage, 'magic');
-                                e.speed = e.baseSpeed * 0.5;
+                                e.shockTimer = 0.6;
                                 if (isRoot && !e.teslaRooted) { e.frozenTimer = 1.0; e.teslaRooted = true; }
                             }
                         }
@@ -382,76 +492,38 @@ var SkillRegistry = {
                 projectiles.push({ x: tx, y: ty, vx: 0, vy: 0, radius: 10, color: '#f44336', life: 10.0, type: 'trap_throw', damage: calcDmg(100), isEnemy: false });
             }
         }
-    },
-    'Magic Knight': {
-        1: (sk, dmg) => {
-            let mult = getBladeConsumeMult();
-            player.blade.state = 'orbit'; player.blade.timer = 3.0; player.blade.orbitAngle = 0; player.blade.hitList = [];
-            player.blade.baseRadius = 100; player.blade.expanding = sk.selectedUpg === 'A'; player.blade.armorBuff = sk.selectedUpg === 'B'; player.blade.orbitDmg = dmg * mult;
-        },
-        2: (sk, dmg) => {
-            let mult = getBladeConsumeMult();
-            player.blade.state = 'cleave'; player.blade.timer = 4.0;
-            player.blade.radius = 120 * mult; player.blade.cleaveDmg = dmg * mult; player.blade.deflect = sk.selectedUpg === 'A';
-            buffs.fractureCleave = sk.selectedUpg === 'B' ? 4.0 : 0;
-        },
-        3: (sk, dmg) => {
-            let tempX = player.x; let tempY = player.y;
-            let bx = player.blade.x; let by = player.blade.y;
-            
-            if (sk.selectedUpg === 'A') {
-                effects.push({ type: 'lightning', x1: tempX, y1: tempY, x2: bx, y2: by, color: '#00e5ff', life: 2.0, maxLife: 2.0 });
-                for(let e of enemies) { if (distToSegment(e.x, e.y, tempX, tempY, bx, by) < e.size/2 + 20) applyDamage(e, dmg, 'magic'); }
-            }
-            if (sk.selectedUpg === 'B') buffs.evade100 = 1.5;
-
-            effects.push({ type: 'circle', x: tempX, y: tempY, radius: 80, color: 'rgba(0, 229, 255, 0.4)', life: 0.3, maxLife: 0.3 });
-            effects.push({ type: 'circle', x: bx, y: by, radius: 80, color: 'rgba(0, 229, 255, 0.4)', life: 0.3, maxLife: 0.3 });
-
-            for(let e of enemies) {
-                if (Math.hypot(e.x - tempX, e.y - tempY) < 80 + e.size/2 || Math.hypot(e.x - bx, e.y - by) < 80 + e.size/2) {
-                    applyDamage(e, dmg*0.5, 'magic'); e.isStaggered = true; e.staggerTimer = 1.0;
-                }
-            }
-            player.x = bx; player.y = by; player.blade.x = tempX; player.blade.y = tempY; clampToBounds(player, player.radius);
-        },
-        4: (sk, dmg) => {
-            let mult = getBladeConsumeMult();
-            buffs.bladeCascade = sk.selectedUpg === 'A' ? 10.0 : 6.0;
-            player.blade.cascadeDmg = dmg * mult;
-            
-            if (sk.selectedUpg === 'B') {
-                buffs.bladeCascade = 0; 
-                let cx = mouseX; let cy = mouseY;
-                effects.push({ type: 'circle', x: cx, y: cy, radius: 250, color: 'rgba(0, 0, 0, 0.8)', life: 3.0, maxLife: 3.0 });
-                let t = 0;
-                let pullInterval = setInterval(() => {
-                    if (gameState !== STATE.PLAYING) return;
-                    t += 0.1;
-                    effects.push({ type: 'circle', x: cx, y: cy, radius: 250 - (t*80), color: '#00e5ff', life: 0.1, maxLife: 0.1 });
-                    for(let e of enemies) {
-                        let [dx, dy, d] = getVector(e.x, e.y, cx, cy);
-                        if (d < 300 && !e.type.startsWith('boss')) { e.x += (dx/d)*300*0.1; e.y += (dy/d)*300*0.1; clampToBounds(e, e.size/2); }
-                    }
-                    if (t >= 3.0) {
-                        clearInterval(pullInterval);
-                        effects.push({ type: 'circle', x: cx, y: cy, radius: 350, color: '#fff', life: 0.5, maxLife: 0.5 });
-                        for(let e of enemies) { if (Math.hypot(e.x - cx, e.y - cy) < 350 + e.size/2) applyDamage(e, dmg * mult * 4, 'magic'); }
-                    }
-                }, 100);
-            }
-        },
-        'rmb': () => {
-            const angle = Math.atan2(mouseY - player.y, mouseX - player.x);
-            player.x += Math.cos(angle) * 300; player.y += Math.sin(angle) * 300; clampToBounds(player, player.radius);
-            player.iFrames = 0.5;
-            effects.push({ type: 'dash_trail', x1: player.x - Math.cos(angle)*300, y1: player.y - Math.sin(angle)*300, x2: player.x, y2: player.y, color: '#00e5ff', life: 0.3, maxLife: 0.3 });
-            for(let e of enemies) { if (distToSegment(e.x, e.y, player.x - Math.cos(angle)*300, player.y - Math.sin(angle)*300, player.x, player.y) < e.size/2 + 20) applyDamage(e, calcDmg(100), 'magic'); }
-        }
     }
 };
 
 var BasicAttackRegistry = {
+    'phantom_blade': (dmg) => {
+        if (player.stance === 'handheld') {
+            // Handheld flow damage bonus: up to +50% dmg based on flow
+            dmg *= 1.0 + (player.flow / Math.max(1, player.maxFlow)) * 0.5;
+
+            const attackAngle = Math.atan2(mouseY - player.y, mouseX - player.x);
+            effects.push({ type: 'slash', x: player.x, y: player.y, radius: 100, angle: attackAngle, color: '#00e5ff', life: 0.15, maxLife: 0.15 }); 
+            let hitAnything = false;
+            for(let i=enemies.length-1; i>=0; i--) {
+                const e = enemies[i];
+                if (Math.hypot(player.x-e.x, player.y-e.y) <= 100 + e.size/2) {
+                    let diff = Math.atan2(e.y-player.y, e.x-player.x) - attackAngle; while(diff < -Math.PI) diff += Math.PI*2; while(diff > Math.PI) diff -= Math.PI*2;
+                    if (Math.abs(diff) <= (Math.PI/1.5)/2) { 
+                        applyDamage(e, dmg, 'slash'); 
+                        hitAnything = true;
+                    }
+                }
+            }
+            if (hitAnything) {
+                let flowGain = 10;
+                if (equipment.gloves && equipment.gloves.name === 'Aether Grips') flowGain *= 1.1; // +10% more Flow
+                player.flow = Math.min(player.maxFlow, player.flow + flowGain);
+            }
+        } else if (player.stance === 'airborne') {
+            player.airborneBlade.overrideX = mouseX;
+            player.airborneBlade.overrideY = mouseY;
+        }
+    },
     'sword': (dmg) => {
         const attackAngle = Math.atan2(mouseY - player.y, mouseX - player.x);
         effects.push({ type: 'slash', x: player.x, y: player.y, radius: 110, angle: attackAngle, color: '#e0e0e0', life: 0.15, maxLife: 0.15 }); 
@@ -485,9 +557,9 @@ var BasicAttackRegistry = {
         let dashDist1 = closest ? 0 : 30;
         player.x += Math.cos(angle) * dashDist1; player.y += Math.sin(angle) * dashDist1; clampToBounds(player, player.radius);
         
-        let startX1 = player.x + Math.cos(angle - 0.5)*15; let startY1 = player.y + Math.sin(angle - 0.5)*15;
-        let endX1 = startX1 + Math.cos(angle) * 80; let endY1 = startY1 + Math.sin(angle) * 80;
-        effects.push({ type: 'thrust_edge', x: endX1, y: endY1, angle: angle, color: '#9c27b0', life: 0.15, maxLife: 0.15 });
+        let startX1 = player.x + Math.cos(angle - 0.4)*20; let startY1 = player.y + Math.sin(angle - 0.4)*20;
+        let endX1 = startX1 + Math.cos(angle) * 90; let endY1 = startY1 + Math.sin(angle) * 90;
+        effects.push({ type: 'thrust_edge', x: startX1, y: startY1, x2: endX1, y2: endY1, angle: angle, color: '#9c27b0', life: 0.15, maxLife: 0.15 });
         
         for(let i=enemies.length-1; i>=0; i--) {
             const e = enemies[i];
@@ -500,9 +572,9 @@ var BasicAttackRegistry = {
             let dashDist2 = closest ? 0 : 15;
             player.x += Math.cos(angle) * dashDist2; player.y += Math.sin(angle) * dashDist2; clampToBounds(player, player.radius);
             
-            let startX2 = player.x + Math.cos(angle + 0.5)*15; let startY2 = player.y + Math.sin(angle + 0.5)*15;
-            let endX2 = startX2 + Math.cos(angle) * 80; let endY2 = startY2 + Math.sin(angle) * 80;
-            effects.push({ type: 'thrust_edge', x: endX2, y: endY2, angle: angle, color: '#e1bee7', life: 0.15, maxLife: 0.15 });
+            let startX2 = player.x + Math.cos(angle + 0.4)*20; let startY2 = player.y + Math.sin(angle + 0.4)*20;
+            let endX2 = startX2 + Math.cos(angle) * 90; let endY2 = startY2 + Math.sin(angle) * 90;
+            effects.push({ type: 'thrust_edge', x: startX2, y: startY2, x2: endX2, y2: endY2, angle: angle, color: '#e1bee7', life: 0.15, maxLife: 0.15 });
             
             for(let i=enemies.length-1; i>=0; i--) {
                 const e = enemies[i];
@@ -517,17 +589,5 @@ var BasicAttackRegistry = {
             let spreadAngle = angle + (i*0.1);
             projectiles.push({ x: player.x, y: player.y, vx: Math.cos(spreadAngle)*900, vy: Math.sin(spreadAngle)*900, radius: 4, color: '#ffb74d', life: 0.4, type: 'scattergun', shape: 'bullet', damage: dmg, pierce: isPierce, hitList: [], isEnemy: false });
         }
-    },
-    'phantom_blade': (dmg) => {
-        if (!player.blade) return;
-        if (player.blade.state !== 'idle' && player.blade.state !== 'attacking') return; 
-        
-        const thrustAngle = Math.atan2(mouseY - player.blade.y, mouseX - player.blade.x);
-        player.blade.state = 'attacking';
-        player.blade.angle = thrustAngle;
-        player.blade.targetX = player.blade.x + Math.cos(thrustAngle) * 450; 
-        player.blade.targetY = player.blade.y + Math.sin(thrustAngle) * 450;
-        player.blade.hitList = [];
-        player.blade.baseDmg = dmg;
     }
 };
