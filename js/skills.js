@@ -26,63 +26,109 @@ function castBasic() {
 
 var SkillRegistry = {
     'Swordsaint': {
-        1: (sk, dmg) => { // Parry Thrust / Blade Surge
+        1: (sk, dmg) => { // Blade Sweep / Blade Surge
             if (player.stance === 'handheld') {
-                player.parryTimer = 0.5; // active parry frames handled in combat
-                player.parryDamage = dmg * 2; // used for counter
-                player.parrySkill = sk;
-            } else {
-                let ab = player.airborneBlade;
-                let target = getNearestEnemyFromPoint(mouseX, mouseY, 300);
-                if (target) {
-                    ab.x = target.x; ab.y = target.y; // instant surge onto target
-                    effects.push({ type: 'slash', x: target.x, y: target.y, radius: 80, angle: 0, color: '#00e5ff', life: 0.15, maxLife: 0.15 });
-                    applyDamage(target, dmg * 1.5, 'slash');
-                    // Chaining Surge (Path B handled in enemies death logic later or right here if killed) Wait, path B triggers "on kill/completion". 
-                    // Let's implement immediate chain if it dies, or just chain anyway.
-                    if (sk.selectedUpg === 'B') {
-                        let chained = 0; let delay = 200;
-                        let lastTarget = target;
-                        for(let i=0; i<3; i++) {
-                            setTimeout(() => {
-                                if (gameState !== STATE.PLAYING) return;
-                                let nextT = getNearestEnemyFromPoint(lastTarget.x, lastTarget.y, 250);
-                                if (nextT) {
-                                    ab.x = nextT.x; ab.y = nextT.y;
-                                    effects.push({ type: 'slash', x: nextT.x, y: nextT.y, radius: 80, angle: 0, color: '#00e5ff', life: 0.15, maxLife: 0.15 });
-                                    applyDamage(nextT, dmg * 1.5, 'slash');
-                                    lastTarget = nextT;
-                                }
-                            }, delay);
-                            delay += 200;
+                const attackAngle = Math.atan2(mouseY - player.y, mouseX - player.x);
+                effects.push({ type: 'precision_slash', x: player.x, y: player.y, radius: 180, angle: attackAngle, color: '#18ffff', life: 0.25, maxLife: 0.25 }); 
+                player.qAnimTimer = 0.25;
+                
+                // Destroy Enemy Projectiles
+                for(let i = projectiles.length - 1; i >= 0; i--) {
+                    let p = projectiles[i];
+                    if (p.isEnemy) {
+                        if (Math.hypot(player.x - p.x, player.y - p.y) <= 180) {
+                            let diff = Math.atan2(p.y-player.y, p.x-player.x) - attackAngle; 
+                            while(diff < -Math.PI) diff += Math.PI*2; while(diff > Math.PI) diff -= Math.PI*2;
+                            if (Math.abs(diff) <= Math.PI/3) { // inside slash cone
+                                effects.push({ type: 'sparkle_poof', x: p.x, y: p.y, color: '#00e5ff' });
+                                p.life = 0; 
+                            }
                         }
                     }
                 }
+                
+                let hitAnything = false;
+                for(let e of enemies) {
+                    if (Math.hypot(player.x-e.x, player.y-e.y) <= 180 + e.size/2) {
+                        let diff = Math.atan2(e.y-player.y, e.x-player.x) - attackAngle; 
+                        while(diff < -Math.PI) diff += Math.PI*2; 
+                        while(diff > Math.PI) diff -= Math.PI*2;
+                        if (Math.abs(diff) <= (Math.PI/3)) { 
+                            applyDamage(e, dmg * 2.5, 'slash'); 
+                            hitAnything = true;
+                        }
+                    }
+                }
+                
+                if (hitAnything) {
+                    player.flow = Math.min(player.maxFlow, player.flow + 30); 
+                    player.flowGainTimer = 0;
+                }
+            } else {
+                let ab = player.airborneBlade;
+                // Devastating epic spin on current location
+                ab.flyTimer = 0.6; // Lock the AI out of flying away while it spins
+                
+                effects.push({ type: 'text', text: 'Blade Surge!', x: ab.x, y: ab.y - 40, color: '#00e5ff', life: 0.6, maxLife: 0.6 });
+                
+                let isDeflectingStorm = sk.selectedUpg === 'B';
+                let spinRadius = isDeflectingStorm ? 250 : 180;
+                let finalRadius = isDeflectingStorm ? 280 : 200;
+                
+                let spinCount = 0;
+                let spinInterval = setInterval(() => {
+                    if (gameState !== STATE.PLAYING) { clearInterval(spinInterval); return; }
+                    
+                    let spinAngle = (Math.PI * 2 / 5) * spinCount + ab.angle;
+                    ab.angle += 0.5; // visibly rotate the blade fast
+                    
+                    effects.push({ type: 'storm_cyclone', x: ab.x, y: ab.y, radius: spinRadius, angle: spinAngle, color: '#00e5ff', life: 0.15, maxLife: 0.15 });
+                    
+                    if (isDeflectingStorm) {
+                        for (let i = projectiles.length - 1; i >= 0; i--) {
+                            let p = projectiles[i];
+                            if (p.isEnemy && Math.hypot(p.x - ab.x, p.y - ab.y) <= spinRadius + p.radius) {
+                                projectiles.splice(i, 1);
+                                player.flow = Math.min(player.maxFlow, (player.flow || 0) + (player.maxFlow * 0.05));
+                                player.flowGainTimer = 0;
+                                effects.push({ type: 'circle', x: p.x, y: p.y, radius: 15, color: '#84ffff', life: 0.2, maxLife: 0.2 });
+                            }
+                        }
+                    }
+
+                    for (let e of enemies) {
+                        if (Math.hypot(e.x - ab.x, e.y - ab.y) <= spinRadius + e.size/2) {
+                            applyDamage(e, dmg * 0.8, 'slash'); // 6 hits of 0.8 dmg
+                        }
+                    }
+                    
+                    spinCount++;
+                    if (spinCount >= 6) {
+                        clearInterval(spinInterval);
+                        // Final explosion blast
+                        effects.push({ type: 'circle', x: ab.x, y: ab.y, radius: finalRadius, color: 'rgba(0, 229, 255, 0.4)', life: 0.2, maxLife: 0.2 });
+                        for (let e of enemies) {
+                            if (Math.hypot(e.x - ab.x, e.y - ab.y) <= finalRadius + e.size/2) {
+                                applyDamage(e, dmg * 1.5, 'slash');
+                            }
+                        }
+                    }
+                }, 100);
             }
         },
         2: (sk, dmg) => { // Deploy / Recall (Toggle)
             if (player.stance === 'handheld') {
+                if (player.flow >= player.maxFlow) player.empoweredAirborne = true;
                 player.stance = 'airborne';
-                if (sk.selectedUpg === 'B') player.flow = Math.min(player.maxFlow, player.flow + (player.maxFlow * 0.30));
+                if (sk.selectedUpg === 'B') {
+                    player.flow = Math.min(player.maxFlow, player.flow + (player.maxFlow * 0.30));
+                    player.flowGainTimer = 0;
+                }
             } else {
                 player.stance = 'handheld';
+                player.empoweredAirborne = false;
                 player.airborneBlade.x = player.x; player.airborneBlade.y = player.y;
                 if (sk.selectedUpg === 'A') player.iFrames = 0.5;
-                
-                // Unique Weapon logic: Detonate Residual Blades
-                if (equipment.weapon && equipment.weapon.name === 'Shattered Reality') {
-                    for (let i = effects.length - 1; i >= 0; i--) {
-                        if (effects[i].type === 'residual_blade') {
-                            effects.push({ type: 'slash', x: effects[i].x, y: effects[i].y, radius: 100, angle: 0, color: '#00bcd4', life: 0.15, maxLife: 0.15 });
-                            for (let e of enemies) {
-                                if (Math.hypot(e.x - effects[i].x, e.y - effects[i].y) < 100 + e.size/2) {
-                                    applyDamage(e, activeClass.skills[2].baseDmg * 2 + player.bonusDmg, 'slash');
-                                }
-                            }
-                            effects[i].life = 0; // Destroy
-                        }
-                    }
-                }
             }
         },
         3: (sk, dmg) => { // Shadow Step / Spatial Swap
@@ -91,41 +137,94 @@ var SkillRegistry = {
                 let moveDist = Math.min(dist, equipment.boots && equipment.boots.name === 'Windwalker Steps' ? 400 : 300);
                 
                 if (sk.selectedUpg === 'A') {
-                    // Leaves phantom
-                    player.phantomDecoy = { x: player.x, y: player.y, life: 3.0 }; 
-                    effects.push({ type: 'circle', x: player.x, y: player.y, radius: player.radius, color: 'rgba(0, 188, 212, 0.4)', life: 3.0, maxLife: 3.0 });
+                    // Path of Blades - Phantom blade follows the dash and slashes
+                    let startX = player.x; let startY = player.y;
+                    let dashAngle = Math.atan2(dy, dx);
+                    
+                    // Spawn a highly visible, fast-moving projectile that tracks the dash path
+                    projectiles.push({
+                        x: startX, y: startY,
+                        vx: Math.cos(dashAngle) * 2000, vy: Math.sin(dashAngle) * 2000,
+                        radius: 85, color: '#00e5ff',
+                        life: moveDist / 2000, // lives exactly long enough to traverse the dash dist
+                        type: 'pierce',
+                        shape: 'phantom_blade_proj',
+                        damage: dmg * 2.0,
+                        pierce: true,
+                        hitList: [],
+                        isEnemy: false
+                    });
                 }
+                
+                // Add dash trail effect for Shadow Step
+                effects.push({ type: 'dash_trail', x1: player.x, y1: player.y, x2: player.x + (dx/dist)*moveDist, y2: player.y + (dy/dist)*moveDist, color: '#00e5ff', life: 0.2, maxLife: 0.2 });
+                
                 player.x += (dx/dist)*moveDist; player.y += (dy/dist)*moveDist; clampToBounds(player, player.radius);
                 player.iFrames = 0.3;
+                
+                // Add arrival effect
+                effects.push({ type: 'circle_burst', x: player.x, y: player.y, radius: 40, color: 'rgba(0, 229, 255, 0.8)', life: 0.3, maxLife: 0.3 });
+                
             } else {
                 // Swap places with Airborne Blade
                 let tmpX = player.x; let tmpY = player.y;
                 player.x = player.airborneBlade.x; player.y = player.airborneBlade.y;
                 player.airborneBlade.x = tmpX; player.airborneBlade.y = tmpY;
-                effects.push({ type: 'line', x1: tmpX, y1: tmpY, x2: player.x, y2: player.y, color: '#00bcd4', life: 0.2, maxLife: 0.2, lineWidth: 4 });
+                
+                // Add a more dramatic spatial swap effect
+                effects.push({ type: 'flash_line', x1: tmpX, y1: tmpY, x2: player.x, y2: player.y, color: '#00bcd4', life: 0.25, maxLife: 0.25, lineWidth: 6 });
+                effects.push({ type: 'circle_burst', x: tmpX, y: tmpY, radius: 50, color: 'rgba(0, 188, 212, 0.7)', life: 0.4, maxLife: 0.4 });
+                effects.push({ type: 'circle_burst', x: player.x, y: player.y, radius: 50, color: 'rgba(0, 229, 255, 0.9)', life: 0.4, maxLife: 0.4 });
+                
                 if (sk.selectedUpg === 'B') cooldowns.s1 = 0; // Reset Q (Blade Surge)
             }
         },
         4: (sk, dmg) => { // Blade Whirlwind / Shatter Storm
             if (player.stance === 'handheld') {
-                effects.push({ type: 'slash', x: player.x, y: player.y, radius: 200, angle: 0, color: '#00e5ff', life: 0.3, maxLife: 0.3 });
-                effects.push({ type: 'slash', x: player.x, y: player.y, radius: 200, angle: Math.PI, color: '#00e5ff', life: 0.3, maxLife: 0.3 });
+                // Creates a visually stunning vortex of blades
+                effects.push({ type: 'whirlwind', x: player.x, y: player.y, radius: 250, color: '#00e5ff', life: 0.8, maxLife: 0.8 });
                 for(let i=enemies.length-1; i>=0; i--) {
                     let e = enemies[i];
-                    if (Math.hypot(player.x - e.x, player.y - e.y) < 200 + e.size/2) {
-                        applyDamage(e, dmg, 'slash');
+                    if (Math.hypot(player.x - e.x, player.y - e.y) < 250 + e.size/2) {
+                        applyDamage(e, dmg * 1.5, 'slash');
                         if (sk.selectedUpg === 'A') {
                             let [edx, edy, edist] = getVector(e.x, e.y, player.x, player.y);
-                            e.x += (edx/edist) * Math.min(edist, 100); e.y += (edy/edist) * Math.min(edist, 100);
+                            e.x += (edx/edist) * Math.min(edist, 150); e.y += (edy/edist) * Math.min(edist, 150);
                         }
                     }
                 }
             } else {
                 let ab = player.airborneBlade;
                 let isPierce = sk.selectedUpg === 'B';
-                for(let i=0; i<8; i++) {
-                    let ang = (Math.PI*2 / 8) * i;
-                    projectiles.push({ x: ab.x, y: ab.y, vx: Math.cos(ang)*800, vy: Math.sin(ang)*800, radius: 5, color: '#18ffff', life: 1.5, type: isPierce ? 'pierce' : 'basic', shape: 'knife', damage: dmg, pierce: isPierce, hitList: [], isEnemy: false });
+                
+                // Visual explosion of the main blade
+                effects.push({ type: 'circle_burst', x: ab.x, y: ab.y, radius: 100, color: '#00e5ff', life: 0.3, maxLife: 0.3 });
+                
+                if (!player.miniBlades) player.miniBlades = [];
+                for(let i=0; i<6; i++) {
+                    let ang = (Math.PI*2 / 6) * i;
+                    player.miniBlades.push({ 
+                        x: ab.x, y: ab.y, 
+                        angle: ang, 
+                        life: 6.0, 
+                        maxLife: 6.0,
+                        attackTimer: 0,
+                        pierce: isPierce
+                    });
+                }
+            }
+        },
+        'rmb': () => {
+            // Shatter Detonation
+            for (let i = effects.length - 1; i >= 0; i--) {
+                if (effects[i].type === 'residual_blade') {
+                    effects.push({ type: 'slash', x: effects[i].x, y: effects[i].y, radius: 100, angle: 0, color: '#00bcd4', life: 0.15, maxLife: 0.15 });
+                    for (let e of enemies) {
+                        if (Math.hypot(e.x - effects[i].x, e.y - effects[i].y) < 100 + e.size/2) {
+                            applyDamage(e, activeClass.basicDmg * 6 + (player.bonusDmg || 0), 'slash');
+                        }
+                    }
+                    effects[i].life = 0; // Destroy
                 }
             }
         }
@@ -500,28 +599,43 @@ var BasicAttackRegistry = {
         if (player.stance === 'handheld') {
             // Handheld flow damage bonus: up to +50% dmg based on flow
             dmg *= 1.0 + (player.flow / Math.max(1, player.maxFlow)) * 0.5;
-
             const attackAngle = Math.atan2(mouseY - player.y, mouseX - player.x);
-            effects.push({ type: 'slash', x: player.x, y: player.y, radius: 100, angle: attackAngle, color: '#00e5ff', life: 0.15, maxLife: 0.15 }); 
+
+            let step = player.comboStep || 0;
+            player.lastAttackStep = step;
+            player.comboStep = (step + 1) % 3;
+            player.comboTimer = 1.0; // Wait 1s max before resetting back to 1st hit
+
+            let hitRadius = (step === 2) ? 170 : 130; 
+            let effectType = (step === 2) ? 'precision_thrust' : 'precision_slash';
+            let angleThreshold = (step === 2) ? (Math.PI/6) : (Math.PI/3); 
+            
+            // On step 1, we flip the rendering visually for alternate swipe in main.js, but here logic is symmetrical
+            effects.push({ type: effectType, x: player.x, y: player.y, radius: hitRadius, angle: attackAngle, color: '#00e5ff', life: 0.15, maxLife: 0.15 }); 
+            
             let hitAnything = false;
             for(let i=enemies.length-1; i>=0; i--) {
                 const e = enemies[i];
-                if (Math.hypot(player.x-e.x, player.y-e.y) <= 100 + e.size/2) {
-                    let diff = Math.atan2(e.y-player.y, e.x-player.x) - attackAngle; while(diff < -Math.PI) diff += Math.PI*2; while(diff > Math.PI) diff -= Math.PI*2;
-                    if (Math.abs(diff) <= (Math.PI/1.5)/2) { 
-                        applyDamage(e, dmg, 'slash'); 
+                if (Math.hypot(player.x-e.x, player.y-e.y) <= hitRadius + e.size/2) {
+                    let diff = Math.atan2(e.y-player.y, e.x-player.x) - attackAngle; 
+                    while(diff < -Math.PI) diff += Math.PI*2; while(diff > Math.PI) diff -= Math.PI*2;
+                    
+                    if (Math.abs(diff) <= angleThreshold) { 
+                        let mult = (step === 2) ? 1.5 : 1.0; // 3rd hit deals 50% more dmg
+                        applyDamage(e, dmg * mult, 'slash'); 
                         hitAnything = true;
                     }
                 }
             }
             if (hitAnything) {
-                let flowGain = 10;
+                let flowGain = (step === 2) ? 20 : 10;
                 if (equipment.gloves && equipment.gloves.name === 'Aether Grips') flowGain *= 1.1; // +10% more Flow
                 player.flow = Math.min(player.maxFlow, player.flow + flowGain);
+                player.flowGainTimer = 0;
             }
         } else if (player.stance === 'airborne') {
-            player.airborneBlade.overrideX = mouseX;
-            player.airborneBlade.overrideY = mouseY;
+            // In airborne mode, basic attack doesn't strictly fire a one-off projectile anymore.
+            // The AI companion loop handles continuous damage and following mouse smoothly.
         }
     },
     'sword': (dmg) => {

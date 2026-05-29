@@ -13,7 +13,7 @@ function startGame(className) {
     isEndlessMode = false;
     
     player.blade = null;
-    player.flow = 0; player.maxFlow = 100; player.stance = 'handheld'; player.parryTimer = 0;
+    player.flow = 0; player.maxFlow = 100; player.stance = 'handheld'; player.comboStep = 0; player.comboTimer = 0;
     player.airborneBlade = { x: player.x, y: player.y, angle: 0, overrideX: null, overrideY: null, attackTimer: 0 };
     player.flowGainTimer = 0; // for decay tracking
 
@@ -245,6 +245,14 @@ function update(dt) {
     }
 
     if (activeClass && activeClass.name === 'Swordsaint') {
+        if (player.comboTimer > 0) {
+            player.comboTimer -= dt;
+            if (player.comboTimer <= 0) player.comboStep = 0;
+        }
+        if (player.qAnimTimer > 0) {
+            player.qAnimTimer -= dt;
+        }
+
         if (player.stance === 'handheld') {
             player.flowGainTimer += dt;
             if (player.flowGainTimer >= 1.5) {
@@ -256,70 +264,205 @@ function update(dt) {
             player.airborneBlade.angle = Math.atan2(mouseY - player.y, mouseX - player.x);
         } else if (player.stance === 'airborne') {
             // Flow constantly decays in Airborne to put a cap on it
-            player.flow = Math.max(0, player.flow - (5 * dt));
+            player.flow = Math.max(0, player.flow - (10 * dt)); // Deplete a bit faster in Airborne
+            if (player.flow <= 0) {
+                player.empoweredAirborne = false;
+            }
             
             // Airborne Blade Logic (AI companion)
             let ab = player.airborneBlade;
-            let targetSpeed = 400 + (player.flow / player.maxFlow) * 300; // Speed scales with Flow
+            let targetSpeed = 400 + (player.flow / player.maxFlow) * 500; // Speed scales with Flow
             
-            // Override takes precedence (Left click dash)
+            if (isMouseDown) {
+                ab.overrideX = mouseX;
+                ab.overrideY = mouseY;
+            } else {
+                ab.overrideX = null;
+                ab.overrideY = null;
+            }
+
+            // Override takes precedence (Left click follow & slash)
             if (ab.overrideX !== null) {
                 let dx = ab.overrideX - ab.x; let dy = ab.overrideY - ab.y;
                 let dist = Math.hypot(dx, dy);
-                if (dist < 10) {
-                    ab.overrideX = null; ab.overrideY = null; ab.attackTimer = 0.5;
-                } else {
+                
+                if (dist > 5) {
                     let moveAngle = Math.atan2(dy, dx);
-                    ab.x += Math.cos(moveAngle) * 1200 * dt;
-                    ab.y += Math.sin(moveAngle) * 1200 * dt;
-                    ab.angle = moveAngle;
+                    // Smoothly rotate towards mouse
+                    let angleDiff = moveAngle - ab.angle;
+                    while (angleDiff < -Math.PI) angleDiff += Math.PI*2;
+                    while (angleDiff > Math.PI) angleDiff -= Math.PI*2;
+                    ab.angle += angleDiff * 12 * dt;
                     
-                    // Damage things on path
+                    let followSpeed = Math.min(1200, dist * 8); 
+                    ab.x += Math.cos(ab.angle) * followSpeed * dt;
+                    ab.y += Math.sin(ab.angle) * followSpeed * dt;
+                }
+
+                // Slash damage through enemies on path
+                if (ab.attackTimer <= 0) {
+                    let hitAnything = false;
                     for (const e of enemies) {
-                        if (Math.hypot(e.x - ab.x, e.y - ab.y) < e.size / 2 + 30) {
-                            applyDamage(e, activeClass.basicDmg * 2 * (1 + (player.flow/player.maxFlow)), 'slash');
-                            if (equipment.weapon && equipment.weapon.name === 'Shattered Reality' && Math.random() < 0.2) { // limit so we don't spam too many
-                                effects.push({ type: 'residual_blade', x: e.x, y: e.y, color: '#00bcd4', life: 2.0, maxLife: 2.0 });
+                        if (Math.hypot(e.x - ab.x, e.y - ab.y) < e.size / 2 + 50) {
+                            let dmg = activeClass.basicDmg * 1.2 * (1 + (player.flow/player.maxFlow));
+                            if (player.empoweredAirborne) dmg *= 1.5;
+                            applyDamage(e, dmg, 'slash');
+                            let slashColor = player.empoweredAirborne ? 'rgba(0, 229, 255, 0.9)' : 'rgba(0, 188, 212, 0.7)';
+                            let slashRadius = player.empoweredAirborne ? 75 : 50;
+                            effects.push({ type: 'slash', x: e.x, y: e.y, angle: ab.angle, color: slashColor, life: 0.15, maxLife: 0.15, radius: slashRadius });
+                            if (equipment.weapon && equipment.weapon.name === 'Shattered Reality' && Math.random() < 0.2) {
+                                effects.push({ type: 'residual_blade', x: e.x, y: e.y, color: '#00bcd4', life: 6.0, maxLife: 6.0 });
                             }
+                            hitAnything = true;
                         }
                     }
+                    if (hitAnything) {
+                        let stanceBonus = (player.flow / player.maxFlow) * 0.5;
+                        ab.attackTimer = (player.empoweredAirborne ? 0.1 : 0.2) / (1 + stanceBonus); 
+                    }
+                } else {
+                    ab.attackTimer -= dt;
                 }
             } else {
-                // Seek nearest enemy in 500 radius of player
-                let bestTarget = getNearestEnemyFromPoint(player.x, player.y, 500);
+                // Seek nearest enemy in 600 radius of the Blade itself (not player)
+                let bestTarget = getNearestEnemyFromPoint(ab.x, ab.y, 600);
                 if (bestTarget) {
                     let btx = bestTarget.x; let bty = bestTarget.y;
-                    let bdist = Math.hypot(btx - ab.x, bty - ab.y);
-                    ab.angle = Math.atan2(bty - ab.y, btx - ab.x);
+                    let dx = btx - ab.x; let dy = bty - ab.y;
+                    let dist = Math.hypot(dx, dy);
+                    let targetAngle = Math.atan2(dy, dx);
 
-                    if (bdist > 40) {
-                        ab.x += Math.cos(ab.angle) * targetSpeed * dt;
-                        ab.y += Math.sin(ab.angle) * targetSpeed * dt;
+                    let angleDiff = targetAngle - ab.angle;
+                    while (angleDiff < -Math.PI) angleDiff += Math.PI*2;
+                    while (angleDiff > Math.PI) angleDiff -= Math.PI*2;
+                    
+                    if (ab.flyTimer === undefined) ab.flyTimer = 0;
+                    
+                    if (ab.flyTimer > 0) {
+                        ab.flyTimer -= dt;
+                    } else {
+                        // Wide sweeping turn to face target
+                        ab.angle += angleDiff * 5 * dt; 
                     }
+
+                    // If we are looking reasonably towards the enemy and get close, enter Pierce mode
+                    if (ab.flyTimer <= 0 && dist < 160 && Math.abs(angleDiff) < Math.PI/3) {
+                        ab.flyTimer = 0.45; // Lock steering and dash forward for 0.45s to punch through and fly away
+                    }
+
+                    let currentSpeed = targetSpeed * 1.4;
+                    if (ab.flyTimer > 0) {
+                        currentSpeed *= 2.0; // Violent piercing speed
+                    } else {
+                        // Slow down slightly while turning around to make tighter turns
+                        currentSpeed *= 0.9;
+                    }
+
+                    ab.x += Math.cos(ab.angle) * currentSpeed * dt;
+                    ab.y += Math.sin(ab.angle) * currentSpeed * dt;
+                    clampToBounds(ab, 20); // Prevent flying off the map edges
                     
                     ab.attackTimer -= dt;
-                    if (ab.attackTimer <= 0 && bdist < 60) {
-                        // Swing damage
-                        effects.push({ type: 'slash', x: btx, y: bty, angle: ab.angle, color: 'rgba(0, 188, 212, 0.7)', life: 0.15, maxLife: 0.15, radius: 40 });
-                        applyDamage(bestTarget, activeClass.basicDmg * (1 + (player.flow/player.maxFlow)), 'slash');
+                    // If close, damage as it flies through
+                    if (ab.attackTimer <= 0 && dist < bestTarget.size / 2 + 50) {
+                        let dmg = activeClass.basicDmg * (1 + (player.flow/player.maxFlow));
+                        if (player.empoweredAirborne) dmg *= 1.5;
+                        
+                        applyDamage(bestTarget, dmg, 'slash');
                         if (equipment.weapon && equipment.weapon.name === 'Shattered Reality') {
-                            effects.push({ type: 'residual_blade', x: btx, y: bty, color: '#00bcd4', life: 2.0, maxLife: 2.0 });
+                            effects.push({ type: 'residual_blade', x: bestTarget.x, y: bestTarget.y, color: '#00bcd4', life: 6.0, maxLife: 6.0 });
                         }
-                        let stanceBonus = (player.flow / player.maxFlow) * 0.5; // up to +50% atk speed in airborne
-                        ab.attackTimer = Math.max(0.2, 0.6 / (1 + stanceBonus)); 
+                        let stanceBonus = (player.flow / player.maxFlow) * 0.5; 
+                        ab.attackTimer = Math.max(player.empoweredAirborne ? 0.1 : 0.2, (player.empoweredAirborne ? 0.3 : 0.6) / (1 + stanceBonus)); 
                     }
                 } else {
-                    // Orbit player
+                    // Orbit player smoothly
+                    let dx = player.x - ab.x;
+                    let dy = player.y - ab.y;
+                    let distToPlayer = Math.hypot(dx, dy);
+                    
                     let orbitAngle = Date.now() / 500;
-                    let ox = player.x + Math.cos(orbitAngle) * 60;
-                    let oy = player.y + Math.sin(orbitAngle) * 60;
-                    ab.angle = Math.atan2(oy - ab.y, ox - ab.x);
-                    ab.x += Math.cos(ab.angle) * targetSpeed * dt;
-                    ab.y += Math.sin(ab.angle) * targetSpeed * dt;
+                    let ox = player.x + Math.cos(orbitAngle) * 80;
+                    let oy = player.y + Math.sin(orbitAngle) * 80;
+                    let tox = ox - ab.x;
+                    let toy = oy - ab.y;
+                    
+                    let targetAngle = Math.atan2(toy, tox);
+                    let angleDiff = targetAngle - ab.angle;
+                    while (angleDiff < -Math.PI) angleDiff += Math.PI*2;
+                    while (angleDiff > Math.PI) angleDiff -= Math.PI*2;
+                    
+                    ab.angle += angleDiff * 5 * dt;
+                    
+                    let returnSpeed = distToPlayer > 200 ? 900 : targetSpeed;
+                    ab.x += Math.cos(ab.angle) * returnSpeed * dt;
+                    ab.y += Math.sin(ab.angle) * returnSpeed * dt;
+                    clampToBounds(ab, 20);
+                }
+            }
+            
+            // Reusable flow gain mechanics (decay handled above)
+        }
+        
+        // Shatter Storm mini-blades
+        if (player.miniBlades && player.miniBlades.length > 0) {
+            for (let i = player.miniBlades.length - 1; i >= 0; i--) {
+                let mb = player.miniBlades[i];
+                mb.life -= dt;
+                if (mb.life <= 0) {
+                    player.miniBlades.splice(i, 1);
+                    continue;
+                }
+
+                if (!mb.target || mb.target.hp <= 0) {
+                    mb.target = getNearestEnemyFromPoint(mb.x, mb.y, 800);
+                }
+
+                if (mb.target) {
+                    let dx = mb.target.x - mb.x;
+                    let dy = mb.target.y - mb.y;
+                    let dist = Math.hypot(dx, dy);
+                    let targetAngle = Math.atan2(dy, dx);
+                    
+                    let angleDiff = targetAngle - mb.angle;
+                    while(angleDiff < -Math.PI) angleDiff += Math.PI*2;
+                    while(angleDiff > Math.PI) angleDiff -= Math.PI*2;
+                    
+                    mb.angle += angleDiff * 10 * dt;
+                    let speed = 900;
+                    mb.x += Math.cos(mb.angle) * speed * dt;
+                    mb.y += Math.sin(mb.angle) * speed * dt;
+
+                    mb.attackTimer -= dt;
+                    if (dist < mb.target.size/2 + 25 && mb.attackTimer <= 0) {
+                        let dmg = activeClass.basicDmg * (1 + (player.flow/player.maxFlow)) * 0.8;
+                        if (player.empoweredAirborne) dmg *= 1.5;
+                        applyDamage(mb.target, dmg, 'shatter_storm');
+                        mb.attackTimer = 0.25;
+                        effects.push({ type: 'slash', x: mb.target.x, y: mb.target.y, angle: mb.angle, color: '#18ffff', life: 0.15, maxLife: 0.15, radius: 45 });
+                        if (!mb.pierce) mb.target = null;
+                        
+                        // Recoil bounce
+                        mb.x -= Math.cos(mb.angle) * 40;
+                        mb.y -= Math.sin(mb.angle) * 40;
+                    }
+                } else {
+                    let orbitAngle = (mb.life * 3) + (i * Math.PI*2 / 6);
+                    let px = player.airborneBlade && player.stance === 'airborne' ? player.airborneBlade.x : player.x;
+                    let py = player.airborneBlade && player.stance === 'airborne' ? player.airborneBlade.y : player.y;
+                    let tx = px + Math.cos(orbitAngle)*120;
+                    let ty = py + Math.sin(orbitAngle)*120;
+                    
+                    let dx = tx - mb.x; let dy = ty - mb.y;
+                    mb.angle = Math.atan2(dy, dx);
+                    let dist = Math.hypot(dx, dy);
+                    let speed = Math.min(1000, Math.max(200, dist * 5));
+                    mb.x += Math.cos(mb.angle) * speed * dt;
+                    mb.y += Math.sin(mb.angle) * speed * dt;
                 }
             }
         }
-        
+
         if (player.parryTimer > 0) {
             player.parryTimer -= dt;
             player.iFrames = 0.1; // Maintain IFrames during parry window
@@ -708,14 +851,27 @@ function draw() {
             }
             ctx.restore();
         } else if (ef.type === 'residual_blade') {
-            ctx.fillStyle = ef.color;
             ctx.save();
             ctx.translate(ef.x, ef.y);
-            ctx.rotate(Date.now() / 200); // spinning slightly or just pointing up
+            ctx.rotate(Date.now() / 200); 
+            ctx.globalAlpha = ef.life / ef.maxLife;
+            // Draw a floating shattered sword piece
+            ctx.fillStyle = ef.color;
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = ef.color;
             ctx.beginPath();
-            ctx.moveTo(0, -15);
-            ctx.lineTo(5, 5);
-            ctx.lineTo(-5, 5);
+            ctx.moveTo(0, -25);
+            ctx.lineTo(8, 10);
+            ctx.lineTo(-8, 10);
+            ctx.closePath();
+            ctx.fill();
+            // Core
+            ctx.fillStyle = '#ffffff';
+            ctx.shadowBlur = 0;
+            ctx.beginPath();
+            ctx.moveTo(0, -18);
+            ctx.lineTo(3, 5);
+            ctx.lineTo(-3, 5);
             ctx.closePath();
             ctx.fill();
             ctx.restore();
@@ -861,6 +1017,24 @@ function draw() {
             ctx.strokeStyle = ef.color; ctx.lineWidth = 16 * (ef.life/ef.maxLife); ctx.lineCap = 'round';
             ctx.beginPath(); ctx.moveTo(ef.x1, ef.y1); ctx.lineTo(ef.x2, ef.y2); ctx.stroke(); ctx.lineCap = 'butt';
         }
+        else if (ef.type === 'flash_line') {
+            ctx.strokeStyle = ef.color; ctx.lineWidth = ef.lineWidth || 4; ctx.lineCap = 'round';
+            ctx.beginPath(); ctx.moveTo(ef.x1, ef.y1); ctx.lineTo(ef.x2, ef.y2); ctx.stroke(); ctx.lineCap = 'butt';
+            
+            // Add a white core for brightness
+            ctx.strokeStyle = '#ffffff'; ctx.lineWidth = (ef.lineWidth || 4) / 2; ctx.lineCap = 'round';
+            ctx.beginPath(); ctx.moveTo(ef.x1, ef.y1); ctx.lineTo(ef.x2, ef.y2); ctx.stroke(); ctx.lineCap = 'butt';
+        }
+        else if (ef.type === 'circle_burst') {
+            ctx.strokeStyle = ef.color; 
+            ctx.lineWidth = 4 * (ef.life/ef.maxLife);
+            let currentRadius = ef.radius * (1.0 - ef.life/ef.maxLife);
+            ctx.beginPath(); ctx.arc(ef.x, ef.y, currentRadius, 0, Math.PI*2); ctx.stroke();
+            
+            // Also draw a fading filled core
+            ctx.fillStyle = ef.color;
+            ctx.beginPath(); ctx.arc(ef.x, ef.y, currentRadius * 0.7, 0, Math.PI*2); ctx.fill();
+        }
         else if (ef.type === 'valerius_chain') {
             ctx.strokeStyle = '#757575'; ctx.lineWidth = 2;
             ctx.beginPath(); ctx.moveTo(ef.x1, ef.y1); ctx.lineTo(ef.x2, ef.y2); ctx.stroke();
@@ -902,8 +1076,99 @@ function draw() {
         else if (ef.type === 'line') { ctx.strokeStyle = ef.color; ctx.lineWidth = ef.lineWidth || 40; ctx.beginPath(); ctx.moveTo(ef.x1, ef.y1); ctx.lineTo(ef.x2, ef.y2); ctx.stroke(); } 
         else if (ef.type === 'cone') { ctx.fillStyle = ef.color; ctx.beginPath(); ctx.moveTo(ef.x, ef.y); ctx.arc(ef.x, ef.y, ef.radius, ef.angle - ef.spread/2, ef.angle + ef.spread/2); ctx.closePath(); ctx.fill(); }
         else if (ef.type === 'slash') { ctx.strokeStyle = ef.color || '#e0e0e0'; ctx.lineWidth = 25 * (ef.life/ef.maxLife); ctx.lineCap = 'round'; ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.radius * 0.8, ef.angle - Math.PI/2.5, ef.angle + Math.PI/2.5); ctx.stroke(); ctx.lineCap = 'butt'; }
+        else if (ef.type === 'precision_slash') {
+            ctx.save();
+            ctx.translate(ef.x, ef.y);
+            
+            // Faint gradient fill for the whole slash area
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.arc(0, 0, ef.radius, ef.angle - Math.PI/3.5, ef.angle + Math.PI/3.5);
+            ctx.closePath();
+            
+            let grad = ctx.createRadialGradient(0, 0, ef.radius * 0.3, 0, 0, ef.radius);
+            grad.addColorStop(0, 'rgba(255,255,255,0)');
+            grad.addColorStop(0.8, ef.color || '#00e5ff');
+            grad.addColorStop(1, 'rgba(255,255,255,0)');
+            
+            ctx.fillStyle = grad;
+            ctx.globalAlpha = 0.6 * (ef.life/ef.maxLife);
+            ctx.fill();
+
+            // Sharp outer edge
+            ctx.globalAlpha = 1.0;
+            ctx.beginPath();
+            ctx.arc(0, 0, ef.radius, ef.angle - Math.PI/3.5, ef.angle + Math.PI/3.5);
+            ctx.lineWidth = 4 * (ef.life/ef.maxLife);
+            ctx.strokeStyle = '#ffffff';
+            ctx.stroke();
+            
+            ctx.restore();
+        }
+        else if (ef.type === 'precision_thrust') {
+            ctx.save();
+            ctx.translate(ef.x, ef.y);
+            ctx.rotate(ef.angle);
+            ctx.fillStyle = ef.color;
+            ctx.globalAlpha = (ef.life/ef.maxLife);
+            ctx.beginPath();
+            ctx.moveTo(10, -5); // base
+            ctx.lineTo(ef.radius, 0); // sharp tip
+            ctx.lineTo(10, 5); // base
+            ctx.fill();
+            let grad = ctx.createLinearGradient(0, 0, ef.radius, 0);
+            grad.addColorStop(0, 'rgba(255,255,255,0)');
+            grad.addColorStop(0.5, '#ffffff');
+            grad.addColorStop(1, 'rgba(0, 229, 255, 0)');
+            ctx.strokeStyle = grad;
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(ef.radius + 20, 0);
+            ctx.stroke();
+            ctx.restore();
+        }
         else if (ef.type === 'bear_trap') { ctx.fillStyle = ef.color; ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.radius, 0, Math.PI*2); ctx.fill(); ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.radius/2, 0, Math.PI*2); ctx.fill(); }
+        else if (ef.type === 'storm_cyclone') {
+            ctx.save();
+            ctx.translate(ef.x, ef.y);
+            ctx.rotate(Date.now() / 50 + ef.angle);
+            ctx.globalAlpha = ef.life / ef.maxLife;
+            // Draw multiple massive curved wind/slash blades
+            for (let i = 0; i < 4; i++) {
+                ctx.rotate(Math.PI / 2);
+                let grad = ctx.createLinearGradient(0, 0, ef.radius, 0);
+                grad.addColorStop(0, 'rgba(0, 229, 255, 0.8)');
+                grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                ctx.fillStyle = grad;
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.arc(0, 0, ef.radius, 0, Math.PI / 2.5);
+                ctx.closePath();
+                ctx.fill();
+            }
+            ctx.restore();
+        }
         else if (ef.type === 'text') { ctx.fillStyle = ef.color; ctx.font = '16px monospace'; ctx.textAlign = 'center'; ctx.fillText(ef.text, ef.x, ef.y - (1.0 - (ef.life/ef.maxLife)) * 30); }
+        else if (ef.type === 'whirlwind') {
+            ctx.save();
+            ctx.translate(ef.x, ef.y);
+            ctx.rotate((1.0 - ef.life/ef.maxLife) * Math.PI * 8); // Spin rapidly
+            ctx.strokeStyle = ef.color;
+            ctx.lineWidth = 15 * (ef.life/ef.maxLife);
+            ctx.lineCap = 'round';
+            for (let i = 0; i < 4; i++) {
+                ctx.beginPath();
+                ctx.arc(0, 0, ef.radius * (0.5 + 0.5 * (ef.life/ef.maxLife)), (i * Math.PI/2), (i * Math.PI/2) + Math.PI/3);
+                ctx.stroke();
+            }
+            ctx.filter = 'blur(4px)';
+            ctx.fillStyle = 'rgba(0, 229, 255, 0.2)';
+            ctx.beginPath();
+            ctx.arc(0, 0, ef.radius, 0, Math.PI*2);
+            ctx.fill();
+            ctx.restore();
+        }
         ctx.globalAlpha = 1.0;
     }
 
@@ -1010,12 +1275,37 @@ function draw() {
             ctx.fillStyle = '#ffeb3b'; ctx.shadowBlur = 0;
             ctx.beginPath(); ctx.arc(2, 0, p.radius * 0.5, 0, Math.PI*2); ctx.fill();
             ctx.restore();
+        } else if (p.shape === 'mini_sword') {
+            ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.angle || 0);
+            ctx.fillStyle = p.color || '#00bcd4';
+            ctx.strokeStyle = '#00e5ff'; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(10, 0); ctx.lineTo(-5, -4); ctx.lineTo(-5, 4); ctx.closePath(); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = '#e0f7fa'; ctx.beginPath(); ctx.moveTo(7, 0); ctx.lineTo(-3, -1); ctx.lineTo(-3, 1); ctx.closePath(); ctx.fill();
+            ctx.restore();
         } else if (p.shape === 'shield') {
             p.spinAngle = (p.spinAngle || 0) + 0.3; 
             ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.spinAngle);
             ctx.fillStyle = '#78909c'; ctx.beginPath(); ctx.arc(0, 0, p.radius, 0, Math.PI*2); ctx.fill();
             ctx.strokeStyle = '#cfd8dc'; ctx.lineWidth = 3; ctx.stroke();
             ctx.fillStyle = '#ffca28'; ctx.beginPath(); ctx.arc(0, 0, p.radius * 0.4, 0, Math.PI*2); ctx.fill();
+            ctx.restore();
+        } else if (p.shape === 'phantom_blade_proj') {
+            let ang = Math.atan2(p.vy, p.vx);
+            ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(ang);
+            ctx.globalAlpha = 0.8;
+            ctx.fillStyle = p.color;
+            ctx.filter = 'blur(4px)';
+            ctx.beginPath(); ctx.ellipse(-20, 0, 60, 15, 0, 0, Math.PI*2); ctx.fill();
+            ctx.filter = 'none';
+            ctx.globalAlpha = 1.0;
+            // Draw blade
+            let bladeGrad = ctx.createLinearGradient(-60, 0, 40, 0);
+            bladeGrad.addColorStop(0, '#e0f7fa'); bladeGrad.addColorStop(0.3, p.color); bladeGrad.addColorStop(1, p.color);
+            ctx.fillStyle = bladeGrad;
+            ctx.beginPath(); ctx.moveTo(-50, 0); ctx.lineTo(-40, -10); ctx.lineTo(40, 0); ctx.lineTo(-40, 10); ctx.closePath(); ctx.fill();
+            // Core
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath(); ctx.moveTo(-45, 0); ctx.lineTo(-38, -4); ctx.lineTo(30, 0); ctx.lineTo(-38, 4); ctx.closePath(); ctx.fill();
             ctx.restore();
         } else {
             ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI*2); ctx.fill();
@@ -1071,56 +1361,182 @@ function draw() {
             ctx.strokeStyle = '#757575'; ctx.lineWidth = 12; ctx.beginPath(); ctx.moveTo(player.x + Math.cos(aimAngle)*25, player.y + Math.sin(aimAngle)*25); ctx.lineTo(player.x + Math.cos(aimAngle)*40, player.y + Math.sin(aimAngle)*40); ctx.stroke();
         } else if (activeClass && activeClass.weapon === 'phantom_blade') {
             let ab = player.airborneBlade;
-            let ang = (player.stance === 'handheld') ? aimAngle : ab.angle;
-            let bx = (player.stance === 'handheld') ? player.x : ab.x;
-            let by = (player.stance === 'handheld') ? player.y : ab.y;
+            let ang, bx, by;
+            let thrustExt = 0;
             
-            if (player.stance === 'handheld' && cooldowns.basic > 0) {
-                let progress = 1.0 - (cooldowns.basic / activeClass.basicAttackCD);
-                let eased = Math.min(1, progress * 4);
-                ang = aimAngle - Math.PI/1.5 + (Math.PI * 1.5) * eased;
-            } else if (player.stance === 'handheld') {
-                ang = aimAngle;
+            if (player.stance === 'handheld') {
+                ang = aimAngle - Math.PI/4; // Default resting
+                let pivotAng = aimAngle;
+                
+                if (player.qAnimTimer > 0) {
+                    let progress = 1.0 - (player.qAnimTimer / 0.25);
+                    let eased = Math.min(1, progress * 2); // Big sweep
+                    ang = aimAngle - Math.PI/1.2 + (Math.PI * 1.6) * eased;
+                    thrustExt = Math.sin(eased * Math.PI) * 20; // Short reach outward
+                } else if (cooldowns.basic > 0) {
+                    let progress = 1.0 - (cooldowns.basic / activeClass.basicAttackCD);
+                    let eased = Math.min(1, progress * 4); 
+                    let step = player.lastAttackStep || 0;
+                    
+                    if (step === 0) {
+                        // Swing Left to Right (Proper arc, no 360 spin)
+                        ang = aimAngle - Math.PI/2.5 + (Math.PI * 0.8) * eased;
+                    } else if (step === 1) {
+                        // Swing Right to Left
+                        ang = aimAngle + Math.PI/2.5 - (Math.PI * 0.8) * eased;
+                    } else {
+                        // Thrust Forward
+                        ang = aimAngle;
+                        thrustExt = Math.sin(eased * Math.PI) * 45;
+                    }
+                }
+                bx = player.x + Math.cos(pivotAng)*15 + Math.cos(aimAngle)*thrustExt;
+                by = player.y + Math.sin(pivotAng)*15 + Math.sin(aimAngle)*thrustExt;
+            } else {
+                ang = ab.angle;
+                bx = ab.x;
+                by = ab.y;
             }
 
             let flowRatio = player.flow / player.maxFlow;
+            let perp = ang + Math.PI/2;
+            let p1 = { x: bx + Math.cos(ang)*20, y: by + Math.sin(ang)*20 }; // base of blade
+            let p2 = { x: bx + Math.cos(ang)*85, y: by + Math.sin(ang)*85 }; // tip
             
-            // Aura wrapping the blade
-            ctx.globalAlpha = 0.3 + (0.4 * flowRatio);
-            ctx.fillStyle = '#00e5ff';
-            ctx.beginPath();
-            ctx.arc(bx + Math.cos(ang)*45, by + Math.sin(ang)*45, 15 + (10 * flowRatio), 0, Math.PI*2);
-            ctx.fill();
-            ctx.globalAlpha = 1.0;
+            // Render beautiful phantom blade
+            ctx.save();
+            ctx.translate(bx, by);
+            ctx.rotate(ang);
 
-            // Blade Gradient
-            let grad = ctx.createLinearGradient(bx + Math.cos(ang)*20, by + Math.sin(ang)*20, bx + Math.cos(ang)*70, by + Math.sin(ang)*70);
-            grad.addColorStop(0, '#ffffff');
-            grad.addColorStop(1, '#00bcd4');
+            // Shroud main blade if mini blades are active
+            let isShattered = player.stance === 'airborne' && player.miniBlades && player.miniBlades.length > 0;
             
-            // Hilt
-            ctx.strokeStyle = '#bcaaa4'; ctx.lineWidth = 6; ctx.lineCap = 'butt';
-            ctx.beginPath(); ctx.moveTo(bx + Math.cos(ang)*10, by + Math.sin(ang)*10); ctx.lineTo(bx + Math.cos(ang)*20, by + Math.sin(ang)*20); ctx.stroke();
-            
-            // Winged Guards
-            ctx.strokeStyle = '#311b92'; ctx.lineWidth = 4;
-            const perp = ang + Math.PI/2;
-            let cx = bx + Math.cos(ang)*20; let cy = by + Math.sin(ang)*20;
-            ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(perp)*15 - Math.cos(ang)*10, cy + Math.sin(perp)*15 - Math.sin(ang)*10); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx - Math.cos(perp)*15 - Math.cos(ang)*10, cy - Math.sin(perp)*15 - Math.sin(ang)*10); ctx.stroke();
-            
-            // Blade body
-            ctx.strokeStyle = grad; ctx.lineWidth = 7; ctx.lineCap = 'round';
-            ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(bx + Math.cos(ang)*70, by + Math.sin(ang)*70); ctx.stroke();
-            
-            // Diamond Center
-            ctx.fillStyle = '#18ffff';
+            if (!isShattered) {
+                // Aura glow behind blade
+                if (flowRatio >= 1.0 || player.empoweredAirborne) {
+                ctx.globalAlpha = 0.8;
+                ctx.fillStyle = player.empoweredAirborne ? '#84ffff' : '#00e5ff';
+                ctx.filter = 'blur(6px)';
+                ctx.beginPath();
+                ctx.ellipse(50, 0, 45, 12, 0, 0, Math.PI*2);
+                ctx.fill();
+                ctx.filter = 'none';
+                ctx.globalAlpha = 1.0;
+            }
+
+            // Hilt - more intricate
+            ctx.fillStyle = '#5d4037';
+            ctx.fillRect(5, -3, 15, 6);
+            ctx.fillStyle = '#ffca28';
+            ctx.fillRect(5, -4, 4, 8);
+            ctx.fillRect(16, -4, 4, 8);
+
+            // Guard - swept back wings
+            ctx.fillStyle = '#1a237e';
             ctx.beginPath();
-            ctx.moveTo(cx + Math.cos(ang)*10, cy + Math.sin(ang)*10);
-            ctx.lineTo(cx + Math.cos(perp)*4 + Math.cos(ang)*14, cy + Math.sin(perp)*4 + Math.sin(ang)*14);
-            ctx.lineTo(cx + Math.cos(ang)*18, cy + Math.sin(ang)*18);
-            ctx.lineTo(cx - Math.cos(perp)*4 + Math.cos(ang)*14, cy - Math.sin(perp)*4 + Math.sin(ang)*14);
+            ctx.moveTo(20, 0); // center
+            ctx.lineTo(15, -18); // top wing tip
+            ctx.lineTo(25, -5); // top wing inner
+            ctx.lineTo(30, 0); // center point
+            ctx.lineTo(25, 5); // bottom wing inner
+            ctx.lineTo(15, 18); // bottom wing tip
+            ctx.closePath();
             ctx.fill();
+
+            // Guard highlight
+            ctx.strokeStyle = '#8c9eff';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            // The energy blade itself
+            let bladeGrad = ctx.createLinearGradient(20, 0, 85, 0);
+                if (flowRatio >= 1.0 || player.empoweredAirborne) {
+                    bladeGrad.addColorStop(0, player.empoweredAirborne ? '#84ffff' : '#e0f7fa');
+                    bladeGrad.addColorStop(0.3, player.empoweredAirborne ? '#00e5ff' : '#00bcd4');
+                    bladeGrad.addColorStop(1, player.empoweredAirborne ? '#00e5ff' : '#00e5ff');
+                } else {
+                    bladeGrad.addColorStop(0, '#ffffff');
+                    bladeGrad.addColorStop(0.3, '#bdbdbd');
+                    bladeGrad.addColorStop(1, '#757575');
+                }
+                
+                ctx.fillStyle = bladeGrad;
+                ctx.beginPath();
+                ctx.moveTo(25, 0); // inner base
+                ctx.lineTo(35, -8); // top edge
+                ctx.lineTo(85, 0); // tip
+                ctx.lineTo(35, 8); // bottom edge
+                ctx.closePath();
+                ctx.fill();
+
+                // Inner bright core
+                if (flowRatio >= 1.0 || player.empoweredAirborne) {
+                    ctx.fillStyle = '#ffffff';
+                    ctx.beginPath();
+                    ctx.moveTo(28, 0);
+                    ctx.lineTo(38, -3);
+                    ctx.lineTo(80, 0);
+                    ctx.lineTo(38, 3);
+                    ctx.closePath();
+                    ctx.fill();
+                }
+            } else {
+                ctx.beginPath();
+                ctx.arc(20, 0, 10, 0, Math.PI * 2);
+                ctx.fillStyle = player.empoweredAirborne ? '#ffffff' : '#e0f7fa';
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = player.empoweredAirborne ? '#84ffff' : '#00e5ff';
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            }
+
+            // Airborne floating trail
+            if (player.stance === 'airborne' && (Math.abs(ab.overrideX) > 0 || player.flow > 0)) {
+                ctx.globalAlpha = player.empoweredAirborne ? 0.7 : 0.5;
+                ctx.fillStyle = player.empoweredAirborne ? '#00e5ff' : '#00e5ff';
+                ctx.beginPath();
+                ctx.moveTo(25, 0);
+                ctx.lineTo(-20, -4);
+                ctx.lineTo(-20, 4);
+                ctx.closePath();
+                ctx.fill();
+                ctx.globalAlpha = 1.0;
+            }
+
+            ctx.restore();
+
+            // Render Shatter Storm mini-blades
+            if (player.miniBlades && player.miniBlades.length > 0) {
+                ctx.fillStyle = player.empoweredAirborne ? '#ffffff' : '#00bcd4';
+                ctx.strokeStyle = '#00e5ff';
+                ctx.lineWidth = 1;
+                for (const mb of player.miniBlades) {
+                    ctx.save();
+                    ctx.translate(mb.x, mb.y);
+                    ctx.rotate(mb.angle);
+                    
+                    // Draw a mini dagger
+                    ctx.beginPath();
+                    ctx.moveTo(10, 0); // Tip
+                    ctx.lineTo(-5, -4); // Top edge
+                    ctx.lineTo(-5, 4); // Bottom edge
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+
+                    // Glow core
+                    ctx.fillStyle = '#e0f7fa';
+                    ctx.beginPath();
+                    ctx.moveTo(7, 0);
+                    ctx.lineTo(-3, -1);
+                    ctx.lineTo(-3, 1);
+                    ctx.closePath();
+                    ctx.fill();
+                    
+                    ctx.restore();
+                }
+            }
+
         } else if (activeClass && activeClass.weapon === 'dagger') {
             const handleColor = equipment.weapon && equipment.weapon.rarity === 'rare' ? '#4a148c' : '#9c27b0';
             const perp = aimAngle + Math.PI/2;

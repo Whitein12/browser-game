@@ -77,15 +77,15 @@
   "swordsaint": {
     "name": "Swordsaint", "color": "#00bcd4", "weapon": "phantom_blade", "baseMaxHp": 100, "baseArmor": 1, "dmgMult": 1.2, "basicAttackCD": 0.3, "basicDmg": 12,
     "passive": "Flow & Stance: Toggle stances with E. Melee strikes build Flow, boosting Airborne Blade power.",
-    "rareWeapon": { "name": "Shattered Reality", "desc": "Airborne attacks leave Residual Blades (2s). Swapping to Handheld detonates them." },
+    "rareWeapon": { "name": "Shattered Reality", "desc": "+100% DMG | RMB: Shatter Detonation (Detonate Residual Blades)", "rmbSkill": "Shatter Detonation" },
     "rareArmor": { "name": "Saint's Silk Shroud", "desc": "Taking Handheld damage grants 5% Flow. Airborne damage grants 2.5% Flow + 10% Dodge." },
     "rareAmulet": { "name": "Prismatic Core", "desc": "+25% Max Flow | 15% CDR" },
     "rareBoots": { "name": "Windwalker Steps", "desc": "+60 Move Speed | Shadow Step distance +30%" },
     "rareGloves": { "name": "Aether Grips", "desc": "+30% Attack Speed | Basic attacks generate 10% more Flow" },
     "skills": {
-      "1": { "name": "Parry Thrust / Blade Surge", "level": 0, "maxCd": 4.0, "baseDmg": 50, "selectedUpg": null, "upgA": { "name": "Perfect Counter", "desc": "Success grants massive Flow. (Handheld)" }, "upgB": { "name": "Chaining Surge", "desc": "Blade Surge chains to 3 targets on kill. (Airborne)" } },
+      "1": { "name": "Parry Thrust / Blade Surge", "level": 0, "maxCd": 4.0, "baseDmg": 50, "selectedUpg": null, "upgA": { "name": "Flawless Execution", "desc": "Successful parry grants Maximum Flow and resets its cooldown. (Handheld)" }, "upgB": { "name": "Deflecting Storm", "desc": "The sweep area is increased and destroying projectiles restores Flow. (Airborne)" } },
       "2": { "name": "Deploy / Recall (Toggle)", "level": 0, "maxCd": 1.0, "baseDmg": 0, "selectedUpg": null, "upgA": { "name": "Aegis Return", "desc": "Recalling grants 0.5s Invulnerability. (Handheld)" }, "upgB": { "name": "Instant Flow", "desc": "Deploying grants 30% Max Flow. (Airborne)" } },
-      "3": { "name": "Shadow Step / Spatial Swap", "level": 0, "maxCd": 5.0, "baseDmg": 0, "selectedUpg": null, "upgA": { "name": "Phantom Decoy", "desc": "Leaves a phantom that absorbs 1 projectile. (Handheld)" }, "upgB": { "name": "Surge Reset", "desc": "Spatial Swap resets Blade Surge (Q) cooldown. (Airborne)" } },
+      "3": { "name": "Shadow Step / Spatial Swap", "level": 0, "maxCd": 5.0, "baseDmg": 40, "selectedUpg": null, "upgA": { "name": "Path of Blades", "desc": "A phantom blade follows your dash, piercing through enemies. (Handheld)" }, "upgB": { "name": "Surge Reset", "desc": "Spatial Swap resets Blade Surge (Q) cooldown. (Airborne)" } },
       "4": { "name": "Blade Whirlwind / Shatter Storm", "level": 0, "maxCd": 12.0, "baseDmg": 60, "selectedUpg": null, "upgA": { "name": "Vortex", "desc": "Whirlwind pulls enemies in aggressively. (Handheld)" }, "upgB": { "name": "Piercing Shrapnel", "desc": "Shatter Storm knives pierce multiple enemies. (Airborne)" } }
     }
   }

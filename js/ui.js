@@ -154,7 +154,10 @@ function triggerEvolution(skillIndex) {
 window.selectUpgrade = function(path) {
     if (gameState !== STATE.EVOLVE || isProcessingClick) return; isProcessingClick = true;
     const sk = activeClass.skills[evolvingSkillId]; sk.level++; sk.selectedUpg = path;
-    el('upgrade-screen').classList.add('hidden'); finishLevelUp();
+    el('upgrade-screen').classList.add('hidden'); 
+    el('dev-screen').classList.add('hidden'); // Force hide dev menu if it was open behind the upgrade screen
+    gameState = STATE.LEVELUP; 
+    finishLevelUp();
 }
 
 function finishLevelUp() {
@@ -162,12 +165,12 @@ function finishLevelUp() {
     if (player.skillPoints > 0) { triggerLevelUp(); } 
     else {
         el('levelup-screen').classList.add('hidden'); updateHUD();
+        isProcessingClick = false; // Reset the click latch immediately when done!
         if (wave === 0) startNextWave(); 
         else if (enemiesToSpawn === 0 && activeEnemies === 0) {
             gameState = STATE.INTERMISSION; el('intermission-title').innerText = isBossWave ? "Boss Defeated!" : "Wave Cleared"; el('intermission-title').style.color = "#ffca28"; el('btn-shop').classList.toggle('hidden', !isBossWave); el('intermission-screen').classList.remove('hidden');
         } else { 
-            if (!el('dev-screen').classList.contains('hidden')) { gameState = STATE.DEV; } 
-            else { gameState = STATE.PLAYING; }
+            gameState = STATE.PLAYING;
             lastTime = performance.now(); 
         }
     }

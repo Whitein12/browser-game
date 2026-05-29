@@ -130,6 +130,23 @@ function applyDamage(enemy, amount, source = 'player', projAngle = null) {
 }
 
 function takeDamage(amount, isContinuous = false) {
+    if (player.parryTimer > 0 && !isContinuous) {
+        effects.push({ type: 'text', text: 'Parried!', x: player.x, y: player.y - 30, color: '#00e5ff', life: 0.6, maxLife: 0.6 });
+        
+        let flowGain = player.maxFlow * 0.2; // Base parry flow gain
+        
+        // Grant Maximum Flow and reset cooldown for Upgrade A
+        if (activeClass && activeClass.skills[1] && activeClass.skills[1].selectedUpg === 'A') {
+            flowGain = player.maxFlow;
+            cooldowns.s1 = 0; // Reset skill 1 cooldown
+        }
+        
+        player.flow = Math.min(player.maxFlow, (player.flow || 0) + flowGain);
+        player.flowGainTimer = 0;
+        
+        return; // Mitigate all damage
+    }
+
     if (player.iFrames > 0) return;
     if (buffs.evade100 > 0) {
         if (!isContinuous) effects.push({ type: 'text', text: 'Evaded!', x: player.x, y: player.y - 30, color: '#e1bee7', life: 0.6, maxLife: 0.6 });
@@ -137,19 +154,6 @@ function takeDamage(amount, isContinuous = false) {
     }
     if (player.inSmoke && Math.random() < 0.5) {
         if (!isContinuous) effects.push({ type: 'text', text: 'Evaded!', x: player.x, y: player.y - 30, color: '#e1bee7', life: 0.6, maxLife: 0.6 });
-        return;
-    }
-    
-    if (activeClass && activeClass.name === 'Swordsaint' && player.parryTimer > 0 && !isContinuous) {
-        player.parryTimer = 0; // consumed
-        player.flow = Math.min(player.maxFlow, player.flow + 30);
-        effects.push({ type: 'text', text: 'Parry!', x: player.x, y: player.y - 40, color: '#00bcd4', life: 1.0, maxLife: 1.0 });
-        effects.push({ type: 'circle_outline', x: player.x, y: player.y, radius: 100, color: '#00bcd4', life: 0.3, maxLife: 0.3 });
-        for (let e of enemies) {
-            if (Math.hypot(e.x - player.x, e.y - player.y) <= 100 + player.radius) {
-                applyDamage(e, player.stats.dmg * (player.skills[3] ? 1 + player.skills[3].level*0.5 : 3), 'physical');
-            }
-        }
         return;
     }
 
@@ -168,6 +172,7 @@ function takeDamage(amount, isContinuous = false) {
     if (activeClass && activeClass.name === 'Swordsaint' && equipment.armor && equipment.armor.name === "Saint's Silk Shroud") {
         if (player.stance === 'handheld') {
             player.flow = Math.min(player.maxFlow, player.flow + player.maxFlow * 0.05);
+            player.flowGainTimer = 0;
         } else {
             player.flow = Math.min(player.maxFlow, player.flow + player.maxFlow * 0.025);
             if (Math.random() < 0.10) {
