@@ -33,13 +33,25 @@
         .class-card:hover { transform: scale(1.05); }
         .class-title { font-size: 24px; font-weight: bold; margin-bottom: 10px; text-shadow: 1px 1px 0 #000; }
         .diff-tag { position: absolute; bottom: 15px; right: 15px; font-size: 12px; padding: 4px 8px; border-radius: 4px; background: rgba(0,0,0,0.8); border: 1px solid; }        
-        .inventory-grid { display: flex; gap: 20px; max-width: 1000px; width: 100%; padding: 20px; box-sizing: border-box; }
-        .inv-column { flex: 1; background: #222; border: 2px solid #555; border-radius: 8px; padding: 15px; display: flex; flex-direction: column; gap: 10px; }
+        .inventory-grid { display: flex; gap: 20px; max-width: 1000px; width: 100%; max-height: 75vh; padding: 20px; box-sizing: border-box; }
+        .inv-column { flex: 1; background: #222; border: 2px solid #555; border-radius: 8px; padding: 15px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
         .item-slot { background: #111; border: 1px solid #444; padding: 10px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
         .item-slot:hover { border-color: #fff; }
         .item-slot.rare { border-color: #b39ddb; background: rgba(103, 58, 183, 0.1); }
         .item-stats { color: #aaa; font-size: 12px; }
         .price-tag { color: #ffd54f; font-weight: bold; }
+        
+        .cd-tracker-container { display: flex; gap: 10px; justify-content: center; align-items: flex-end; }
+        .cd-box { position: relative; width: 50px; height: 50px; background: #222; border: 2px solid #555; border-radius: 4px; display: flex; flex-direction: column; justify-content: center; align-items: center; color: #fff; text-shadow: 1px 1px 0 #000; box-shadow: 0 4px 6px rgba(0,0,0,0.5); overflow: hidden; }
+        .cd-box.ready { border-color: #4caf50; }
+        .cd-box.cooldown { border-color: #f44336; color: #aaa; }
+        .cd-box.locked { border-color: #555; opacity: 0.5; }
+        .cd-key { font-size: 12px; font-weight: bold; position: absolute; top: 2px; left: 4px; color: #aaa; z-index: 2; }
+        .cd-time { font-size: 18px; font-weight: bold; z-index: 2; }
+        .cd-name { font-size: 10px; position: absolute; bottom: 2px; white-space: nowrap; color: #ccc; z-index: 2; }
+        .cd-overlay { position: absolute; bottom: 0; left: 0; width: 100%; background: rgba(244, 67, 54, 0.4); z-index: 1; transition: height 0.1s linear; }
+
+        .hud-top { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); text-align: center; pointer-events: none; z-index: 10; text-shadow: 2px 2px 0 #000; }
         
         #loading-text { font-size: 24px; color: #fff; margin-bottom: 20px; }
         .dev-input { background: #111; color: #fff; border: 1px solid #ff4081; padding: 5px; font-family: monospace; width: 60px; text-align: center; }
@@ -50,6 +62,12 @@
     <canvas id="gameCanvas"></canvas>
 
     <div id="ui-layer">
+        <div id="hud-top" class="hud-top hidden">
+            <div style="font-size: 28px; font-weight: bold; color: #fff;" id="wave-display">Wave 1</div>
+            <div style="font-size: 16px; color: #aaa;" id="wave-subtext">Enemies Left: 0</div>
+            <div style="font-size: 20px; color: #ffd54f; margin-top: 5px; font-weight: bold;" id="gold-display">Gold: 0</div>
+        </div>
+
         <div id="hud" class="hud-bottom hidden">
             <div class="stats">
                 <div style="font-size: 18px; font-weight: bold; margin-bottom: 5px;" id="class-name"></div>
@@ -66,17 +84,18 @@
                     <div class="bar-fg" id="flow-bar" style="background: #00bcd4; box-shadow: 0 0 5px #00bcd4;"></div>
                     <div class="bar-text" id="flow-text" style="font-size: 10px; line-height: 12px;">0 / 100 Flow</div>
                 </div>
+                <!-- Zeal Bar (Cleric) -->
+                <div class="bar-container" id="zeal-bar-container" style="height: 12px; display: none; margin-top: 2px; border-color: #f57f17;">
+                    <div class="bar-fg" id="zeal-bar" style="background: #fbc02d; box-shadow: 0 0 5px #fbc02d;"></div>
+                    <div class="bar-text" id="zeal-text" style="font-size: 10px; line-height: 12px;">0 / 100 Zeal</div>
+                </div>
             </div>
             
-            <div style="text-align: center;">
-                <div style="font-size: 24px; font-weight: bold; color: #fff; text-shadow: 2px 2px 0 #000;" id="wave-display">Wave 1</div>
-                <div style="font-size: 16px; color: #aaa;" id="wave-subtext">Enemies Left: 0</div>
-                <div style="font-size: 18px; color: #ffd54f; margin-top: 5px; font-weight: bold;" id="gold-display">Gold: 0</div>
+            <div id="cd-tracker" class="cd-tracker-container">
+                <!-- Generates tracked cooldown boxes in JS -->
             </div>
 
             <div class="skills-display">
-                <div style="font-size: 14px; color: #aaa;" id="skill-display"></div>
-                <div style="font-size: 18px; font-weight: bold; color: #fff;" id="cd-display"></div>
                 <div style="font-size: 14px; color: #81c784;" id="perm-display"></div>
             </div>
         </div>
@@ -122,6 +141,18 @@
                         <div class="class-title" style="color: #00bcd4;">Swordsaint</div>
                         <p style="color: #ccc;">High-skill tactician and glass cannon. Swap between melee parry and autonomous Airborne Blade to control space.</p>
                         <p style="color: #888; font-size: 14px;">Weapon: Phantom Blade | Stance Dancer | Low HP</p>
+                    </div>
+                    <div class="class-card" style="border-color: #fbc02d;" onclick="chooseClass('cleric')">
+                        <div class="diff-tag" style="border-color:#ff9800; color:#ff9800;">Difficulty: Medium</div>
+                        <div class="class-title" style="color: #fbc02d;">Cleric</div>
+                        <p style="color: #ccc;">A duality caster. Basic attacks generate Zeal. Empty Zeal casts are halved. Rank 4 evolves spells into Holy or Shadow.</p>
+                        <p style="color: #888; font-size: 14px;">Weapon: Censer | Mid HP | Sustain</p>
+                    </div>
+                    <div class="class-card" style="border-color: #2e7d32;" onclick="chooseClass('druid')">
+                        <div class="diff-tag" style="border-color:#f44336; color:#f44336;">Difficulty: Hard</div>
+                        <div class="class-title" style="color: #2e7d32;">Druid</div>
+                        <p style="color: #ccc;">A shape-shifting hybrid. Stack poison spores in Caster Form, then transform into a Beast to detonate them for massive burst.</p>
+                        <p style="color: #888; font-size: 14px;">Weapon: Totem/Claws | High HP | DoT & Burst</p>
                     </div>
                 </div>
             </div>

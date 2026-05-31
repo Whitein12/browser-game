@@ -7,6 +7,8 @@ function calcDmg(baseAmount, skillLevel = 1) {
     let mult = activeClass.dmgMult + (equipment.weapon ? equipment.weapon.val : 0);
     if (activeClass && activeClass.name === 'Dragonknight') mult += (player.frenzyStacks * 0.02);
     if (activeClass && activeClass.name === 'Ranger') mult += player.momentum;
+    if (activeClass && activeClass.name === 'Cleric' && buffs.aspectOfReaper > 0) mult += 0.50; // Aspect of the Reaper +50% DMG
+    if (activeClass && activeClass.name === 'Cleric' && buffs.ascension > 0) mult += 0.25; // Base Ascension +25% DMG
     mult += (buffs.powerSurgeStacks * 0.1); 
     
     let finalDmg = scaledBase * mult * (1.0 + player.bonusDmg);
@@ -14,11 +16,21 @@ function calcDmg(baseAmount, skillLevel = 1) {
     return finalDmg;
 }
 
+function calcUtility(baseAmount, skillLevel = 1) {
+    return baseAmount + (skillLevel > 1 ? (skillLevel - 1) * (baseAmount * 0.3) : 0);
+}
+
+function calcCooldown(baseCd, skillLevel = 1) {
+    // Reduces cooldowns by 15% to 30% dynamically based on skill level.
+    return baseCd * Math.max(0.4, (1 - ((skillLevel > 1 ? skillLevel - 1 : 0) * 0.15)));
+}
+
 function getCDR() {
     let cdr = 1.0;
     if (equipment.amulet && equipment.amulet.type === 'amulet' && equipment.amulet.rarity !== 'rare') cdr -= equipment.amulet.val;
     if (equipment.amulet && equipment.amulet.name === 'Amulet of Power') cdr -= 0.20;
     if (equipment.amulet && equipment.amulet.name === 'Prismatic Core') cdr -= 0.15;
+    if (activeClass && activeClass.name === 'Cleric' && buffs.aspectOfReaper > 0) cdr -= 0.50; // Aspect of the Reaper -50% CD
     return Math.max(0.2, cdr); 
 }
 
@@ -33,6 +45,8 @@ function generateItem(tierLevel) {
 }
 
 function applyDamage(enemy, amount, source = 'player', projAngle = null) {
+    amount *= 0.6; // Global player damage reduction
+    
     if (source === 'melee_basic') hitStopTimer = 0.04;
     if (enemy.isStaggered) amount *= 2.0; 
 
@@ -129,7 +143,9 @@ function applyDamage(enemy, amount, source = 'player', projAngle = null) {
     checkEnemyDeath(enemy);
 }
 
-function takeDamage(amount, isContinuous = false) {
+function takeDamage(amount, isContinuous = false, sourceObj = null) {
+    amount *= 0.6; // Global enemy damage reduction to player
+
     if (player.parryTimer > 0 && !isContinuous) {
         effects.push({ type: 'text', text: 'Parried!', x: player.x, y: player.y - 30, color: '#00e5ff', life: 0.6, maxLife: 0.6 });
         
@@ -160,6 +176,28 @@ function takeDamage(amount, isContinuous = false) {
     if (buffs.ironBulwark > 0) amount *= 0.5;
     if (equipment.boots && equipment.boots.name === 'Ethereal Treads' && player.isMoving) amount *= 0.5;
     if (equipment.armor && equipment.armor.name === 'Hazard Suit' && (isContinuous || amount < 5)) return;
+    
+    // Cleric Vestments of the Fractured Soul interaction
+    if (activeClass && activeClass.name === 'Cleric' && equipment.armor && equipment.armor.name === 'Vestments of the Fractured Soul') {
+        let isShadow = activeClass.skills[1].selectedUpg === 'B';
+        let isHoly = activeClass.skills[1].selectedUpg === 'A';
+        
+        if (isShadow && player.hp / player.maxHp < 0.25) { // Free Desecration < 25% HP
+            // Ensure no infinity loop by adding a small tiny cooldown check on `cowlCooldown`
+            if ((player.vestmentCD || 0) <= 0) {
+                window.SkillRegistry['Cleric'][2]({ selectedUpg: 'B' }, calcDmg(activeClass.skills[2].baseDmg || 15));
+                player.vestmentCD = 2.0; // max once every 2 seconds
+            }
+        }
+        if (isHoly && sourceObj && sourceObj.isProjectile) { // Reflect 15% projectile DMG
+            amount *= 0.85; // take 15% less
+            let nearest = typeof getNearestEnemyFromPoint === 'function' ? getNearestEnemyFromPoint(player.x, player.y, 400) : null;
+            if (nearest) {
+                let dx = nearest.x - player.x, dy = nearest.y - player.y, dist = Math.hypot(dx,dy) || 1;
+                projectiles.push({ x: player.x, y: player.y, vx: (dx/dist)*500, vy: (dy/dist)*500, radius: 8, color: '#fbc02d', life: 1.0, type: 'fireball', shape: 'fireball', damage: amount * 0.15 * 5, pierce: false, hitList: [], isEnemy: false });
+            }
+        }
+    }
 
     if (!isContinuous) amount = Math.max(1, amount - player.armor); 
     
@@ -228,6 +266,12 @@ function checkEnemyDeath(e) {
 
         if (e.type === 'spore_slime') effects.push({ type: 'spore_cloud', x: e.x, y: e.y, radius: 100, color: 'rgba(205, 220, 57, 0.4)', life: 3.0, maxLife: 3.0 });
         
+        if (activeClass && activeClass.name === 'Cleric' && buffs.aspectOfReaper > 0) {
+            let missingHp = player.maxHp - player.hp;
+            player.hp += missingHp * 0.25;
+            effects.push({ type: 'text', text: '+HP', x: player.x, y: player.y - 30, color: '#69f0ae', life: 0.8, maxLife: 0.8 });
+        }
+
         if (activeClass.name === 'Dragonknight' && equipment.armor && equipment.armor.name === 'Dragon Scale Plate') player.hp = Math.min(player.maxHp, player.hp + 5);
         if (activeClass.name === 'Spellweaver' && equipment.amulet && equipment.amulet.name === 'Chronos Pendant') {
             for(let i=1; i<=4; i++) cooldowns[`s${i}`] = Math.max(0, cooldowns[`s${i}`] - 0.5); cooldowns.rmb = Math.max(0, cooldowns.rmb - 0.5);

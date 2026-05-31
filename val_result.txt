@@ -1,0 +1,1 @@
+Valid JSON. Keys: dragonknight, spellweaver, ranger, nightblade, machinist, swordsaint, cleric, druid

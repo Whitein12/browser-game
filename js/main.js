@@ -21,7 +21,9 @@ function startGame(className) {
     buffs.rooted = 0; buffs.powerSurgeStacks = 0; buffs.powerSurgeTimer = 0; buffs.weakened = 0; buffs.evade100 = 0; buffs.deathMarkActive = 0; buffs.overclockTimer = 0; buffs.bladeCascade = 0;
     enemies.length = 0; projectiles.length = 0; effects.length = 0; drops.length = 0;
     
-    el('start-screen').classList.add('hidden'); el('hud').classList.remove('hidden');
+    el('start-screen').classList.add('hidden'); 
+    el('hud').classList.remove('hidden');
+    el('hud-top').classList.remove('hidden');
     triggerLevelUp("Choose Starting Skill");
     loop();
 }
@@ -185,14 +187,55 @@ window.addEventListener('keydown', e => {
     if (keyMap[k]) {
         let i = keyMap[k];
         if ((cooldowns[`s${i}`] <= 0 || devNoCooldowns) && activeClass.skills[i].level > 0) {
+            if (activeClass.name === 'Swordsaint' && i === 2 && player.stance === 'handheld' && player.flow < player.maxFlow) {
+                effects.push({ type: 'text', text: 'Not Enough Flow!', x: player.x, y: player.y - 40, color: '#ff5252', life: 0.6, maxLife: 0.6 });
+                return;
+            }
+
             const sk = activeClass.skills[i];
             let cdReduction = getCDR();
-            if (activeClass.name === 'Dragonknight' && i === 3 && equipment.boots && equipment.boots.name === 'Earthshaker Treads') sk.maxCd = Math.max(1, sk.maxCd - 2.0);
-            cooldowns[`s${i}`] = devNoCooldowns ? 0 : sk.maxCd * cdReduction;
+            let baseCd = sk.maxCd;
+            
+            // Dash skills (usually Slot 3) and Swordsaint's Stance Toggle (Slot 2) get level-based cooldown scaling 
+            if (i === 3 || (activeClass.name === 'Swordsaint' && i === 2)) {
+                baseCd = calcCooldown(baseCd, sk.level);
+            }
+
+            if (activeClass.name === 'Dragonknight' && i === 3 && equipment.boots && equipment.boots.name === 'Earthshaker Treads') baseCd = Math.max(1, baseCd - 2.0);
+            cooldowns[`s${i}`] = devNoCooldowns ? 0 : baseCd * cdReduction;
             
             if (equipment.amulet && equipment.amulet.name === 'Amulet of Power') {
                 buffs.powerSurgeStacks = Math.min(5, buffs.powerSurgeStacks + 1);
                 buffs.powerSurgeTimer = 3.0;
+            }
+
+            if (activeClass && activeClass.name === 'Cleric' && buffs.aspectOfReaper > 0 && i !== 4) {
+                // ASCENSION is cost-free to cast. Other abilities cost 8% max HP.
+                let cost = player.maxHp * 0.08;
+                player.hp -= cost;
+                effects.push({ type: 'text', x: player.x, y: player.y + 20, text: `-${Math.floor(cost)}`, color: '#e53935', life: 0.8, maxLife: 0.8 });
+                if (player.hp <= 0) player.hp = 1; // Don't let casting kill you technically? Let's just leave it at 1.
+            }
+
+            if (activeClass && activeClass.name === 'Cleric' && buffs.avatarOfRenewal > 0 && i !== 4) {
+                let bolts = 3;
+                for(let b=0; b<bolts; b++) {
+                    let angle = Math.random() * Math.PI * 2;
+                    projectiles.push({
+                        x: player.x, y: player.y, vx: Math.cos(angle)*400, vy: Math.sin(angle)*400,
+                        radius: 8, color: '#fff', life: 3.0, type: 'basic', shape: 'fireball', damage: activeClass.skills[4].baseDmg ? calcDmg(activeClass.skills[4].baseDmg, activeClass.skills[4].level) : 50, pierce: false, isEnemy: false,
+                        customUpdate: function(dt, p) {
+                            let nearest = getNearestEnemyFromPoint(p.x, p.y, 400);
+                            if (nearest) {
+                                let [dx, dy, dist] = getVector(p.x, p.y, nearest.x, nearest.y);
+                                p.vx += (dx/dist)*900 * dt;
+                                p.vy += (dy/dist)*900 * dt;
+                                let vDist = Math.hypot(p.vx, p.vy);
+                                if (vDist > 600) { p.vx = (p.vx/vDist)*600; p.vy = (p.vy/vDist)*600; }
+                            }
+                        }
+                    });
+                }
             }
 
             let dmg = calcDmg(sk.baseDmg, sk.level);
@@ -219,6 +262,7 @@ function update(dt) {
     if (buffs.evade100 > 0) buffs.evade100 -= dt;
     if (buffs.deathMarkActive > 0) buffs.deathMarkActive -= dt;
     if (player.cowlCooldown > 0) player.cowlCooldown -= dt;
+    if (player.vestmentCD > 0) player.vestmentCD -= dt;
     if (player.iFrames > 0) player.iFrames -= dt;
     if (player.phantomDecoy && player.phantomDecoy.life > 0) player.phantomDecoy.life -= dt;
 
@@ -243,6 +287,38 @@ function update(dt) {
     if (activeClass && activeClass.name === 'Machinist' && buffs.overclockTimer > 0) {
         buffs.overclockTimer -= dt;
     }
+    
+    if (activeClass && activeClass.name === 'Druid') {
+        if (buffs.wildFormTimer > 0) {
+            buffs.wildFormTimer -= dt;
+            if (Math.random() < 0.2) effects.push({ type: 'circle', x: player.x, y: player.y, radius: player.radius + 15, color: 'rgba(109, 76, 65, 0.4)', life: 0.3, maxLife: 0.3 });
+            if (buffs.wildFormTimer <= 0) {
+                // Return to normal
+                player.maxHp = Math.floor(player.maxHp / 1.25);
+                if (player.hp > player.maxHp) player.hp = player.maxHp;
+                effects.push({ type: 'sparkle_poof', x: player.x, y: player.y, color: '#2e7d32' });
+            }
+        }
+    }
+    
+    if (activeClass && activeClass.name === 'Cleric') {
+        if (buffs.avatarOfRenewal > 0) {
+            buffs.avatarOfRenewal -= dt;
+            buffs.zealLocked = true;
+            player.zeal = player.maxZeal;
+            if (buffs.avatarOfRenewal <= 0) buffs.zealLocked = false;
+        }
+        if (buffs.aspectOfReaper > 0) {
+            buffs.aspectOfReaper -= dt;
+            buffs.zealLocked = true;
+            player.zeal = 0;
+            if (buffs.aspectOfReaper <= 0) buffs.zealLocked = false;
+        }
+        if (buffs.ascension > 0) {
+            buffs.ascension -= dt;
+            // Maybe slight passive healing/dmg boost which we handle in dmg calc
+        }
+    }
 
     if (activeClass && activeClass.name === 'Swordsaint') {
         if (player.comboTimer > 0) {
@@ -266,7 +342,12 @@ function update(dt) {
             // Flow constantly decays in Airborne to put a cap on it
             player.flow = Math.max(0, player.flow - (10 * dt)); // Deplete a bit faster in Airborne
             if (player.flow <= 0) {
+                effects.push({ type: 'flash_line', x1: player.airborneBlade.x, y1: player.airborneBlade.y, x2: player.x, y2: player.y, color: '#00e5ff', life: 0.25, maxLife: 0.25, lineWidth: 6 });
+                effects.push({ type: 'circle_burst', x: player.x, y: player.y, radius: 40, color: 'rgba(0, 229, 255, 0.8)', life: 0.3, maxLife: 0.3 });
+                player.stance = 'handheld';
                 player.empoweredAirborne = false;
+                player.airborneBlade.x = player.x;
+                player.airborneBlade.y = player.y;
             }
             
             // Airborne Blade Logic (AI companion)
@@ -310,9 +391,6 @@ function update(dt) {
                             let slashColor = player.empoweredAirborne ? 'rgba(0, 229, 255, 0.9)' : 'rgba(0, 188, 212, 0.7)';
                             let slashRadius = player.empoweredAirborne ? 75 : 50;
                             effects.push({ type: 'slash', x: e.x, y: e.y, angle: ab.angle, color: slashColor, life: 0.15, maxLife: 0.15, radius: slashRadius });
-                            if (equipment.weapon && equipment.weapon.name === 'Shattered Reality' && Math.random() < 0.2) {
-                                effects.push({ type: 'residual_blade', x: e.x, y: e.y, color: '#00bcd4', life: 6.0, maxLife: 6.0 });
-                            }
                             hitAnything = true;
                         }
                     }
@@ -369,9 +447,6 @@ function update(dt) {
                         if (player.empoweredAirborne) dmg *= 1.5;
                         
                         applyDamage(bestTarget, dmg, 'slash');
-                        if (equipment.weapon && equipment.weapon.name === 'Shattered Reality') {
-                            effects.push({ type: 'residual_blade', x: bestTarget.x, y: bestTarget.y, color: '#00bcd4', life: 6.0, maxLife: 6.0 });
-                        }
                         let stanceBonus = (player.flow / player.maxFlow) * 0.5; 
                         ab.attackTimer = Math.max(player.empoweredAirborne ? 0.1 : 0.2, (player.empoweredAirborne ? 0.3 : 0.6) / (1 + stanceBonus)); 
                     }
@@ -435,7 +510,7 @@ function update(dt) {
 
                     mb.attackTimer -= dt;
                     if (dist < mb.target.size/2 + 25 && mb.attackTimer <= 0) {
-                        let dmg = activeClass.basicDmg * (1 + (player.flow/player.maxFlow)) * 0.8;
+                        let dmg = activeClass.basicDmg * (1 + (player.flow/player.maxFlow)) * 0.25;
                         if (player.empoweredAirborne) dmg *= 1.5;
                         applyDamage(mb.target, dmg, 'shatter_storm');
                         mb.attackTimer = 0.25;
@@ -469,6 +544,13 @@ function update(dt) {
         }
     }
 
+    if (activeClass && activeClass.name === 'Cleric') {
+        if (buffs.zealLocked) {
+            if (buffs.aspectOfReaper > 0) player.zeal = 0;
+            else player.zeal = player.maxZeal;
+        }
+    }
+
     if (isMouseDown && cooldowns.basic <= 0) castBasic();
 
     let vx = 0; let vy = 0;
@@ -481,7 +563,20 @@ function update(dt) {
     if (buffs.slowed > 0) currentSpeed *= 0.5;
     if (buffs.rooted > 0) currentSpeed = 0;
 
-    if (mag > 0 && currentSpeed > 0) {
+    if (player.grappleTarget) {
+        let [gx, gy, gdist] = getVector(player.x, player.y, player.grappleTarget.x, player.grappleTarget.y);
+        let gSpeed = 2000;
+        if (gdist <= gSpeed * dt) {
+            player.x = player.grappleTarget.x;
+            player.y = player.grappleTarget.y;
+            player.grappleTarget = null;
+        } else {
+            player.x += (gx/gdist) * gSpeed * dt;
+            player.y += (gy/gdist) * gSpeed * dt;
+        }
+        player.iFrames = 0.1;
+        clampToBounds(player, player.radius);
+    } else if (mag > 0 && currentSpeed > 0) {
         player.x += (vx / mag) * currentSpeed * dt; player.y += (vy / mag) * currentSpeed * dt;
         clampToBounds(player, player.radius);
         if (activeClass && activeClass.name === 'Ranger') player.momentum = Math.min(0.20, player.momentum + (0.05 * dt)); 
@@ -502,7 +597,7 @@ function update(dt) {
             else if (d.type === 'dmg') { player.bonusDmg += 0.05; } 
             else if (d.type === 'gold') { player.gold += d.val; }
             else if (d.type === 'item') { inventory.push(d.itemData); }
-            else if (d.type === 'shield_catch') { let shieldAmt = d.skill && d.skill.selectedUpg === 'B' ? 100 : 50; player.shield += shieldAmt; player.shieldTimer = 5.0; }
+            else if (d.type === 'shield_catch') { let shieldAmt = d.skill && d.skill.selectedUpg === 'B' ? 100 : 50; player.shield += calcUtility(shieldAmt, d.skill ? d.skill.level : 1); player.shieldTimer = calcUtility(5.0, d.skill ? d.skill.level : 1); }
             else if (d.type === 'scrap') { player.hp = Math.min(player.maxHp, player.hp + 5); for(let j=1; j<=4; j++) cooldowns[`s${j}`] = Math.max(0, cooldowns[`s${j}`] - 0.5); }
             drops.splice(i, 1); updateHUD();
         }
@@ -511,6 +606,7 @@ function update(dt) {
     player.inSmoke = false;
     for (let i = effects.length - 1; i >= 0; i--) { 
         effects[i].life -= dt; 
+        if (effects[i].customUpdate) effects[i].customUpdate(dt, effects[i]);
         if (effects[i].type === 'smoke_bomb') {
             if (Math.hypot(player.x - effects[i].x, player.y - effects[i].y) <= effects[i].radius) player.inSmoke = true;
             for(let k=enemies.length-1; k>=0; k--) {
@@ -607,7 +703,7 @@ function update(dt) {
             }
 
             if (p.type !== 'trap_throw' && p.type !== 'spore' && Math.hypot(p.x - player.x, p.y - player.y) < player.radius + p.radius) { 
-                takeDamage(p.damage); 
+                takeDamage(p.damage, false, { isProjectile: true, proj: p }); 
                 if (p.type === 'chain_hook') {
                     buffs.rooted = 1.0;
                     let [bx, by, bdist] = getVector(player.x, player.y, p.sourceBoss.x, p.sourceBoss.y);
@@ -639,7 +735,7 @@ function update(dt) {
             for (let j = enemies.length - 1; j >= 0; j--) {
                 const e = enemies[j];
                 if (Math.hypot(p.x - e.x, p.y - e.y) < e.size/2 + p.radius) {
-                    if ((p.pierce || p.type === 'shield_throw' || p.type === 'fan_of_knives' || p.type === 'scattergun') && p.hitList.includes(e)) continue;
+                    if ((p.pierce || p.type === 'shield_throw' || p.type === 'fan_of_knives' || p.type === 'scattergun' || p.type === 'censer_pulse') && p.hitList.includes(e)) continue;
 
                     if (p.type === 'fireball' || p.resonance) {
                         let explRadius = p.sourceSkill && p.sourceSkill.selectedUpg === 'B' ? 100 : 70;
@@ -672,9 +768,23 @@ function update(dt) {
                         applyDamage(e, p.damage, 'ranged');
                         let [ebx, eby, ebd] = getVector(player.x, player.y, e.x, e.y);
                         if (!e.type.startsWith('boss') && ebd > 0) { e.x += (ebx/ebd)*15; e.y += (eby/ebd)*15; clampToBounds(e, e.size/2); }
+                    } else if (p.type === 'net_throw') {
+                        applyDamage(e, p.damage, 'ranged');
+                        e.rootedTimer = 2.0;
                     } else { applyDamage(e, p.damage, activeClass.name === 'Ranger' ? 'ranged' : (p.source === 'fan_of_knives' ? 'assassin_skill' : 'magic'), Math.atan2(p.vy, p.vx)); }
                     
-                    if (p.pierce || p.type === 'shield_throw' || p.type === 'ricochet' || p.type === 'fan_of_knives' || p.type === 'scattergun') { if (p.type !== 'ricochet') p.hitList.push(e); } else { hit = true; break; }
+                    if (p.type === 'censer_pulse') {
+                        if (!buffs.zealLocked) {
+                            let zealGain = 15 * (p.zealMult || 1.0);
+                            if (p.isInSanctuary) zealGain *= 2.0;
+                            player.zeal = Math.min(player.maxZeal, player.zeal + zealGain);
+                        }
+                        if (p.isSiphon) {
+                            player.hp = Math.min(player.maxHp, player.hp + ((player.maxHp - player.hp) * 0.03));
+                        }
+                    }
+
+                    if (p.pierce || p.type === 'shield_throw' || p.type === 'ricochet' || p.type === 'fan_of_knives' || p.type === 'scattergun' || p.type === 'censer_pulse') { if (p.type !== 'ricochet') p.hitList.push(e); } else { hit = true; break; }
                 }
             }
             if (hit) projectiles.splice(i, 1);
@@ -685,6 +795,9 @@ function update(dt) {
     for (let i = enemies.length - 1; i >= 0; i--) {
         const e = enemies[i];
         if (e.frozenTimer > 0) { e.frozenTimer -= dt; e.renderColor = '#90caf9'; } 
+        else if (e.rootedTimer > 0) { e.rootedTimer -= dt; e.renderColor = '#b0bec5'; }
+        else if (e.stunTimer > 0) { e.stunTimer -= dt; e.renderColor = '#ffeb3b'; }
+        else if (e.blindTimer > 0) { e.blindTimer -= dt; e.renderColor = '#e0e0e0'; }
         else { e.renderColor = e.color; }
 
         if (e.bleedTimer > 0) {
@@ -692,6 +805,14 @@ function update(dt) {
             if (Math.random() < 0.1) effects.push({ type: 'circle', x: e.x, y: e.y, radius: 4, color: '#f44336', life: 0.2, maxLife: 0.2 });
         }
         
+        if (e.sporeTimer > 0) {
+            let sparkMult = (buffs.wildFormTimer <= 0 && player.shield > 0 && activeClass && activeClass.skills[2] && activeClass.skills[2].selectedUpg === 'A') ? 1.5 : 1.0;
+            e.sporeTimer -= dt * sparkMult; 
+            applyDamage(e, e.sporeDmg * dt * sparkMult, 'dot');
+            if (Math.random() < 0.1) effects.push({ type: 'circle', x: e.x + (Math.random()*20-10), y: e.y + (Math.random()*20-10), radius: 3, color: '#8bc34a', life: 0.3, maxLife: 0.3 });
+            if (e.type !== 'boss_slime_queen' && e.type !== 'boss_warlord' && e.type !== 'boss_slime') e.renderColor = '#c5e1a5';
+        }
+
         if (e.aoeResistTimer > 0) {
             e.aoeResistTimer -= dt;
             if (e.aoeResistTimer <= 0) e.aoeResistStacks = 0;
@@ -699,15 +820,17 @@ function update(dt) {
 
         if (e.shockTimer > 0) e.shockTimer -= dt;
 
-        let curSpd = (e.speed === 0 || e.frozenTimer > 0) ? (e.speed === 0 ? 0 : e.speed * 0.3) : e.speed;
+        let isImmobilized = (e.frozenTimer > 0 || (e.rootedTimer && e.rootedTimer > 0) || e.stunTimer > 0);
+        let curSpd = (e.speed === 0 || isImmobilized) ? ((e.speed === 0 || isImmobilized) ? 0 : e.speed * 0.3) : e.speed;
         if (e.shockTimer > 0) curSpd *= 0.5;
+        if (e.brambleSlowTimer > 0) { e.brambleSlowTimer -= dt; curSpd *= 0.7; }
         
         hasCasterAura = false;
         for(let j=0; j<enemies.length; j++) { if (enemies[j].type === 'caster' && Math.hypot(e.x - enemies[j].x, e.y - enemies[j].y) < 400) hasCasterAura = true; }
         if (hasCasterAura) curSpd *= 2.0;
 
         let [edx, edy, edist] = getVector(e.x, e.y, player.x, player.y);
-        if (player.inSmoke) { edx = 0; edy = 0; edist = Infinity; }
+        if (player.inSmoke || e.blindTimer > 0) { edx = 0; edy = 0; edist = Infinity; }
         if (e.meleeTimer > 0) e.meleeTimer -= dt; 
 
         if (edist < player.radius + e.size / 2 && e.state !== 'dash_execute' && e.state !== 'bounce_telegraph' && e.state !== 'charge' && e.state !== 'jousting' && e.state !== 'death_throes') {
@@ -724,11 +847,18 @@ function update(dt) {
             } else { e.facingAngle = targetAngle; }
         }
 
-        if (window.EnemyAI[e.type]) window.EnemyAI[e.type](e, dt, curSpd, edx, edy, edist, i);
-        else window.EnemyAI['slime_melee'](e, dt, curSpd, edx, edy, edist, i);
+        if (window.EnemyAI[e.type]) {
+            if (e.stunTimer > 0 && !e.type.startsWith('boss_')) {}
+            else window.EnemyAI[e.type](e, dt, curSpd, edx, edy, edist, i);
+        } else {
+            if (e.stunTimer > 0) {}
+            else window.EnemyAI['slime_melee'](e, dt, curSpd, edx, edy, edist, i);
+        }
         
         clampToBounds(e, e.size/2);
     }
+    
+    updateHUD();
 }
 
 function draw() {
@@ -849,31 +979,6 @@ function draw() {
                 ctx.lineTo(Math.cos(ef.rockPoints[3].a)*ef.rockPoints[3].r*0.4, Math.sin(ef.rockPoints[3].a)*ef.rockPoints[3].r*0.4);
                 ctx.stroke();
             }
-            ctx.restore();
-        } else if (ef.type === 'residual_blade') {
-            ctx.save();
-            ctx.translate(ef.x, ef.y);
-            ctx.rotate(Date.now() / 200); 
-            ctx.globalAlpha = ef.life / ef.maxLife;
-            // Draw a floating shattered sword piece
-            ctx.fillStyle = ef.color;
-            ctx.shadowBlur = 10;
-            ctx.shadowColor = ef.color;
-            ctx.beginPath();
-            ctx.moveTo(0, -25);
-            ctx.lineTo(8, 10);
-            ctx.lineTo(-8, 10);
-            ctx.closePath();
-            ctx.fill();
-            // Core
-            ctx.fillStyle = '#ffffff';
-            ctx.shadowBlur = 0;
-            ctx.beginPath();
-            ctx.moveTo(0, -18);
-            ctx.lineTo(3, 5);
-            ctx.lineTo(-3, 5);
-            ctx.closePath();
-            ctx.fill();
             ctx.restore();
         } else if (ef.type === 'crater') {
             if (!ef.cracks) {
@@ -1035,6 +1140,16 @@ function draw() {
             ctx.fillStyle = ef.color;
             ctx.beginPath(); ctx.arc(ef.x, ef.y, currentRadius * 0.7, 0, Math.PI*2); ctx.fill();
         }
+        else if (ef.type === 'repulse_ring') {
+            ctx.strokeStyle = ef.color; 
+            ctx.lineWidth = 6 * (ef.life/ef.maxLife);
+            let currentRadius = ef.radius * (1.0 - (ef.life/ef.maxLife));
+            ctx.beginPath(); ctx.arc(ef.x, ef.y, currentRadius, 0, Math.PI*2); ctx.stroke();
+            
+            // Draw an extra inner ring to look cooler but not completely filled
+            ctx.lineWidth = 2 * (ef.life/ef.maxLife);
+            ctx.beginPath(); ctx.arc(ef.x, ef.y, currentRadius * 0.85, 0, Math.PI*2); ctx.stroke();
+        }
         else if (ef.type === 'valerius_chain') {
             ctx.strokeStyle = '#757575'; ctx.lineWidth = 2;
             ctx.beginPath(); ctx.moveTo(ef.x1, ef.y1); ctx.lineTo(ef.x2, ef.y2); ctx.stroke();
@@ -1064,6 +1179,77 @@ function draw() {
                 ctx.lineTo(nx, ny);
             }
             ctx.lineTo(ef.x2, ef.y2); ctx.stroke();
+        }
+        else if (ef.type === 'radiant_flash') {
+            ctx.save();
+            ctx.translate(ef.x, ef.y);
+            ctx.rotate(ef.angle);
+            let prog = ef.life / ef.maxLife;
+            ctx.fillStyle = ef.color;
+            ctx.globalAlpha = prog * 0.8;
+            ctx.beginPath();
+            ctx.moveTo(0, -ef.width/2);
+            ctx.lineTo(ef.length, 0);
+            ctx.lineTo(0, ef.width/2);
+            ctx.closePath();
+            ctx.fill();
+            
+            // core
+            ctx.fillStyle = '#ffffff';
+            ctx.globalAlpha = prog;
+            ctx.beginPath();
+            ctx.moveTo(0, -ef.width/4);
+            ctx.lineTo(ef.length * 0.8, 0);
+            ctx.lineTo(0, ef.width/4);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+        }
+        else if (ef.type === 'void_spike_cascade') {
+            ctx.save();
+            ctx.translate(ef.x, ef.y);
+            ctx.rotate(ef.angle);
+            let progress = 1.0 - (ef.life/ef.maxLife);
+            ctx.strokeStyle = ef.color;
+            ctx.fillStyle = ef.color;
+            
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(ef.length * Math.min(1.0, progress * 2), 0);
+            ctx.stroke();
+
+            for (let i = 1; i <= 6; i++) {
+                let d = (i / 6) * ef.length;
+                if (progress * ef.length * 1.5 >= d) {
+                    let a = 1.0 - ((progress * ef.length * 1.5 - d) / 100); 
+                    if(a<0) a=0; if(a>1) a=1;
+                    ctx.globalAlpha = a;
+                    ctx.beginPath();
+                    ctx.moveTo(d - ef.width/3, 0);
+                    ctx.lineTo(d, -ef.width);
+                    ctx.lineTo(d + ef.width/3, 0);
+                    ctx.lineTo(d, ef.width);
+                    ctx.closePath();
+                    ctx.fill();
+                }
+            }
+            ctx.restore();
+        }
+        else if (ef.type === 'divine_ray_channel') {
+            ctx.save();
+            ctx.translate(ef.x, ef.y);
+            ctx.rotate(ef.angle);
+            ctx.fillStyle = ef.color;
+            // Pulsate transparency
+            ctx.globalAlpha = 0.4 + Math.sin(ef.life * 30) * 0.2;
+            ctx.fillRect(0, -ef.width/2, ef.length, ef.width);
+            
+            ctx.fillStyle = '#fff';
+            ctx.globalAlpha = 0.8 + Math.sin(ef.life * 30) * 0.2;
+            ctx.fillRect(0, -ef.width/6, ef.length, ef.width/3);
+            ctx.restore();
+            ctx.globalAlpha = 1.0;
         }
         else if (ef.type === 'circle') { 
             ctx.fillStyle = ef.color; 
@@ -1246,6 +1432,16 @@ function draw() {
             ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(ang);
             ctx.fillStyle = p.color; ctx.beginPath(); ctx.roundRect(-6, -3, 12, 6, 3); ctx.fill();
             ctx.restore();
+        } else if (p.type === 'censer_pulse') {
+            ctx.fillStyle = p.color;
+            ctx.shadowBlur = 10; ctx.shadowColor = p.color;
+            ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2); ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.strokeStyle = '#fff'; ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(p.x - p.radius * 1.5, p.y); ctx.lineTo(p.x + p.radius * 1.5, p.y);
+            ctx.moveTo(p.x, p.y - p.radius * 1.5); ctx.lineTo(p.x, p.y + p.radius * 1.5);
+            ctx.stroke();
         } else if (p.shape === 'hound') {
             let ang = Math.atan2(p.vy, p.vx);
             ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(ang);
@@ -1267,6 +1463,17 @@ function draw() {
         } else if (p.shape === 'slime_blob') {
             ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI*2); ctx.fill();
             ctx.beginPath(); ctx.arc(p.x + Math.cos(p.life*10)*4, p.y + Math.sin(p.life*10)*4, p.radius*0.6, 0, Math.PI*2); ctx.fill();
+        } else if (p.shape === 'net') {
+            ctx.save(); ctx.translate(p.x, p.y); ctx.rotate((p.life * 5) % (Math.PI * 2));
+            ctx.strokeStyle = p.color; ctx.lineWidth = 2;
+            let sz = p.radius;
+            ctx.beginPath();
+            for(let i= -sz; i <= sz; i += sz/2) {
+                ctx.moveTo(i, -sz); ctx.lineTo(i, sz);
+                ctx.moveTo(-sz, i); ctx.lineTo(sz, i);
+            }
+            ctx.stroke();
+            ctx.restore();
         } else if (p.shape === 'fireball' || p.type === 'fireball') {
             let ang = Math.atan2(p.vy, p.vx);
             ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(ang);
@@ -1274,6 +1481,29 @@ function draw() {
             ctx.beginPath(); ctx.arc(0, 0, p.radius, -Math.PI/2, Math.PI/2); ctx.lineTo(-p.radius * 2.5, 0); ctx.closePath(); ctx.fill();
             ctx.fillStyle = '#ffeb3b'; ctx.shadowBlur = 0;
             ctx.beginPath(); ctx.arc(2, 0, p.radius * 0.5, 0, Math.PI*2); ctx.fill();
+            ctx.restore();
+        } else if (p.shape === 'aura') {
+            ctx.strokeStyle = p.color;
+            ctx.lineWidth = 2 + Math.sin(p.life * 5) * 2;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.fillStyle = p.color;
+            ctx.globalAlpha = 0.2 + Math.sin(p.life * 5) * 0.1;
+            ctx.fill();
+            ctx.globalAlpha = 1.0;
+            
+            // Add some spinning runes or an inner ring
+            ctx.save();
+            ctx.translate(p.x, p.y);
+            ctx.rotate(p.life * 2);
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([10, 15]);
+            ctx.beginPath();
+            ctx.arc(0, 0, p.radius * 0.8, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
             ctx.restore();
         } else if (p.shape === 'mini_sword') {
             ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.angle || 0);
@@ -1314,6 +1544,20 @@ function draw() {
     }
 
     if (player.hp > 0 && gameState !== STATE.MENU && gameState !== STATE.DEAD) {
+        if (player.grappleTarget) {
+            ctx.strokeStyle = '#9e9e9e'; ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(player.x, player.y);
+            ctx.lineTo(player.grappleTarget.x, player.grappleTarget.y);
+            ctx.stroke();
+            
+            // Draw hook at the end
+            ctx.fillStyle = '#616161';
+            ctx.beginPath();
+            ctx.arc(player.grappleTarget.x, player.grappleTarget.y, 6, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
         const aimAngle = Math.atan2(mouseY - player.y, mouseX - player.x); 
         ctx.lineWidth = 4;
         
@@ -1339,6 +1583,35 @@ function draw() {
             let drawY = cooldowns.basic <= 0 ? player.y + Math.sin(aimAngle)*5 : player.y + Math.sin(aimAngle)*15;
             ctx.moveTo(p1x, p1y); ctx.lineTo(drawX, drawY); ctx.lineTo(p2x, p2y); ctx.stroke();
             if (cooldowns.basic <= 0) { ctx.strokeStyle = '#00e5ff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(drawX, drawY); ctx.lineTo(drawX + Math.cos(aimAngle)*30, drawY + Math.sin(aimAngle)*30); ctx.stroke(); }
+        } else if (activeClass && activeClass.weapon === 'censer') {
+            let relicDist = 35;
+            let endX = player.x + Math.cos(aimAngle) * relicDist;
+            let endY = player.y + Math.sin(aimAngle) * relicDist;
+            
+            // A floating magical tether (soft glowing line instead of rigid chain)
+            ctx.strokeStyle = 'rgba(251, 192, 45, 0.4)'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(player.x, player.y); ctx.lineTo(endX, endY); ctx.stroke();
+
+            // The Relic / Censer core pulsing with energy
+            let pulse = Math.sin(Date.now() / 150) * 1.5; // Slight pulsing size
+            let coreColor = equipment.weapon && equipment.weapon.rarity === 'rare' ? '#9c27b0' : '#fbc02d'; // Gold or Purple
+            
+            // Outer golden ring
+            ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(endX, endY, 12 + pulse * 0.5, 0, Math.PI*2); ctx.stroke();
+            
+            // Inner glowing core
+            ctx.fillStyle = coreColor;
+            ctx.shadowBlur = 15; ctx.shadowColor = coreColor;
+            ctx.beginPath(); ctx.arc(endX, endY, 6 + pulse, 0, Math.PI*2); ctx.fill();
+            ctx.shadowBlur = 0;
+            
+            // Cross geometry over the core
+            ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(endX - 8, endY); ctx.lineTo(endX + 8, endY);
+            ctx.moveTo(endX, endY - 8); ctx.lineTo(endX, endY + 8);
+            ctx.stroke();
         } else if (activeClass && activeClass.weapon === 'sword') {
             let swordAng = aimAngle;
             if (cooldowns.basic > 0) {
@@ -1357,8 +1630,45 @@ function draw() {
             const cx = player.x + Math.cos(swordAng)*20; const cy = player.y + Math.sin(swordAng)*20; const perp = swordAng + Math.PI/2;
             ctx.moveTo(cx + Math.cos(perp)*20, cy + Math.sin(perp)*20); ctx.lineTo(cx - Math.cos(perp)*20, cy - Math.sin(perp)*20); ctx.stroke(); ctx.lineCap = 'butt';
         } else if (activeClass && activeClass.weapon === 'scattergun') {
-            ctx.strokeStyle = '#ff9800'; ctx.lineWidth = 8; ctx.beginPath(); ctx.moveTo(player.x + Math.cos(aimAngle)*10, player.y + Math.sin(aimAngle)*10); ctx.lineTo(player.x + Math.cos(aimAngle)*25, player.y + Math.sin(aimAngle)*25); ctx.stroke();
-            ctx.strokeStyle = '#757575'; ctx.lineWidth = 12; ctx.beginPath(); ctx.moveTo(player.x + Math.cos(aimAngle)*25, player.y + Math.sin(aimAngle)*25); ctx.lineTo(player.x + Math.cos(aimAngle)*40, player.y + Math.sin(aimAngle)*40); ctx.stroke();
+            ctx.save();
+            ctx.translate(player.x, player.y);
+            ctx.rotate(aimAngle);
+
+            let recoil = 0;
+            if (cooldowns.basic > 0 && activeClass.basicAttackCD) {
+                let progress = cooldowns.basic / activeClass.basicAttackCD;
+                if (progress > 0.8) recoil = -6; 
+            }
+
+            ctx.translate(recoil, 0);
+
+            // Wooden Stock
+            ctx.fillStyle = '#5d4037';
+            ctx.beginPath();
+            ctx.moveTo(8, -4);
+            ctx.lineTo(20, -3);
+            ctx.lineTo(20, 3);
+            ctx.lineTo(8, 4);
+            ctx.closePath();
+            ctx.fill();
+
+            // Breech/Mechanism
+            ctx.fillStyle = '#424242';
+            ctx.fillRect(20, -5, 10, 10);
+
+            // Double Barrels
+            ctx.fillStyle = '#9e9e9e';
+            ctx.fillRect(30, -4, 25, 3); 
+            ctx.fillRect(30, 1, 25, 3);
+
+            // Glow if Overclocked
+            if (buffs.overclockTimer > 0) {
+                ctx.strokeStyle = '#ffca28';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(28, -5, 29, 12);
+            }
+
+            ctx.restore();
         } else if (activeClass && activeClass.weapon === 'phantom_blade') {
             let ab = player.airborneBlade;
             let ang, bx, by;
@@ -1564,8 +1874,46 @@ function draw() {
             ctx.strokeStyle = '#0288d1'; ctx.lineWidth = 2; 
             ctx.beginPath(); ctx.arc(player.x, player.y, player.radius + 18, aimAngle - Math.PI/3.5, aimAngle + Math.PI/3.5); ctx.stroke();
         }
+
+        // Cleric Ultimate Auras
+        if (buffs.aspectOfReaper > 0) {
+            ctx.strokeStyle = '#9c27b0'; ctx.lineWidth = 4 + Math.sin(performance.now() / 150) * 2;
+            ctx.beginPath(); ctx.arc(player.x, player.y, player.radius + 14, 0, Math.PI*2); ctx.stroke();
+        } else if (buffs.avatarOfRenewal > 0) {
+            ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 4 + Math.sin(performance.now() / 150) * 2;
+            ctx.beginPath(); ctx.arc(player.x, player.y, player.radius + 14, 0, Math.PI*2); ctx.stroke();
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+            ctx.beginPath(); ctx.arc(player.x, player.y, player.radius + 14, 0, Math.PI*2); ctx.fill();
+        } else if (buffs.ascension > 0) {
+            ctx.strokeStyle = '#fbc02d'; ctx.lineWidth = 4 + Math.sin(performance.now() / 150) * 2;
+            ctx.beginPath(); ctx.arc(player.x, player.y, player.radius + 14, 0, Math.PI*2); ctx.stroke();
+        }
         
-        ctx.fillStyle = player.color; ctx.beginPath(); ctx.arc(player.x, player.y, player.radius, 0, Math.PI*2); ctx.fill();
+        ctx.save();
+        if (buffs.wildFormTimer > 0) {
+            // Feral Beast (Wolf) Drawing
+            ctx.translate(player.x, player.y);
+            const aimAngle = Math.atan2(mouseY - player.y, mouseX - player.x);
+            ctx.rotate(aimAngle);
+            ctx.fillStyle = '#6d4c41'; // Brown fur
+            
+            // Body
+            ctx.beginPath(); ctx.ellipse(0, 0, player.radius + 10, player.radius, 0, 0, Math.PI*2); ctx.fill();
+            // Head snout
+            ctx.beginPath(); ctx.arc(player.radius + 8, 0, player.radius * 0.7, 0, Math.PI*2); ctx.fill();
+            // Ears
+            ctx.fillStyle = '#5d4037';
+            ctx.beginPath(); ctx.moveTo(player.radius, -8); ctx.lineTo(player.radius - 5, -16); ctx.lineTo(player.radius + 5, -10); ctx.fill();
+            ctx.beginPath(); ctx.moveTo(player.radius, 8); ctx.lineTo(player.radius - 5, 16); ctx.lineTo(player.radius + 5, 10); ctx.fill();
+            // Red eyes
+            ctx.fillStyle = '#ff1744';
+            ctx.beginPath(); ctx.arc(player.radius + 10, -5, 3, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(player.radius + 10, 5, 3, 0, Math.PI*2); ctx.fill();
+        } else {
+            // Normal Player Circle
+            ctx.fillStyle = player.color; ctx.beginPath(); ctx.arc(player.x, player.y, player.radius, 0, Math.PI*2); ctx.fill();
+        }
+        ctx.restore();
         
         // Draw Phantom Decoy
         if (player.phantomDecoy && player.phantomDecoy.life > 0) {

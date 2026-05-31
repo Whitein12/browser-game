@@ -18,18 +18,62 @@ function updateHUD() {
         el('flow-bar-container').style.display = 'none';
     }
 
+    if (activeClass && activeClass.name === 'Cleric') {
+        el('zeal-bar-container').style.display = 'block';
+        el('zeal-bar').style.width = Math.max(0, (player.zeal / player.maxZeal * 100)) + '%';
+        el('zeal-text').innerText = `${Math.floor(player.zeal)} / ${player.maxZeal} Zeal`;
+    } else {
+        el('zeal-bar-container').style.display = 'none';
+    }
+
     el('wave-display').innerText = `Wave ${wave}`; el('wave-subtext').innerText = `Enemies Left: ${enemiesToSpawn + activeEnemies}`; el('gold-display').innerText = `Gold: ${player.gold}`;
 
-    let cdText = [];
     const keyLabels = {1: 'Q', 2: 'E', 3: 'SPC', 4: 'R'};
-    for(let i=1; i<=4; i++) { if (activeClass.skills[i].level > 0) cdText.push(`${keyLabels[i]}: ${Math.max(0, cooldowns[`s${i}`]).toFixed(1)}s`); }
-    if (equipment.weapon && equipment.weapon.rarity === 'rare') cdText.push(`RMB: ${Math.max(0, cooldowns.rmb).toFixed(1)}s`);
-    el('cd-display').innerText = cdText.join(' | ');
+    let cdTrackerHtml = '';
+    
+    for(let i=1; i<=4; i++) { 
+        let sk = activeClass.skills[i];
+        let cd = Math.max(0, cooldowns[`s${i}`] || 0);
+        let maxCd = sk.maxCd || 1;
+        
+        let pcd = cd / maxCd * 100;
+        let isReady = cd <= 0;
+        let isLocked = sk.level === 0;
 
-    let skillText = [];
-    for(let i=1; i<=4; i++) { if (activeClass.skills[i].level > 0) skillText.push(`${keyLabels[i]}: ${activeClass.skills[i].name}`); }
-    if (equipment.weapon && equipment.weapon.rarity === 'rare') skillText.push(`RMB: ${activeClass.rareWeapon.rmbSkill}`);
-    el('skill-display').innerText = skillText.join(' | ');
+        let boxClass = isLocked ? 'cd-box locked' : (isReady ? 'cd-box ready' : 'cd-box cooldown');
+        let cdTextStr = isLocked ? 'LCK' : (isReady ? '' : cd.toFixed(1));
+        let shortName = sk.name.split(' / ')[0].substring(0, 8);
+        
+        cdTrackerHtml += `
+            <div class="${boxClass}">
+                <div class="cd-key">${keyLabels[i]}</div>
+                <div class="cd-time">${cdTextStr}</div>
+                <div class="cd-name">${shortName}</div>
+                ${!isReady && !isLocked ? `<div class="cd-overlay" style="height: ${pcd}%"></div>` : ''}
+            </div>
+        `;
+    }
+
+    if (equipment.weapon && equipment.weapon.rarity === 'rare') {
+        let cdRmb = Math.max(0, cooldowns.rmb || 0);
+        let maxCdRmb = 4.0 * getCDR();
+        let pcdRmb = cdRmb / maxCdRmb * 100;
+        let isReadyRmb = cdRmb <= 0;
+        let boxClassRmb = isReadyRmb ? 'cd-box ready' : 'cd-box cooldown';
+        let cdTextStrRmb = isReadyRmb ? '' : cdRmb.toFixed(1);
+        let shortNameRmb = activeClass.rareWeapon.rmbSkill.substring(0, 8);
+
+        cdTrackerHtml += `
+            <div class="${boxClassRmb}">
+                <div class="cd-key">RMB</div>
+                <div class="cd-time">${cdTextStrRmb}</div>
+                <div class="cd-name">${shortNameRmb}</div>
+                ${!isReadyRmb ? `<div class="cd-overlay" style="height: ${pcdRmb}%"></div>` : ''}
+            </div>
+        `;
+    }
+    
+    el('cd-tracker').innerHTML = cdTrackerHtml;
     
     let passives = [];
     if (player.bonusDmg > 0) passives.push(`Perm DMG: +${Math.round(player.bonusDmg * 100)}%`);
