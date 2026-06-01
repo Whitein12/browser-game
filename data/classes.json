@@ -707,37 +707,37 @@
       "2": {
         "name": "Barkskin Shift",
         "level": 0,
-        "maxCd": 15.0,
+        "maxCd": 10.0,
         "baseDmg": 0,
         "selectedUpg": null,
         "upgA": {
           "name": "Accelerated Decay (Caster)",
-          "desc": "While active, Spores tick faster."
+          "desc": "While active, Spores tick 50% faster globally."
         },
         "upgB": {
           "name": "Splintering Shell (Wild)",
-          "desc": "When broken/expires, explodes dealing damage."
+          "desc": "When broken/expires, explodes dealing high physical damage locally."
         }
       },
       "3": {
-        "name": "Spore Burst",
+        "name": "Spore Burst / Feral Pounce",
         "level": 0,
         "maxCd": 8.0,
         "baseDmg": 30,
         "selectedUpg": null,
         "upgA": {
           "name": "Spore Surge (Caster)",
-          "desc": "Grants move speed per enemy hit."
+          "desc": "Temporarily grants +15% move speed per enemy hit."
         },
         "upgB": {
-          "name": "Tenderize (Wild)",
-          "desc": "Feral Pounce causes the target to take 20% more damage for 3s."
+          "name": "Predatory Momentum (Wild)",
+          "desc": "Gains a 2nd maximum charge. Ultimate instantly readies 1 charge."
         }
       },
       "4": {
         "name": "Aspect of the Wild",
-        "level": 0,
-        "maxCd": 25.0,
+        "level": 1,
+        "maxCd": 2.0,
         "baseDmg": 50,
         "selectedUpg": null,
         "upgA": {
@@ -746,7 +746,7 @@
         },
         "upgB": {
           "name": "Apex Predator (Wild)",
-          "desc": "Popping a Spore with a claw attack extends transformation duration by 0.5s."
+          "desc": "Popping a Spore with a claw attack heals you for 2% of Max HP."
         }
       }
     }

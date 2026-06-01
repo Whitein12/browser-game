@@ -261,6 +261,7 @@ function update(dt) {
     if (buffs.weakened > 0) buffs.weakened -= dt;
     if (buffs.evade100 > 0) buffs.evade100 -= dt;
     if (buffs.deathMarkActive > 0) buffs.deathMarkActive -= dt;
+    if (buffs.wildFormTimer > 0) buffs.wildFormTimer -= dt;
     if (player.cowlCooldown > 0) player.cowlCooldown -= dt;
     if (player.vestmentCD > 0) player.vestmentCD -= dt;
     if (player.iFrames > 0) player.iFrames -= dt;
@@ -286,19 +287,6 @@ function update(dt) {
 
     if (activeClass && activeClass.name === 'Machinist' && buffs.overclockTimer > 0) {
         buffs.overclockTimer -= dt;
-    }
-    
-    if (activeClass && activeClass.name === 'Druid') {
-        if (buffs.wildFormTimer > 0) {
-            buffs.wildFormTimer -= dt;
-            if (Math.random() < 0.2) effects.push({ type: 'circle', x: player.x, y: player.y, radius: player.radius + 15, color: 'rgba(109, 76, 65, 0.4)', life: 0.3, maxLife: 0.3 });
-            if (buffs.wildFormTimer <= 0) {
-                // Return to normal
-                player.maxHp = Math.floor(player.maxHp / 1.25);
-                if (player.hp > player.maxHp) player.hp = player.maxHp;
-                effects.push({ type: 'sparkle_poof', x: player.x, y: player.y, color: '#2e7d32' });
-            }
-        }
     }
     
     if (activeClass && activeClass.name === 'Cleric') {
@@ -614,10 +602,14 @@ function update(dt) {
                     if (effects[i].poison) applyDamage(enemies[k], effects[i].dmg * dt, 'dot');
                 }
             }
-        } else if (effects[i].type === 'fire_puddle') {
+        } else if (effects[i].type === 'fire_puddle' || effects[i].type === 'thorn_patch') {
             for(let k=enemies.length-1; k>=0; k--) {
                 if (Math.hypot(enemies[k].x - effects[i].x, enemies[k].y - effects[i].y) <= effects[i].radius + enemies[k].size/2) {
                     applyDamage(enemies[k], effects[i].dmg * dt, 'dot');
+                    if (effects[i].type === 'thorn_patch' && effects[i].slow) {
+                        enemies[k].slowTimer = 0.5; // continuous refresh
+                        enemies[k].slowAmount = effects[i].slow;
+                    }
                 }
             }
         } else if (effects[i].type === 'puddle') {
@@ -627,7 +619,25 @@ function update(dt) {
                 buffs.rooted = 1.5; takeDamage(effects[i].dmg); effects.splice(i, 1); continue;
             }
         } else if (effects[i].type === 'spore_cloud') {
-            if (Math.hypot(player.x - effects[i].x, player.y - effects[i].y) < player.radius + effects[i].radius) buffs.weakened = 0.5;
+            if (effects[i].isFriendly) {
+                // Friendly spore cloud continuously applies Spore stacks to enemies
+                for(let k=enemies.length-1; k>=0; k--) {
+                    let ek = enemies[k];
+                    if (Math.hypot(ek.x - effects[i].x, ek.y - effects[i].y) <= effects[i].radius + ek.size/2) {
+                        applyDamage(ek, effects[i].dmg * dt, 'dot');
+                        if (Math.random() < 0.1) {
+                            let maxStacks = 3;
+                            let dpsPerStack = effects[i].dmg * 0.25;
+                            if (!ek.sporeStacks) ek.sporeStacks = 0;
+                            ek.sporeStacks = Math.min(maxStacks, ek.sporeStacks + 1);
+                            ek.sporeTimer = 5.0;
+                            ek.sporeDps = dpsPerStack * ek.sporeStacks;
+                        }
+                    }
+                }
+            } else {
+                if (Math.hypot(player.x - effects[i].x, player.y - effects[i].y) < player.radius + effects[i].radius) buffs.weakened = 0.5;
+            }
         }
         if (effects[i].life <= 0) effects.splice(i, 1); 
     }
@@ -675,6 +685,11 @@ function update(dt) {
         p.life -= dt;
         
         if (p.life <= 0 || p.x < currentMap.left - 50 || p.x > currentMap.right + 50 || p.y < currentMap.top - 50 || p.y > currentMap.bottom + 50) { 
+            if (p.type === 'bramble_core') {
+                let pRadius = p.sourceSkill && p.sourceSkill.selectedUpg === 'A' ? 75 : 50;
+                let pSlow = p.sourceSkill && p.sourceSkill.selectedUpg === 'A' ? 0.5 : 0.0;
+                effects.push({ type: 'thorn_patch', x: p.x, y: p.y, radius: pRadius, color: 'rgba(76, 175, 80, 0.4)', life: 4.0, maxLife: 4.0, dmg: p.damage * 0.5, slow: pSlow });
+            }
             if (p.type === 'boss_slimeball') { effects.push({ type: 'puddle', x: p.x, y: p.y, radius: 30, color: '#009688', life: 1.5, maxLife: 1.5 }); }
             if (p.type === 'trap_throw') { effects.push({ type: 'bear_trap', x: p.x, y: p.y, radius: 15, color: '#5d4037', life: 8.0, maxLife: 8.0, dmg: p.damage }); }
             if (p.type === 'spore') { effects.push({ type: 'spore_cloud', x: p.x, y: p.y, radius: 100, color: 'rgba(205, 220, 57, 0.4)', life: 3.0, maxLife: 3.0 }); }
@@ -771,6 +786,23 @@ function update(dt) {
                     } else if (p.type === 'net_throw') {
                         applyDamage(e, p.damage, 'ranged');
                         e.rootedTimer = 2.0;
+                    } else if (p.type === 'druid_spore' || p.type === 'bramble_core') {
+                        applyDamage(e, p.damage, 'magic');
+                        // Apply Spores: 5 seconds duration, DPS based on player scale (e.g. 50% of hit dmg per second)
+                        let sporeDur = 5.0;
+                        let maxStacks = 3;
+                        let dpsPerStack = p.damage * 0.25;
+                        if (!e.sporeStacks) e.sporeStacks = 0;
+                        e.sporeStacks = Math.min(maxStacks, e.sporeStacks + 1);
+                        e.sporeTimer = sporeDur;
+                        e.sporeDps = dpsPerStack * e.sporeStacks;
+                        
+                        if (p.type === 'bramble_core') {
+                            // Create Thorn Patch (using 'fire_puddle' style or new type)
+                            let pRadius = p.sourceSkill && p.sourceSkill.selectedUpg === 'A' ? 75 : 50;
+                            let pSlow = p.sourceSkill && p.sourceSkill.selectedUpg === 'A' ? 0.5 : 0.0;
+                            effects.push({ type: 'thorn_patch', x: p.x, y: p.y, radius: pRadius, color: 'rgba(76, 175, 80, 0.4)', life: 4.0, maxLife: 4.0, dmg: p.damage * 0.5, slow: pSlow });
+                        }
                     } else { applyDamage(e, p.damage, activeClass.name === 'Ranger' ? 'ranged' : (p.source === 'fan_of_knives' ? 'assassin_skill' : 'magic'), Math.atan2(p.vy, p.vx)); }
                     
                     if (p.type === 'censer_pulse') {
@@ -805,14 +837,22 @@ function update(dt) {
             if (Math.random() < 0.1) effects.push({ type: 'circle', x: e.x, y: e.y, radius: 4, color: '#f44336', life: 0.2, maxLife: 0.2 });
         }
         
+        // Druid Spores DoT
         if (e.sporeTimer > 0) {
-            let sparkMult = (buffs.wildFormTimer <= 0 && player.shield > 0 && activeClass && activeClass.skills[2] && activeClass.skills[2].selectedUpg === 'A') ? 1.5 : 1.0;
-            e.sporeTimer -= dt * sparkMult; 
-            applyDamage(e, e.sporeDmg * dt * sparkMult, 'dot');
-            if (Math.random() < 0.1) effects.push({ type: 'circle', x: e.x + (Math.random()*20-10), y: e.y + (Math.random()*20-10), radius: 3, color: '#8bc34a', life: 0.3, maxLife: 0.3 });
-            if (e.type !== 'boss_slime_queen' && e.type !== 'boss_warlord' && e.type !== 'boss_slime') e.renderColor = '#c5e1a5';
+            e.sporeTimer -= dt;
+            
+            let myDps = e.sporeDps || 0;
+            // Spore ticks 50% faster if Barkskin Shift Accelerated Decay is active
+            if (activeClass && activeClass.name === 'Druid' && activeClass.skills[2].selectedUpg === 'A' && player.shieldTimer > 0) {
+                myDps *= 1.5;
+            }
+            
+            applyDamage(e, myDps * dt, 'dot');
+            if (Math.random() < 0.15) {
+                effects.push({ type: 'circle', x: e.x + (Math.random()-0.5)*e.size, y: e.y + (Math.random()-0.5)*e.size, radius: 3 + Math.random()*3, color: '#cddc39', life: 0.4, maxLife: 0.4 });
+            }
         }
-
+        
         if (e.aoeResistTimer > 0) {
             e.aoeResistTimer -= dt;
             if (e.aoeResistTimer <= 0) e.aoeResistStacks = 0;
@@ -823,7 +863,6 @@ function update(dt) {
         let isImmobilized = (e.frozenTimer > 0 || (e.rootedTimer && e.rootedTimer > 0) || e.stunTimer > 0);
         let curSpd = (e.speed === 0 || isImmobilized) ? ((e.speed === 0 || isImmobilized) ? 0 : e.speed * 0.3) : e.speed;
         if (e.shockTimer > 0) curSpd *= 0.5;
-        if (e.brambleSlowTimer > 0) { e.brambleSlowTimer -= dt; curSpd *= 0.7; }
         
         hasCasterAura = false;
         for(let j=0; j<enemies.length; j++) { if (enemies[j].type === 'caster' && Math.hypot(e.x - enemies[j].x, e.y - enemies[j].y) < 400) hasCasterAura = true; }
@@ -877,7 +916,7 @@ function draw() {
     }
 
     for (const ef of effects) {
-        if (ef.type === 'puddle' || ef.type === 'fire_puddle' || ef.type === 'spore_cloud') {
+        if (ef.type === 'puddle' || ef.type === 'fire_puddle' || ef.type === 'thorn_patch' || ef.type === 'spore_cloud') {
             ctx.fillStyle = ef.color; ctx.globalAlpha = ef.life / ef.maxLife * 0.5; ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.radius, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1.0;
         } else if (ef.type === 'smoke_bomb') {
             ctx.fillStyle = ef.color; 
@@ -919,7 +958,7 @@ function draw() {
     }
 
     for (const ef of effects) {
-        if (ef.type === 'puddle' || ef.type === 'fire_puddle' || ef.type === 'spore_cloud' || ef.type === 'smoke_bomb') continue; 
+        if (ef.type === 'puddle' || ef.type === 'fire_puddle' || ef.type === 'thorn_patch' || ef.type === 'spore_cloud' || ef.type === 'smoke_bomb') continue; 
         
         ctx.globalAlpha = ef.isWarning ? 1.0 : ef.life / ef.maxLife; 
         
@@ -1315,6 +1354,19 @@ function draw() {
             ctx.restore();
         }
         else if (ef.type === 'bear_trap') { ctx.fillStyle = ef.color; ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.radius, 0, Math.PI*2); ctx.fill(); ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.radius/2, 0, Math.PI*2); ctx.fill(); }
+        else if (ef.type === 'slash') { ctx.strokeStyle = ef.color || '#e0e0e0'; ctx.lineWidth = 25 * (ef.life/ef.maxLife); ctx.lineCap = 'round'; ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.radius * 0.8, ef.angle - Math.PI/2.5, ef.angle + Math.PI/2.5); ctx.stroke(); ctx.lineCap = 'butt'; }
+        else if (ef.type === 'claw_swipe') {
+            ctx.strokeStyle = ef.color || '#c62828';
+            ctx.lineWidth = 12 * (ef.life/ef.maxLife);
+            ctx.lineCap = 'round';
+            for(let c=-1; c<=1; c++) {
+                let offsetAngle = c * 0.15;
+                ctx.beginPath();
+                ctx.arc(ef.x, ef.y, ef.radius * 0.8 + c * 20, ef.angle - Math.PI/3 + offsetAngle, ef.angle + Math.PI/3 + offsetAngle);
+                ctx.stroke();
+            }
+            ctx.lineCap = 'butt';
+        }
         else if (ef.type === 'storm_cyclone') {
             ctx.save();
             ctx.translate(ef.x, ef.y);
@@ -1889,31 +1941,63 @@ function draw() {
             ctx.beginPath(); ctx.arc(player.x, player.y, player.radius + 14, 0, Math.PI*2); ctx.stroke();
         }
         
-        ctx.save();
+        let pColor = buffs.wildFormTimer > 0 ? '#5d4037' : player.color;
+        let pRad = buffs.wildFormTimer > 0 ? player.radius + 5 : player.radius;
+        
+        ctx.fillStyle = pColor; ctx.beginPath(); ctx.arc(player.x, player.y, pRad, 0, Math.PI*2); ctx.fill();
+        
+        // Druid Wolf Rendering
         if (buffs.wildFormTimer > 0) {
-            // Feral Beast (Wolf) Drawing
-            ctx.translate(player.x, player.y);
-            const aimAngle = Math.atan2(mouseY - player.y, mouseX - player.x);
-            ctx.rotate(aimAngle);
-            ctx.fillStyle = '#6d4c41'; // Brown fur
-            
-            // Body
-            ctx.beginPath(); ctx.ellipse(0, 0, player.radius + 10, player.radius, 0, 0, Math.PI*2); ctx.fill();
-            // Head snout
-            ctx.beginPath(); ctx.arc(player.radius + 8, 0, player.radius * 0.7, 0, Math.PI*2); ctx.fill();
+            // Snout
+            ctx.fillStyle = '#4e342e';
+            ctx.beginPath();
+            ctx.arc(player.x + Math.cos(aimAngle)*pRad, player.y + Math.sin(aimAngle)*pRad, 10, 0, Math.PI*2);
+            ctx.fill();
+            // Nose
+            ctx.fillStyle = '#000000';
+            ctx.beginPath();
+            ctx.arc(player.x + Math.cos(aimAngle)*(pRad + 6), player.y + Math.sin(aimAngle)*(pRad + 6), 4, 0, Math.PI*2);
+            ctx.fill();
+
             // Ears
-            ctx.fillStyle = '#5d4037';
-            ctx.beginPath(); ctx.moveTo(player.radius, -8); ctx.lineTo(player.radius - 5, -16); ctx.lineTo(player.radius + 5, -10); ctx.fill();
-            ctx.beginPath(); ctx.moveTo(player.radius, 8); ctx.lineTo(player.radius - 5, 16); ctx.lineTo(player.radius + 5, 10); ctx.fill();
-            // Red eyes
-            ctx.fillStyle = '#ff1744';
-            ctx.beginPath(); ctx.arc(player.radius + 10, -5, 3, 0, Math.PI*2); ctx.fill();
-            ctx.beginPath(); ctx.arc(player.radius + 10, 5, 3, 0, Math.PI*2); ctx.fill();
-        } else {
-            // Normal Player Circle
-            ctx.fillStyle = player.color; ctx.beginPath(); ctx.arc(player.x, player.y, player.radius, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#3e2723';
+            ctx.beginPath(); 
+            let earAngle1 = aimAngle - Math.PI/4;
+            let earAngle2 = aimAngle + Math.PI/4;
+            // Left ear
+            ctx.moveTo(player.x + Math.cos(earAngle1)*pRad, player.y + Math.sin(earAngle1)*pRad);
+            ctx.lineTo(player.x + Math.cos(earAngle1 - 0.3)*(pRad+10), player.y + Math.sin(earAngle1 - 0.3)*(pRad+10));
+            ctx.lineTo(player.x + Math.cos(earAngle1 + 0.3)*pRad, player.y + Math.sin(earAngle1 + 0.3)*pRad);
+            ctx.fill();
+            // Right ear
+            ctx.beginPath();
+            ctx.moveTo(player.x + Math.cos(earAngle2)*pRad, player.y + Math.sin(earAngle2)*pRad);
+            ctx.lineTo(player.x + Math.cos(earAngle2 + 0.3)*(pRad+10), player.y + Math.sin(earAngle2 + 0.3)*(pRad+10));
+            ctx.lineTo(player.x + Math.cos(earAngle2 - 0.3)*pRad, player.y + Math.sin(earAngle2 - 0.3)*pRad);
+            ctx.fill();
+
+            // Tail
+            ctx.fillStyle = '#3e2723';
+            ctx.beginPath();
+            let tailBaseAng = aimAngle + Math.PI;
+            // Simple wavy tail
+            let tailWag = Math.sin(Date.now() / 200) * 0.3;
+            ctx.moveTo(player.x + Math.cos(tailBaseAng)*pRad, player.y + Math.sin(tailBaseAng)*pRad);
+            let tailEndAng = tailBaseAng + tailWag; 
+            ctx.arc(player.x + Math.cos(tailBaseAng)*pRad + Math.cos(tailEndAng)*15, 
+                    player.y + Math.sin(tailBaseAng)*pRad + Math.sin(tailEndAng)*15, 
+                    6, 0, Math.PI*2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.lineWidth = 10;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = '#3e2723';
+            ctx.moveTo(player.x + Math.cos(tailBaseAng)*pRad, player.y + Math.sin(tailBaseAng)*pRad);
+            ctx.lineTo(player.x + Math.cos(tailBaseAng)*pRad + Math.cos(tailEndAng)*15, 
+                       player.y + Math.sin(tailBaseAng)*pRad + Math.sin(tailEndAng)*15);
+            ctx.stroke();
+            ctx.lineCap = 'butt';
         }
-        ctx.restore();
         
         // Draw Phantom Decoy
         if (player.phantomDecoy && player.phantomDecoy.life > 0) {

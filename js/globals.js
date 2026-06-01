@@ -22,8 +22,7 @@ const player = {
     gold: 0, bonusDmg: 0.0, skillPoints: 0, armor: 0,
     frenzyStacks: 0, frenzyTimer: 0, momentum: 0, arcaneResonance: false, iFrames: 0,
     blade: null, flow: 0, maxFlow: 100, stance: 'handheld', parryTimer: 0, airborneBlade: null,
-    zeal: 0, maxZeal: 100,
-    wildFormTimer: 0
+    zeal: 0, maxZeal: 100
 };
 
 let classDataConfig = {}; let enemyDataConfig = {}; let itemDataConfig = {};
