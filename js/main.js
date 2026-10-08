@@ -1,0 +1,1728 @@
+// ==========================================
+// main.js - Core Loop, Rendering, & Input
+// ==========================================
+
+window.chooseClass = (cid) => { selectedClassId = cid; el('class-selection').classList.add('hidden'); el('dungeon-selection').classList.remove('hidden'); };
+window.selectDungeon = (did) => { activeDungeonId = did; activeDungeon = enemyDataConfig[did]; startGame(selectedClassId); };
+
+function startGame(className) {
+    activeClass = JSON.parse(JSON.stringify(classDataConfig[className])); 
+    player.color = activeClass.color; player.x = canvas.width / 2; player.y = canvas.height / 2;
+    player.level = 1; player.xp = 0; player.maxXp = 50; player.gold = 0; player.bonusDmg = 0.0; player.bonusMaxHp = 0; player.skillPoints = 1;
+    wave = 0; equipment = { weapon: null, armor: null, amulet: null, boots: null, gloves: null }; inventory = [];
+    isEndlessMode = false;
+    
+    player.blade = null;
+    player.flow = 0; player.maxFlow = 100; player.stance = 'handheld'; player.comboStep = 0; player.comboTimer = 0;
+    player.airborneBlade = { x: player.x, y: player.y, angle: 0, overrideX: null, overrideY: null, attackTimer: 0 };
+    player.flowGainTimer = 0; // for decay tracking
+
+    recalcStats(); player.hp = player.maxHp; player.shield = 0; player.shieldTimer = 0; player.markTimer = 0; player.cowlCooldown = 0; player.iFrames = 0;
+    buffs.rooted = 0; buffs.powerSurgeStacks = 0; buffs.powerSurgeTimer = 0; buffs.weakened = 0; buffs.evade100 = 0; buffs.deathMarkActive = 0; buffs.overclockTimer = 0;
+    player.phantomDecoy = null; player.pounceCharges = 0; player.pounceRecharge = 0;
+    player.dash = null; player.z = 0; player.grappleTarget = null; dashGhosts.length = 0;
+    player.wolfComboStep = 0; player.wolfComboTimer = 0; player.lastWolfStep = 0;
+    resetPaladinState();
+    enemies.length = 0; projectiles.length = 0; effects.length = 0; drops.length = 0; gameTimers.length = 0; particles.length = 0;
+    
+    el('start-screen').classList.add('hidden'); 
+    el('hud').classList.remove('hidden');
+    el('hud-top').classList.remove('hidden');
+    triggerLevelUp("Choose Starting Skill");
+    loop();
+}
+
+window.startEndlessMode = function() {
+    isEndlessMode = true;
+    el('intermission-screen').innerHTML = `<h1 style="color:#ffca28;" id="intermission-title">Wave Cleared</h1>
+    <button class="btn" onclick="openInventory()">Open Inventory</button>
+    <button class="btn btn-gold hidden" id="btn-shop" onclick="openShop()">Visit Shop</button>
+    <button class="btn" onclick="startNextWave()" style="border-color:#4caf50; color:#4caf50;">Start Next Wave</button>`;
+    // Clear leftovers from the final boss fight (summoned guards, archers, corpses) so the wave counter starts clean
+    enemies.length = 0; projectiles.length = 0; effects.length = 0; drops.length = 0; gameTimers.length = 0;
+    activeEnemies = 0; enemiesToSpawn = 0;
+    startNextWave();
+}
+
+window.startNextWave = function() {
+    wave++;
+    resetPaladinState(); // the Paladin's hammer returns to hand between waves
+    isBossWave = (wave % 5 === 0); 
+    bossSpawned = false;
+    enemiesToSpawn = isBossWave ? 4 : 3 + Math.floor(wave * 2.5); 
+    
+    if (activeDungeonId === 'bandit_bastion' && wave === 11 && !isEndlessMode) {
+        currentMap.type = 'bridge'; isBossWave = true; enemiesToSpawn = 0; 
+    } else if (activeDungeonId === 'bandit_bastion' && wave > 11 && !isEndlessMode) {
+        currentMap.type = 'bridge';
+    } else {
+        currentMap.type = 'open';
+    }
+    updateMapBounds();
+    player.dash = null; player.z = 0; player.grappleTarget = null; // never carry a dash across a map change
+
+    if (activeDungeonId === 'bandit_bastion' && wave === 11 && !isEndlessMode) {
+        currentMap.valeriusTriggered = false;
+        player.x = currentMap.left + 80;
+        player.y = (currentMap.top + currentMap.bottom) / 2;
+    }
+
+    el('intermission-screen').classList.add('hidden'); el('inventory-screen').classList.add('hidden'); el('shop-screen').classList.add('hidden');
+    player.hp = Math.min(player.maxHp, player.hp + (player.maxHp * 0.3)); 
+    gameState = STATE.PLAYING; lastTime = performance.now(); updateHUD();
+    if (player.skillPoints > 0) triggerLevelUp();
+}
+
+// ==========================================
+// Initialization & Stat Calculation
+// ==========================================
+
+async function initializeData() {
+    try {
+        const [classesRes, enemiesRes, itemsRes] = await Promise.all([ 
+            fetch('data/classes.json'), 
+            fetch('data/enemies.json'), 
+            fetch('data/items.json') 
+        ]);
+        if (!classesRes.ok || !enemiesRes.ok || !itemsRes.ok) throw new Error("Fetch failed.");
+        classDataConfig = await classesRes.json(); 
+        enemyDataConfig = await enemiesRes.json(); 
+        itemDataConfig = await itemsRes.json();
+        
+        el('loading-text').classList.add('hidden'); 
+        el('class-selection').classList.remove('hidden');
+    } catch (e) {
+        console.error("Failed to load JSON:", e);
+        el('loading-text').innerText = "Error: Could not load data. Ensure Python server is running on localhost."; 
+        el('loading-text').style.color = "#d32f2f";
+    }
+}
+initializeData();
+
+function recalcStats() {
+    let gearHp = equipment.armor ? equipment.armor.val : 0;
+    player.maxHp = activeClass.baseMaxHp + gearHp + (player.bonusMaxHp || 0);
+    player.armor = activeClass.baseArmor;
+    if (player.hp > player.maxHp) player.hp = player.maxHp;
+
+    let gearMs = equipment.boots ? equipment.boots.val : 0;
+    player.speed = 250 + gearMs;
+    if (equipment.armor && equipment.armor.name === 'Windrunner Tunic') player.speed *= 1.3;
+    
+    player.maxFlow = 100;
+    if (activeClass && activeClass.name === 'Swordsaint' && equipment.amulet && equipment.amulet.name === 'Prismatic Core') {
+        player.maxFlow *= 1.25;
+    }
+    
+    if (typeof updateHUD === "function") updateHUD();
+}
+
+function spawnEnemy() {
+    enemiesToSpawn--; activeEnemies++;
+    
+    let ex, ey;
+    if (currentMap.type === 'bridge') {
+        ex = Math.random() < 0.5 ? currentMap.left - 50 : currentMap.right + 50;
+        ey = currentMap.top + Math.random() * (currentMap.bottom - currentMap.top);
+    } else {
+        if (Math.random() < 0.5) { 
+            ex = Math.random() < 0.5 ? currentMap.left - 30 : currentMap.right + 30; 
+            ey = currentMap.top + Math.random() * (currentMap.bottom - currentMap.top); 
+        } else { 
+            ex = currentMap.left + Math.random() * (currentMap.right - currentMap.left); 
+            ey = Math.random() < 0.5 ? currentMap.top - 30 : currentMap.bottom + 30; 
+        }
+    }
+
+    const stage = isEndlessMode ? Math.floor(Math.random() * 3) + 1 : (wave > 10 ? 3 : (wave > 5 ? 2 : 1));
+    const allMinions = [...(activeDungeon.stage1_minions || []), ...(activeDungeon.stage2_minions || []), ...(activeDungeon.stage3_minions || [])];
+    let minionList = activeDungeon[`stage${stage}_minions`];
+    // Slime Caves mixes every stage in Endless; any stage without minions (Bandit Bastion stage 3) falls back to the full pool
+    if (!minionList || minionList.length === 0 || (isEndlessMode && activeDungeonId === 'slime_caves')) minionList = allMinions;
+
+    if (isBossWave && !bossSpawned && enemiesToSpawn === 0) {
+        bossSpawned = true; 
+        let bList = [activeDungeon.stage1_boss, activeDungeon.stage2_boss, activeDungeon.stage3_boss].filter(b=>b);
+        let b = isEndlessMode ? bList[Math.floor(Math.random()*bList.length)] : (activeDungeon[`stage${stage}_boss`] || activeDungeon.stage1_boss);
+        const bossHp = b.baseHp + (wave * b.hpScale);
+        const bossSpeed = b.baseSpeed + (wave * 2.0);
+        let bx = currentMap.type === 'bridge' ? currentMap.right - 150 : (currentMap.left+currentMap.right)/2;
+        let by = currentMap.type === 'bridge' ? (currentMap.top+currentMap.bottom)/2 : currentMap.top + 100;
+        enemies.push({ x: bx, y: by, size: b.size, color: b.color, speed: bossSpeed, hp: bossHp, maxHp: bossHp, type: b.type, dmg: b.baseDmg + (wave * b.dmgScale), xp: b.baseXp, attackTimer: b.attackTimer, meleeTimer: 0, frozenTimer: 0, state: 'idle', stateTimer: b.stateTimer || 2.0, facingAngle: 0, puddleTimer: 0, bleedTimer: 0, bleedDmg: 0 });
+        updateHUD(); return;
+    }
+
+    if (minionList.length === 0) { activeEnemies--; updateHUD(); return; }
+
+    const totalWeight = minionList.reduce((sum, mn) => sum + mn.weight, 0);
+    const roll = Math.random() * totalWeight; let cumulative = 0; let m = minionList[0];
+    for (const minion of minionList) { cumulative += minion.weight; if (roll <= cumulative) { m = minion; break; } }
+    
+    const speed = m.baseSpeed + Math.random() * m.speedVar + (wave * 2.5); 
+    enemies.push({ x: ex, y: ey, size: m.size, color: m.color, speed: speed, hp: m.baseHp + (wave * m.hpScale), maxHp: m.baseHp + (wave * m.hpScale), type: m.type, dmg: m.baseDmg + (wave * m.dmgScale), xp: m.baseXp + (wave * m.xpScale), attackTimer: m.attackTimer || 0, meleeTimer: 0, ammo: m.ammo || 0, frozenTimer: 0, facingAngle: 0, shieldHp: m.shieldHp, shieldMax: m.shieldMax, puddleTimer: m.puddleTimer || 0, bleedTimer: 0, bleedDmg: 0, orbs: m.orbs || 0 });
+    updateHUD();
+}
+
+window.addEventListener('mousemove', e => { mouseX = e.clientX; mouseY = e.clientY; });
+window.addEventListener('mousedown', e => { 
+    if (e.button === 0) isMouseDown = true; 
+    if (e.button === 2 && equipment.weapon && equipment.weapon.rarity === 'rare' && activeClass.rareWeapon.rmbSkill && (cooldowns.rmb <= 0 || devNoCooldowns) && gameState === STATE.PLAYING) {
+        cooldowns.rmb = devNoCooldowns ? 0 : 4.0 * getCDR();
+        window.SkillRegistry[activeClass.name]['rmb']();
+    }
+});
+window.addEventListener('mouseup', e => { if (e.button === 0) isMouseDown = false; });
+window.addEventListener('contextmenu', e => e.preventDefault());
+
+window.addEventListener('keydown', e => {
+    let k = e.key.toLowerCase();
+    if (k === '`' || k === '~') {
+        if (gameState === STATE.PLAYING) { gameState = STATE.DEV; el('dev-screen').classList.remove('hidden'); }
+        else if (gameState === STATE.DEV) closeDevMenu();
+        return;
+    }
+    if (k === ' ') { k = 'space'; e.preventDefault(); }
+    if (k === 'p') {
+        if (gameState === STATE.PLAYING) gameState = STATE.PAUSED;
+        else if (gameState === STATE.PAUSED) { gameState = STATE.PLAYING; lastTime = performance.now(); }
+        return;
+    }
+    if (gameState !== STATE.PLAYING || player.hp <= 0) return;
+    if (k === 'w') keys.w = true; if (k === 'a') keys.a = true; if (k === 's') keys.s = true; if (k === 'd') keys.d = true;
+    
+    const keyMap = { 'q': 1, 'e': 2, 'space': 3, 'r': 4 };
+    if (keyMap[k]) {
+        let i = keyMap[k];
+        if ((cooldowns[`s${i}`] <= 0 || devNoCooldowns) && activeClass.skills[i].level > 0) {
+            if (activeClass.name === 'Swordsaint' && i === 2 && player.stance === 'handheld' && player.flow < player.maxFlow) {
+                effects.push({ type: 'text', text: 'Not Enough Flow!', x: player.x, y: player.y - 40, color: '#ff5252', life: 0.6, maxLife: 0.6 });
+                return;
+            }
+            // Optional per-class gate (e.g. Paladin's Bastion Dome needs a deployed hammer); refusing keeps the cooldown unspent
+            const canCast = window.SkillRegistry[activeClass.name].canCast;
+            if (canCast && !canCast(i)) return;
+
+            const sk = activeClass.skills[i];
+            let cdReduction = getCDR();
+            let baseCd = sk.maxCd;
+            
+            // Dash skills (usually Slot 3) and Swordsaint's Stance Toggle (Slot 2) get level-based cooldown scaling 
+            if (i === 3 || (activeClass.name === 'Swordsaint' && i === 2)) {
+                baseCd = calcCooldown(baseCd, sk.level);
+            }
+
+            cooldowns[`s${i}`] = devNoCooldowns ? 0 : baseCd * cdReduction;
+            cooldownMax[`s${i}`] = cooldowns[`s${i}`];
+            
+            if (equipment.amulet && equipment.amulet.name === 'Amulet of Power') {
+                buffs.powerSurgeStacks = Math.min(5, buffs.powerSurgeStacks + 1);
+                buffs.powerSurgeTimer = 3.0;
+            }
+
+            if (activeClass && activeClass.name === 'Cleric' && buffs.aspectOfReaper > 0 && i !== 4) {
+                // ASCENSION is cost-free to cast. Other abilities cost 8% max HP.
+                let cost = player.maxHp * 0.08;
+                player.hp -= cost;
+                effects.push({ type: 'text', x: player.x, y: player.y + 20, text: `-${Math.floor(cost)}`, color: '#e53935', life: 0.8, maxLife: 0.8 });
+                if (player.hp <= 0) player.hp = 1; // Don't let casting kill you technically? Let's just leave it at 1.
+            }
+
+            if (activeClass && activeClass.name === 'Cleric' && buffs.avatarOfRenewal > 0 && i !== 4) {
+                let bolts = 3;
+                for(let b=0; b<bolts; b++) {
+                    let angle = Math.random() * Math.PI * 2;
+                    projectiles.push({
+                        x: player.x, y: player.y, vx: Math.cos(angle)*400, vy: Math.sin(angle)*400,
+                        radius: 8, color: '#fff', life: 3.0, type: 'basic', shape: 'light_spear', damage: activeClass.skills[4].baseDmg ? calcDmg(activeClass.skills[4].baseDmg, activeClass.skills[4].level) : 50, pierce: false, isEnemy: false,
+                        customUpdate: function(dt, p) {
+                            let nearest = getNearestEnemyFromPoint(p.x, p.y, 400);
+                            if (nearest) {
+                                let [dx, dy, dist] = getVector(p.x, p.y, nearest.x, nearest.y);
+                                p.vx += (dx/dist)*900 * dt;
+                                p.vy += (dy/dist)*900 * dt;
+                                let vDist = Math.hypot(p.vx, p.vy);
+                                if (vDist > 600) { p.vx = (p.vx/vDist)*600; p.vy = (p.vy/vDist)*600; }
+                            }
+                        }
+                    });
+                }
+            }
+
+            let dmg = calcDmg(sk.baseDmg, sk.level);
+            window.SkillRegistry[activeClass.name][i](sk, dmg);
+        }
+    }
+});
+window.addEventListener('keyup', e => { 
+    let k = e.key.toLowerCase(); 
+    if (k === ' ') k = 'space';
+    if (k === 'w') keys.w = false; if (k === 'a') keys.a = false; if (k === 's') keys.s = false; if (k === 'd') keys.d = false; 
+});
+
+function update(dt) {
+    updateGameTimers(dt);
+    updateFx(dt);
+    updatePaladin(dt);
+    if (enemiesToSpawn > 0) { enemySpawnTimer -= dt; if (enemySpawnTimer <= 0) { spawnEnemy(); enemySpawnTimer = Math.max(0.5, 2.0 - (wave * 0.1)); } }
+    if (cooldowns.basic > 0) cooldowns.basic -= dt;
+    if (cooldowns.rmb > 0) cooldowns.rmb -= dt;
+    for(let i=1; i<=4; i++) if (cooldowns[`s${i}`] > 0) cooldowns[`s${i}`] -= dt;
+    if (buffs.msBoost > 0) buffs.msBoost -= dt;
+    if (buffs.slowed > 0) buffs.slowed -= dt;
+    if (buffs.rooted > 0) buffs.rooted -= dt;
+    if (buffs.ironBulwark > 0) buffs.ironBulwark -= dt;
+    if (buffs.weakened > 0) buffs.weakened -= dt;
+    if (buffs.evade100 > 0) buffs.evade100 -= dt;
+    if (buffs.deathMarkActive > 0) buffs.deathMarkActive -= dt;
+    if (buffs.wildFormTimer > 0) buffs.wildFormTimer -= dt;
+    if (player.cowlCooldown > 0) player.cowlCooldown -= dt;
+    if (player.vestmentCD > 0) player.vestmentCD -= dt;
+    if (player.iFrames > 0) player.iFrames -= dt;
+    if (player.phantomDecoy && player.phantomDecoy.life > 0) player.phantomDecoy.life -= dt;
+
+    if (buffs.powerSurgeTimer > 0) { buffs.powerSurgeTimer -= dt; if (buffs.powerSurgeTimer <= 0) buffs.powerSurgeStacks = 0; }
+    if (player.shield > 0 && !buffs.shieldDecayPaused) { player.shieldTimer -= dt; if (player.shieldTimer <= 0) { player.shield = 0; updateHUD(); } }
+    if (activeClass && activeClass.name === 'Dragonknight') { if (player.frenzyTimer > 0) { player.frenzyTimer -= dt; if (player.frenzyTimer <= 0) player.frenzyStacks = 0; } }
+    if (equipment.armor && equipment.armor.name === 'Hazard Suit') buffs.slowed = 0;
+
+    if (activeClass && activeClass.name === 'Druid') {
+        // Barkskin Shift ends when its shield breaks or expires
+        if (buffs.barkskin && player.shield <= 0) {
+            buffs.barkskin = false;
+            if (activeClass.skills[2].selectedUpg === 'B') { // Splintering Shell
+                effects.push({ type: 'bark_burst', x: player.x, y: player.y, radius: 180, life: 0.4, maxLife: 0.4 });
+                for (const e of enemies) if (Math.hypot(e.x - player.x, e.y - player.y) <= 180 + e.size/2) applyDamage(e, buffs.barkskinDmg, 'physical');
+            }
+        }
+        if (buffs.sporeSurgeTimer > 0) buffs.sporeSurgeTimer -= dt;
+        // Predatory Momentum: the extra Feral Pounce charge refills on its own timer
+        if (activeClass.skills[3].selectedUpg === 'B' && player.pounceCharges < 1) {
+            player.pounceRecharge -= dt;
+            if (player.pounceRecharge <= 0) player.pounceCharges = 1;
+        }
+    }
+
+    if (activeClass && activeClass.name === 'Nightblade') {
+        player.markTimer = (player.markTimer || 0) - dt;
+        if (player.markTimer <= 0) {
+            player.markTimer = 3.0;
+            let unmarked = enemies.filter(e => e.markAngle === undefined && Math.hypot(player.x - e.x, player.y - e.y) < 400);
+            let count = Math.floor(Math.random() * 3) + 1;
+            for (let i=0; i<count && unmarked.length > 0; i++) {
+                let idx = Math.floor(Math.random() * unmarked.length);
+                unmarked[idx].markAngle = Math.random() * Math.PI * 2;
+                unmarked.splice(idx, 1);
+            }
+        }
+    }
+
+    if (activeClass && activeClass.name === 'Machinist' && buffs.overclockTimer > 0) {
+        buffs.overclockTimer -= dt;
+    }
+    
+    if (activeClass && activeClass.name === 'Cleric') {
+        // Standing in a Sanctuary (Holy Hallowed Ground) doubles Zeal from basic attacks
+        buffs.inSanctuary = projectiles.some(p => p.type === 'hallowed_ground' && p.isHoly && Math.hypot(player.x - p.x, player.y - p.y) <= p.radius);
+        if (buffs.avatarOfRenewal > 0) {
+            buffs.avatarOfRenewal -= dt;
+            buffs.zealLocked = true;
+            player.zeal = player.maxZeal;
+            if (buffs.avatarOfRenewal <= 0) buffs.zealLocked = false;
+        }
+        if (buffs.aspectOfReaper > 0) {
+            buffs.aspectOfReaper -= dt;
+            buffs.zealLocked = true;
+            player.zeal = 0;
+            if (buffs.aspectOfReaper <= 0) buffs.zealLocked = false;
+        }
+        if (buffs.ascension > 0) {
+            buffs.ascension -= dt;
+            // Maybe slight passive healing/dmg boost which we handle in dmg calc
+        }
+    }
+
+    if (player.wolfComboTimer > 0) { // Druid Wild Form combo
+        player.wolfComboTimer -= dt;
+        if (player.wolfComboTimer <= 0) player.wolfComboStep = 0;
+    }
+
+    if (activeClass && activeClass.name === 'Swordsaint') {
+        if (player.comboTimer > 0) {
+            player.comboTimer -= dt;
+            if (player.comboTimer <= 0) player.comboStep = 0;
+        }
+        if (player.qAnimTimer > 0) {
+            player.qAnimTimer -= dt;
+        }
+
+        if (player.stance === 'handheld') {
+            player.flowGainTimer += dt;
+            if (player.flowGainTimer >= 1.5) {
+                player.flow = Math.max(0, player.flow - (15 * dt)); // Decay 15 flow per second
+            }
+            // Reposition blade to player
+            player.airborneBlade.x = player.x;
+            player.airborneBlade.y = player.y;
+            player.airborneBlade.angle = Math.atan2(mouseY - player.y, mouseX - player.x);
+        } else if (player.stance === 'airborne') {
+            // Flow constantly decays in Airborne to put a cap on it
+            player.flow = Math.max(0, player.flow - (10 * dt)); // Deplete a bit faster in Airborne
+            if (player.flow <= 0) {
+                effects.push({ type: 'flash_line', x1: player.airborneBlade.x, y1: player.airborneBlade.y, x2: player.x, y2: player.y, color: '#00e5ff', life: 0.25, maxLife: 0.25, lineWidth: 6 });
+                effects.push({ type: 'circle_burst', x: player.x, y: player.y, radius: 40, color: 'rgba(0, 229, 255, 0.8)', life: 0.3, maxLife: 0.3 });
+                player.stance = 'handheld';
+                player.empoweredAirborne = false;
+                player.airborneBlade.x = player.x;
+                player.airborneBlade.y = player.y;
+            }
+            
+            // Airborne Blade Logic (AI companion)
+            let ab = player.airborneBlade;
+            let targetSpeed = 400 + (player.flow / player.maxFlow) * 500; // Speed scales with Flow
+            
+            if (isMouseDown) {
+                ab.overrideX = mouseX;
+                ab.overrideY = mouseY;
+            } else {
+                ab.overrideX = null;
+                ab.overrideY = null;
+            }
+
+            // Override takes precedence (Left click follow & slash)
+            if (ab.overrideX !== null) {
+                let dx = ab.overrideX - ab.x; let dy = ab.overrideY - ab.y;
+                let dist = Math.hypot(dx, dy);
+                
+                if (dist > 5) {
+                    let moveAngle = Math.atan2(dy, dx);
+                    // Smoothly rotate towards mouse
+                    let angleDiff = moveAngle - ab.angle;
+                    while (angleDiff < -Math.PI) angleDiff += Math.PI*2;
+                    while (angleDiff > Math.PI) angleDiff -= Math.PI*2;
+                    ab.angle += angleDiff * 12 * dt;
+                    
+                    let followSpeed = Math.min(1200, dist * 8); 
+                    ab.x += Math.cos(ab.angle) * followSpeed * dt;
+                    ab.y += Math.sin(ab.angle) * followSpeed * dt;
+                }
+
+                // Slash damage through enemies on path
+                if (ab.attackTimer <= 0) {
+                    let hitAnything = false;
+                    for (const e of enemies) {
+                        if (Math.hypot(e.x - ab.x, e.y - ab.y) < e.size / 2 + 50) {
+                            let dmg = activeClass.basicDmg * 1.2 * (1 + (player.flow/player.maxFlow));
+                            if (player.empoweredAirborne) dmg *= 1.5;
+                            applyDamage(e, dmg, 'slash');
+                            let slashColor = player.empoweredAirborne ? 'rgba(0, 229, 255, 0.9)' : 'rgba(0, 188, 212, 0.7)';
+                            let slashRadius = player.empoweredAirborne ? 75 : 50;
+                            effects.push({ type: 'slash', x: e.x, y: e.y, angle: ab.angle, color: slashColor, life: 0.15, maxLife: 0.15, radius: slashRadius });
+                            hitAnything = true;
+                        }
+                    }
+                    if (hitAnything) {
+                        let stanceBonus = (player.flow / player.maxFlow) * 0.5;
+                        ab.attackTimer = (player.empoweredAirborne ? 0.1 : 0.2) / (1 + stanceBonus); 
+                    }
+                } else {
+                    ab.attackTimer -= dt;
+                }
+            } else {
+                // Seek nearest enemy in 600 radius of the Blade itself (not player)
+                let bestTarget = getNearestEnemyFromPoint(ab.x, ab.y, 600);
+                if (bestTarget) {
+                    let btx = bestTarget.x; let bty = bestTarget.y;
+                    let dx = btx - ab.x; let dy = bty - ab.y;
+                    let dist = Math.hypot(dx, dy);
+                    let targetAngle = Math.atan2(dy, dx);
+
+                    let angleDiff = targetAngle - ab.angle;
+                    while (angleDiff < -Math.PI) angleDiff += Math.PI*2;
+                    while (angleDiff > Math.PI) angleDiff -= Math.PI*2;
+                    
+                    if (ab.flyTimer === undefined) ab.flyTimer = 0;
+                    
+                    if (ab.flyTimer > 0) {
+                        ab.flyTimer -= dt;
+                    } else {
+                        // Wide sweeping turn to face target
+                        ab.angle += angleDiff * 5 * dt; 
+                    }
+
+                    // If we are looking reasonably towards the enemy and get close, enter Pierce mode
+                    if (ab.flyTimer <= 0 && dist < 160 && Math.abs(angleDiff) < Math.PI/3) {
+                        ab.flyTimer = 0.45; // Lock steering and dash forward for 0.45s to punch through and fly away
+                    }
+
+                    let currentSpeed = targetSpeed * 1.4;
+                    if (ab.flyTimer > 0) {
+                        currentSpeed *= 2.0; // Violent piercing speed
+                    } else {
+                        // Slow down slightly while turning around to make tighter turns
+                        currentSpeed *= 0.9;
+                    }
+
+                    ab.x += Math.cos(ab.angle) * currentSpeed * dt;
+                    ab.y += Math.sin(ab.angle) * currentSpeed * dt;
+                    clampToBounds(ab, 20); // Prevent flying off the map edges
+                    
+                    ab.attackTimer -= dt;
+                    // If close, damage as it flies through
+                    if (ab.attackTimer <= 0 && dist < bestTarget.size / 2 + 50) {
+                        let dmg = activeClass.basicDmg * (1 + (player.flow/player.maxFlow));
+                        if (player.empoweredAirborne) dmg *= 1.5;
+                        
+                        applyDamage(bestTarget, dmg, 'slash');
+                        let stanceBonus = (player.flow / player.maxFlow) * 0.5; 
+                        ab.attackTimer = Math.max(player.empoweredAirborne ? 0.1 : 0.2, (player.empoweredAirborne ? 0.3 : 0.6) / (1 + stanceBonus)); 
+                    }
+                } else {
+                    // Orbit player smoothly
+                    let dx = player.x - ab.x;
+                    let dy = player.y - ab.y;
+                    let distToPlayer = Math.hypot(dx, dy);
+                    
+                    let orbitAngle = Date.now() / 500;
+                    let ox = player.x + Math.cos(orbitAngle) * 80;
+                    let oy = player.y + Math.sin(orbitAngle) * 80;
+                    let tox = ox - ab.x;
+                    let toy = oy - ab.y;
+                    
+                    let targetAngle = Math.atan2(toy, tox);
+                    let angleDiff = targetAngle - ab.angle;
+                    while (angleDiff < -Math.PI) angleDiff += Math.PI*2;
+                    while (angleDiff > Math.PI) angleDiff -= Math.PI*2;
+                    
+                    ab.angle += angleDiff * 5 * dt;
+                    
+                    let returnSpeed = distToPlayer > 200 ? 900 : targetSpeed;
+                    ab.x += Math.cos(ab.angle) * returnSpeed * dt;
+                    ab.y += Math.sin(ab.angle) * returnSpeed * dt;
+                    clampToBounds(ab, 20);
+                }
+            }
+            
+            // Reusable flow gain mechanics (decay handled above)
+        }
+        
+        // Shatter Storm mini-blades
+        if (player.miniBlades && player.miniBlades.length > 0) {
+            for (let i = player.miniBlades.length - 1; i >= 0; i--) {
+                let mb = player.miniBlades[i];
+                mb.life -= dt;
+                if (mb.life <= 0) {
+                    player.miniBlades.splice(i, 1);
+                    continue;
+                }
+
+                if (!mb.target || mb.target.hp <= 0) {
+                    mb.target = getNearestEnemyFromPoint(mb.x, mb.y, 800);
+                }
+
+                if (mb.target) {
+                    let dx = mb.target.x - mb.x;
+                    let dy = mb.target.y - mb.y;
+                    let dist = Math.hypot(dx, dy);
+                    let targetAngle = Math.atan2(dy, dx);
+                    
+                    let angleDiff = targetAngle - mb.angle;
+                    while(angleDiff < -Math.PI) angleDiff += Math.PI*2;
+                    while(angleDiff > Math.PI) angleDiff -= Math.PI*2;
+                    
+                    mb.angle += angleDiff * 10 * dt;
+                    let speed = 900;
+                    mb.x += Math.cos(mb.angle) * speed * dt;
+                    mb.y += Math.sin(mb.angle) * speed * dt;
+
+                    mb.attackTimer -= dt;
+                    if (dist < mb.target.size/2 + 25 && mb.attackTimer <= 0) {
+                        let dmg = activeClass.basicDmg * (1 + (player.flow/player.maxFlow)) * 0.25;
+                        if (player.empoweredAirborne) dmg *= 1.5;
+                        applyDamage(mb.target, dmg, 'shatter_storm');
+                        mb.attackTimer = 0.25;
+                        effects.push({ type: 'slash', x: mb.target.x, y: mb.target.y, angle: mb.angle, color: '#18ffff', life: 0.15, maxLife: 0.15, radius: 45 });
+                        if (!mb.pierce) mb.target = null;
+                        
+                        // Recoil bounce
+                        mb.x -= Math.cos(mb.angle) * 40;
+                        mb.y -= Math.sin(mb.angle) * 40;
+                    }
+                } else {
+                    let orbitAngle = (mb.life * 3) + (i * Math.PI*2 / 6);
+                    let px = player.airborneBlade && player.stance === 'airborne' ? player.airborneBlade.x : player.x;
+                    let py = player.airborneBlade && player.stance === 'airborne' ? player.airborneBlade.y : player.y;
+                    let tx = px + Math.cos(orbitAngle)*120;
+                    let ty = py + Math.sin(orbitAngle)*120;
+                    
+                    let dx = tx - mb.x; let dy = ty - mb.y;
+                    mb.angle = Math.atan2(dy, dx);
+                    let dist = Math.hypot(dx, dy);
+                    let speed = Math.min(1000, Math.max(200, dist * 5));
+                    mb.x += Math.cos(mb.angle) * speed * dt;
+                    mb.y += Math.sin(mb.angle) * speed * dt;
+                }
+            }
+        }
+
+        if (player.parryTimer > 0) {
+            player.parryTimer -= dt;
+            player.iFrames = 0.1; // Maintain IFrames during parry window
+        }
+    }
+
+    if (activeClass && activeClass.name === 'Cleric') {
+        if (buffs.zealLocked) {
+            if (buffs.aspectOfReaper > 0) player.zeal = 0;
+            else player.zeal = player.maxZeal;
+        }
+    }
+
+    if (isMouseDown && cooldowns.basic <= 0) castBasic();
+
+    let vx = 0; let vy = 0;
+    if (keys.w) vy -= 1; if (keys.s) vy += 1; if (keys.a) vx -= 1; if (keys.d) vx += 1;
+    const mag = Math.hypot(vx, vy);
+    player.isMoving = mag > 0;
+    
+    let currentSpeed = player.speed; 
+    if (buffs.msBoost > 0) currentSpeed *= 1.5;
+    if (buffs.sporeSurgeTimer > 0) currentSpeed *= 1 + buffs.sporeSurgeBonus;
+    if (buffs.slowed > 0) currentSpeed *= 0.5;
+    if (buffs.rooted > 0) currentSpeed = 0;
+
+    if (player.dash) {
+        updateDash(dt); // skillfx_space.js: timed dashes and leaps
+    } else if (player.grappleTarget) {
+        // Forced movement to a point (Machinist grapple, Paladin charge / Iron Pull).
+        // Optional fields: speed, iFrames (default true), onStep(), onArrive(), noLine, color.
+        const gt = player.grappleTarget;
+        let [gx, gy, gdist] = getVector(player.x, player.y, gt.x, gt.y);
+        let gSpeed = gt.speed || 2000;
+        gt.time = (gt.time || 0) + dt;
+        let arrived = gdist <= gSpeed * dt || gt.time > 1.5; // time cap so a blocked path can't trap the player
+        if (arrived) {
+            player.x = gt.x;
+            player.y = gt.y;
+            player.grappleTarget = null;
+        } else {
+            player.x += (gx/gdist) * gSpeed * dt;
+            player.y += (gy/gdist) * gSpeed * dt;
+        }
+        if (gt.iFrames !== false) player.iFrames = 0.1;
+        clampToBounds(player, player.radius);
+        if (gt.onStep) gt.onStep(dt);
+        if (arrived && gt.onArrive) gt.onArrive();
+    } else if (mag > 0 && currentSpeed > 0) {
+        player.x += (vx / mag) * currentSpeed * dt; player.y += (vy / mag) * currentSpeed * dt;
+        clampToBounds(player, player.radius);
+        if (activeClass && activeClass.name === 'Ranger') player.momentum = Math.min(0.20, player.momentum + (0.05 * dt)); 
+    } else { if (activeClass && activeClass.name === 'Ranger') player.momentum = 0; }
+
+    if (currentMap.type === 'bridge' && wave === 11 && !currentMap.valeriusTriggered && player.x > currentMap.right - 200) {
+        currentMap.valeriusTriggered = true; bossSpawned = true; let b = activeDungeon.stage3_boss;
+        const bossHp = b.baseHp + (wave * b.hpScale); const bossSpeed = b.baseSpeed + (wave * 2.0);
+        let bx = (currentMap.left + currentMap.right) / 2; let by = (currentMap.top + currentMap.bottom) / 2;
+        enemies.push({ x: bx, y: currentMap.top - 300, size: b.size, color: b.color, speed: bossSpeed, hp: bossHp, maxHp: bossHp, type: b.type, dmg: b.baseDmg + (wave * b.dmgScale), xp: b.baseXp, attackTimer: b.attackTimer, meleeTimer: 0, frozenTimer: 0, state: 'jump_in', stateTimer: 1.0, facingAngle: 0, puddleTimer: 0, bleedTimer: 0, bleedDmg: 0, targetY: by });
+        activeEnemies++; updateHUD();
+    }
+
+    for (let i = drops.length - 1; i >= 0; i--) {
+        const d = drops[i]; d.life -= dt; if (d.life <= 0) { drops.splice(i, 1); continue; }
+        if (Math.hypot(player.x - d.x, player.y - d.y) < player.radius + d.radius) {
+            if (d.type === 'hp') { player.hp = Math.min(player.maxHp, player.hp + (player.maxHp * 0.25)); } 
+            else if (d.type === 'dmg') { player.bonusDmg += 0.05; } 
+            else if (d.type === 'gold') { player.gold += d.val; }
+            else if (d.type === 'item') { inventory.push(d.itemData); }
+            else if (d.type === 'shield_catch') { let shieldAmt = d.skill && d.skill.selectedUpg === 'B' ? 100 : 50; player.shield += calcUtility(shieldAmt, d.skill ? d.skill.level : 1); player.shieldTimer = calcUtility(5.0, d.skill ? d.skill.level : 1); }
+            else if (d.type === 'scrap') { player.hp = Math.min(player.maxHp, player.hp + 5); for(let j=1; j<=4; j++) cooldowns[`s${j}`] = Math.max(0, cooldowns[`s${j}`] - 0.5); }
+            drops.splice(i, 1); updateHUD();
+        }
+    }
+
+    player.inSmoke = false;
+    for (let i = effects.length - 1; i >= 0; i--) { 
+        if (effects[i].life === undefined) effects[i].life = effects[i].maxLife = 0.35; // some effects are pushed without a lifetime
+        effects[i].life -= dt; 
+        if (effects[i].customUpdate) effects[i].customUpdate(dt, effects[i]);
+        if (effects[i].type === 'smoke_bomb') {
+            if (Math.hypot(player.x - effects[i].x, player.y - effects[i].y) <= effects[i].radius) player.inSmoke = true;
+            for(let k=enemies.length-1; k>=0; k--) {
+                if (Math.hypot(enemies[k].x - effects[i].x, enemies[k].y - effects[i].y) <= effects[i].radius + enemies[k].size/2) {
+                    if (effects[i].poison) applyDamage(enemies[k], effects[i].dmg * dt, 'dot');
+                }
+            }
+        } else if (effects[i].type === 'fire_puddle' || effects[i].type === 'thorn_patch' || effects[i].type === 'consecrated_ground') {
+            for(let k=enemies.length-1; k>=0; k--) {
+                const ek = enemies[k];
+                if (Math.hypot(ek.x - effects[i].x, ek.y - effects[i].y) <= effects[i].radius + ek.size/2) {
+                    applyDamage(ek, effects[i].dmg * dt, 'dot');
+                    // Zone slows refresh continuously, but never override a stronger slow that is already active
+                    if (effects[i].slow && (!(ek.slowTimer > 0) || effects[i].slow >= ek.slowAmount)) {
+                        ek.slowTimer = Math.max(ek.slowTimer || 0, 0.5);
+                        ek.slowAmount = effects[i].slow;
+                    }
+                }
+            }
+        } else if (effects[i].type === 'puddle') {
+            if (Math.hypot(player.x - effects[i].x, player.y - effects[i].y) < player.radius + effects[i].radius) takeDamage(15 * dt, true);
+        } else if (effects[i].type === 'bear_trap') {
+            if (Math.hypot(player.x - effects[i].x, player.y - effects[i].y) < player.radius + effects[i].radius) {
+                buffs.rooted = 1.5; takeDamage(effects[i].dmg); effects.splice(i, 1); continue;
+            }
+        } else if (effects[i].type === 'spore_cloud') {
+            if (effects[i].isFriendly) {
+                // Friendly spore cloud continuously applies Spore stacks to enemies
+                for(let k=enemies.length-1; k>=0; k--) {
+                    let ek = enemies[k];
+                    if (Math.hypot(ek.x - effects[i].x, ek.y - effects[i].y) <= effects[i].radius + ek.size/2) {
+                        applyDamage(ek, effects[i].dmg * dt, 'dot');
+                        if (Math.random() < 0.1) {
+                            let maxStacks = 3;
+                            let dpsPerStack = effects[i].dmg * 0.25;
+                            if (!ek.sporeStacks) ek.sporeStacks = 0;
+                            ek.sporeStacks = Math.min(maxStacks, ek.sporeStacks + 1);
+                            ek.sporeTimer = 5.0;
+                            ek.sporeDps = dpsPerStack * ek.sporeStacks;
+                        }
+                    }
+                }
+            } else {
+                if (Math.hypot(player.x - effects[i].x, player.y - effects[i].y) < player.radius + effects[i].radius) buffs.weakened = 0.5;
+            }
+        }
+        if (effects[i].life <= 0) effects.splice(i, 1); 
+    }
+
+    const oozes = enemies.filter(e => e.type === 'voltaic_ooze');
+    for (let i=0; i<oozes.length; i++) {
+        for (let j=i+1; j<oozes.length; j++) {
+            if (Math.hypot(oozes[i].x - oozes[j].x, oozes[i].y - oozes[j].y) < 250) {
+                effects.push({type: 'lightning', x1: oozes[i].x, y1: oozes[i].y, x2: oozes[j].x, y2: oozes[j].y, color: '#03a9f4', life: 0.1, maxLife: 0.1});
+                if (distToSegment(player.x, player.y, oozes[i].x, oozes[i].y, oozes[j].x, oozes[j].y) < player.radius + 5) { takeDamage(15 * dt, true); buffs.slowed = 0.5; }
+            }
+        }
+    }
+
+    for (let i = projectiles.length - 1; i >= 0; i--) {
+        const p = projectiles[i]; 
+        
+        if (p.customUpdate) { p.customUpdate(dt, p); }
+        
+        if (p.source === 'fan_of_knives' && p.returnDmg && p.life <= 0.5 && !p.returning) {
+            p.returning = true; p.hitList = [];
+        }
+        if (p.source === 'fan_of_knives' && p.returning) {
+            const [rx, ry, rd] = getVector(p.x, p.y, player.x, player.y);
+            if (rd < p.radius + player.radius) { projectiles.splice(i, 1); continue; }
+            p.vx = (rx/rd)*1200; p.vy = (ry/rd)*1200; p.life = 0.5;
+        }
+        
+        if (p.type === 'hound') {
+            if (p.trackTimer > 0) {
+                p.trackTimer -= dt;
+                const [tx, ty, tdist] = getVector(p.x, p.y, player.x, player.y);
+                let targetAngle = Math.atan2(ty, tx); let currentAngle = Math.atan2(p.vy, p.vx); let diff = targetAngle - currentAngle;
+                while(diff < -Math.PI) diff += Math.PI*2; while(diff > Math.PI) diff -= Math.PI*2;
+                currentAngle += diff * 2.5 * dt; p.vx = Math.cos(currentAngle) * p.speed; p.vy = Math.sin(currentAngle) * p.speed;
+            }
+            p.x += p.vx * dt; p.y += p.vy * dt; 
+        } else if (p.type === 'trap_throw' || p.type === 'spore') {
+            const [tx, ty, td] = getVector(p.x, p.y, p.targetX, p.targetY); const spd = p.speed || 400;
+            if (td > 10) { p.x += (tx/td)*spd*dt; p.y += (ty/td)*spd*dt; }
+        } else if (p.type !== 'turret' && p.type !== 'tesla_coil_trap') {
+            p.x += p.vx * dt; p.y += p.vy * dt; 
+        }
+        
+        p.life -= dt;
+        
+        if (p.life <= 0 || p.x < currentMap.left - 50 || p.x > currentMap.right + 50 || p.y < currentMap.top - 50 || p.y > currentMap.bottom + 50) { 
+            if (p.type === 'bramble_core') {
+                let pRadius = p.sourceSkill && p.sourceSkill.selectedUpg === 'A' ? 75 : 50;
+                let pSlow = p.sourceSkill && p.sourceSkill.selectedUpg === 'A' ? 0.5 : 0.0;
+                effects.push({ type: 'thorn_patch', x: p.x, y: p.y, radius: pRadius, color: 'rgba(76, 175, 80, 0.4)', life: 4.0, maxLife: 4.0, dmg: p.damage * 0.5, slow: pSlow });
+            }
+            if (p.type === 'boss_slimeball') { effects.push({ type: 'puddle', x: p.x, y: p.y, radius: 30, color: '#009688', life: 1.5, maxLife: 1.5 }); }
+            if (p.type === 'trap_throw') { effects.push({ type: 'bear_trap', x: p.x, y: p.y, radius: 15, color: '#5d4037', life: 8.0, maxLife: 8.0, dmg: p.damage }); }
+            if (p.type === 'spore') { effects.push({ type: 'spore_cloud', x: p.x, y: p.y, radius: 100, color: 'rgba(205, 220, 57, 0.4)', life: 3.0, maxLife: 3.0 }); }
+            if (p.type === 'chain_hook' && p.sourceBoss) { 
+                p.sourceBoss.state = 'hook_pull'; 
+                p.sourceBoss.pullTargetX = Math.max(currentMap.left + 20, Math.min(currentMap.right - 20, p.x)); 
+                p.sourceBoss.pullTargetY = Math.max(currentMap.top + 20, Math.min(currentMap.bottom - 20, p.y)); 
+            }
+            if (p.type === 'turret' && p.volatile) {
+                effects.push({ type: 'fiery_explosion', x: p.x, y: p.y, radius: 150, life: 0.5, maxLife: 0.5 });
+                for(let e of enemies) { if (Math.hypot(e.x - p.x, e.y - p.y) < e.size/2 + 150) applyDamage(e, p.damage * 3, 'magic'); }
+            }
+            projectiles.splice(i, 1); continue; 
+        }
+
+        if (p.isEnemy) {
+            // Check Phantom Decoy intercept first
+            if (player.phantomDecoy && player.phantomDecoy.life > 0 && Math.hypot(p.x - player.phantomDecoy.x, p.y - player.phantomDecoy.y) < player.radius + p.radius) {
+                player.phantomDecoy.life = 0; // destroyed
+                projectiles.splice(i, 1);
+                continue;
+            }
+
+            if (p.type !== 'trap_throw' && p.type !== 'spore' && Math.hypot(p.x - player.x, p.y - player.y) < player.radius + p.radius) { 
+                takeDamage(p.damage, false, { isProjectile: true, proj: p }); 
+                if (p.type === 'chain_hook') {
+                    buffs.rooted = 1.0;
+                    let [bx, by, bdist] = getVector(player.x, player.y, p.sourceBoss.x, p.sourceBoss.y);
+                    player.x += (bx/bdist)*(bdist - 50); player.y += (by/bdist)*(bdist - 50); clampToBounds(player, player.radius);
+                    p.sourceBoss.state = 'idle'; p.sourceBoss.stateTimer = 1.5; 
+                }
+                if (p.type === 'boss_slimeball') { effects.push({ type: 'puddle', x: p.x, y: p.y, radius: 30, color: '#009688', life: 1.5, maxLife: 1.5 }); }
+                if (p.type === 'bolas') { 
+                    buffs.rooted = 1.0; const boss = enemies.find(e => e.type === 'boss_beastmaster');
+                    if (boss) { const [bx, by, bdist] = getVector(player.x, player.y, boss.x, boss.y); player.x += (bx/bdist)*100; player.y += (by/bdist)*100; clampToBounds(player, player.radius); }
+                }
+                projectiles.splice(i, 1); 
+            }
+        } else {
+            if (p.type === 'turret' || p.type === 'tesla_coil_trap') continue; 
+            
+            if (p.type === 'shield_throw') {
+                if (!p.returning && (p.life <= 1.0 || p.x<=currentMap.left+20 || p.x>=currentMap.right-20 || p.y<=currentMap.top+20 || p.y>=currentMap.bottom-20)) { p.returning = true; p.hitList = []; }
+                if (p.returning) {
+                    const [rx, ry, rd] = getVector(p.x, p.y, p.startX, p.startY);
+                    if (rd < p.radius + 10) {
+                        drops.push({ type: 'shield_catch', x: p.x, y: p.y, radius: 12, life: 5.0, skill: p.sourceSkill });
+                        projectiles.splice(i, 1); continue;
+                    } else { p.vx = (rx/rd)*800; p.vy = (ry/rd)*800; }
+                }
+            }
+
+            let hit = false;
+            for (let j = enemies.length - 1; j >= 0; j--) {
+                const e = enemies[j];
+                if (e.dead) continue;
+                if (Math.hypot(p.x - e.x, p.y - e.y) < e.size/2 + p.radius) {
+                    if ((p.pierce || p.type === 'shield_throw' || p.type === 'fan_of_knives' || p.type === 'scattergun' || p.type === 'censer_pulse') && p.hitList.includes(e)) continue;
+
+                    if (p.type === 'fireball' || p.resonance) {
+                        let explRadius = p.sourceSkill && p.sourceSkill.selectedUpg === 'B' ? 100 : 70;
+                        effects.push({ type: 'fiery_explosion', x: p.x, y: p.y, radius: explRadius, life: 0.4, maxLife: 0.4 });
+                        if (p.sourceSkill && p.sourceSkill.selectedUpg === 'B') {
+                            effects.push({ type: 'fire_puddle', x: p.x, y: p.y, radius: explRadius, color: 'rgba(255, 87, 34, 0.4)', life: 0.75, maxLife: 0.75, dmg: p.damage * 0.5 });
+                        }
+                        for(let k=enemies.length-1; k>=0; k--) {
+                            if (Math.hypot(p.x - enemies[k].x, p.y - enemies[k].y) <= explRadius + enemies[k].size/2) applyDamage(enemies[k], p.damage, 'magic');
+                        }
+                    } else if (p.type === 'shield_throw') {
+                        applyDamage(e, p.damage, 'melee');
+                        if (p.sourceSkill && p.sourceSkill.selectedUpg === 'A') {
+                            effects.push({ type: 'shield_blast', x: e.x, y: e.y, radius: 60, life: 0.3, maxLife: 0.3 });
+                            for(let k=enemies.length-1; k>=0; k--) {
+                                if (e !== enemies[k] && Math.hypot(e.x - enemies[k].x, e.y - enemies[k].y) <= 60 + enemies[k].size/2) applyDamage(enemies[k], p.damage*0.5, 'melee');
+                            }
+                        }
+                    } else if (p.type === 'ricochet') {
+                        applyDamage(e, p.damage, 'ranged');
+                        if (p.sourceSkill && p.sourceSkill.selectedUpg === 'B') { e.slowTimer = 1.5; e.slowAmount = 0.5; e.bleedTimer = 3.0; e.bleedDmg = p.damage * 0.4; }
+                        if (p.bounces > 0) {
+                            p.bounces--; p.hitList.push(e);
+                            let nextT = null; let minDist = 400;
+                            for(const et of enemies) { if (et.dead || p.hitList.includes(et)) continue; const dist = Math.hypot(et.x - p.x, et.y - p.y); if(dist < minDist) { minDist = dist; nextT = et; } }
+                            if (nextT) { const [nx, ny, nd] = getVector(p.x, p.y, nextT.x, nextT.y); p.vx = (nx/nd)*900; p.vy = (ny/nd)*900; } 
+                            else { hit = true; } 
+                        } else { hit = true; }
+                    } else if (p.type === 'scattergun') {
+                        applyDamage(e, p.damage, 'ranged');
+                        let [ebx, eby, ebd] = getVector(player.x, player.y, e.x, e.y);
+                        if (!e.type.startsWith('boss') && ebd > 0) { e.x += (ebx/ebd)*15; e.y += (eby/ebd)*15; clampToBounds(e, e.size/2); }
+                    } else if (p.type === 'net_throw') {
+                        applyDamage(e, p.damage, 'ranged');
+                        e.rootedTimer = 2.0; e.netTimer = 2.0;
+                    } else if (p.type === 'druid_spore' || p.type === 'bramble_core') {
+                        applyDamage(e, p.damage, 'magic');
+                        // Apply Spores: 5 seconds duration, DPS based on player scale (e.g. 50% of hit dmg per second)
+                        let sporeDur = 5.0;
+                        let maxStacks = 3;
+                        let dpsPerStack = p.damage * 0.25;
+                        if (!e.sporeStacks) e.sporeStacks = 0;
+                        e.sporeStacks = Math.min(maxStacks, e.sporeStacks + 1);
+                        e.sporeTimer = sporeDur;
+                        e.sporeDps = dpsPerStack * e.sporeStacks;
+                        
+                        if (p.type === 'bramble_core') {
+                            // Create Thorn Patch (using 'fire_puddle' style or new type)
+                            let pRadius = p.sourceSkill && p.sourceSkill.selectedUpg === 'A' ? 75 : 50;
+                            let pSlow = p.sourceSkill && p.sourceSkill.selectedUpg === 'A' ? 0.5 : 0.0;
+                            effects.push({ type: 'thorn_patch', x: p.x, y: p.y, radius: pRadius, color: 'rgba(76, 175, 80, 0.4)', life: 4.0, maxLife: 4.0, dmg: p.damage * 0.5, slow: pSlow });
+                        }
+                    } else { applyDamage(e, p.damage, activeClass.name === 'Ranger' ? 'ranged' : (p.source === 'fan_of_knives' ? 'assassin_skill' : 'magic'), Math.atan2(p.vy, p.vx)); }
+                    
+                    if (p.type === 'censer_pulse') {
+                        if (!buffs.zealLocked) {
+                            let zealGain = 15 * (p.zealMult || 1.0);
+                            if (p.isInSanctuary) zealGain *= 2.0;
+                            player.zeal = Math.min(player.maxZeal, player.zeal + zealGain);
+                        }
+                    }
+
+                    if (p.pierce || p.type === 'shield_throw' || p.type === 'ricochet' || p.type === 'fan_of_knives' || p.type === 'scattergun' || p.type === 'censer_pulse') { if (p.type !== 'ricochet') p.hitList.push(e); } else { hit = true; break; }
+                }
+            }
+            if (hit) projectiles.splice(i, 1);
+        }
+    }
+
+    let hasCasterAura = false;
+    for (let i = enemies.length - 1; i >= 0; i--) {
+        const e = enemies[i];
+        if (e.dead) continue;
+        if (e.frozenTimer > 0) { e.frozenTimer -= dt; e.renderColor = '#90caf9'; } 
+        else if (e.rootedTimer > 0) { e.rootedTimer -= dt; e.renderColor = '#b0bec5'; }
+        else if (e.stunTimer > 0) { e.stunTimer -= dt; e.renderColor = '#ffeb3b'; }
+        else if (e.blindTimer > 0) { e.blindTimer -= dt; e.renderColor = '#e0e0e0'; }
+        else if (e.slowTimer > 0 && e.slowAmount > 0) { e.renderColor = '#4fc3f7'; }
+        else { e.renderColor = e.color; }
+
+        if (e.bleedTimer > 0) {
+            e.bleedTimer -= dt; applyDamage(e, e.bleedDmg * dt, 'dot');
+            if (Math.random() < 0.1) effects.push({ type: 'circle', x: e.x, y: e.y, radius: 4, color: '#f44336', life: 0.2, maxLife: 0.2 });
+        }
+        
+        // Druid Spores DoT
+        if (e.sporeTimer > 0) {
+            e.sporeTimer -= dt;
+            
+            let myDps = e.sporeDps || 0;
+            // Spore ticks 50% faster if Barkskin Shift Accelerated Decay is active
+            if (activeClass && activeClass.name === 'Druid' && activeClass.skills[2].selectedUpg === 'A' && buffs.barkskin) {
+                myDps *= 1.5;
+            }
+
+            applyDamage(e, myDps * dt, 'dot');
+            if (Math.random() < 0.15) {
+                effects.push({ type: 'circle', x: e.x + (Math.random()-0.5)*e.size, y: e.y + (Math.random()-0.5)*e.size, radius: 3 + Math.random()*3, color: '#cddc39', life: 0.4, maxLife: 0.4 });
+            }
+
+            // Gnarled Heartwood Totem: every 3s an enemy spends spored grants +10% DMG to the next Feral Pounce (max 5)
+            if (equipment.weapon && equipment.weapon.name === 'Gnarled Heartwood Totem') {
+                e.sporedTime = (e.sporedTime || 0) + dt;
+                if (e.sporedTime >= 3.0) { e.sporedTime -= 3.0; buffs.pounceStacks = Math.min(5, buffs.pounceStacks + 1); }
+            }
+        }
+        if (e.dead) continue; // killed by a DoT this frame
+
+        if (e.aoeResistTimer > 0) {
+            e.aoeResistTimer -= dt;
+            if (e.aoeResistTimer <= 0) e.aoeResistStacks = 0;
+        }
+
+        if (e.shockTimer > 0) e.shockTimer -= dt;
+
+        let isImmobilized = (e.frozenTimer > 0 || e.rootedTimer > 0 || e.stunTimer > 0);
+        let curSpd = isImmobilized ? 0 : e.speed;
+        if (e.shockTimer > 0) curSpd *= 0.5;
+        if (e.slowTimer > 0) { e.slowTimer -= dt; curSpd *= 1 - (e.slowAmount !== undefined ? e.slowAmount : 0.4); }
+        
+        hasCasterAura = false;
+        for(let j=0; j<enemies.length; j++) { if (enemies[j].type === 'caster' && Math.hypot(e.x - enemies[j].x, e.y - enemies[j].y) < 400) hasCasterAura = true; }
+        if (hasCasterAura) curSpd *= 2.0;
+
+        let [edx, edy, edist] = getVector(e.x, e.y, player.x, player.y);
+
+        // Mantle of the Living Grove: enemies that rush into an active Barkskin get rooted (once per 3s each)
+        if (e.mantleRootCd > 0) e.mantleRootCd -= dt;
+        if (buffs.barkskin && equipment.armor && equipment.armor.name === 'Mantle of the Living Grove' && !(e.mantleRootCd > 0) && edist < player.radius + e.size / 2 + 10) {
+            e.rootedTimer = 1.5; e.mantleRootCd = 3.0;
+            effects.push({ type: 'text', text: 'ROOTED', x: e.x, y: e.y - 20, color: '#8bc34a', life: 0.6, maxLife: 0.6 });
+        }
+
+        if (player.inSmoke || e.blindTimer > 0) { edx = 0; edy = 0; edist = Infinity; }
+        if (e.meleeTimer > 0) e.meleeTimer -= dt;
+
+        if (edist < player.radius + e.size / 2 && e.state !== 'dash_execute' && e.state !== 'bounce_telegraph' && e.state !== 'charge' && e.state !== 'jousting' && e.state !== 'death_throes') {
+            if (!(equipment.boots && equipment.boots.name === 'Ethereal Treads')) {
+                let overlap = (player.radius + e.size / 2) - edist;
+                e.x -= (edx / edist) * overlap; e.y -= (edy / edist) * overlap;
+            }
+        }
+
+        if (edist > 0) {
+            let targetAngle = Math.atan2(edy, edx);
+            if (e.type === 'shield' || e.type === 'boss_valerius') {
+                let diff = targetAngle - (e.facingAngle || 0); while(diff < -Math.PI) diff += Math.PI*2; while(diff > Math.PI) diff -= Math.PI*2; e.facingAngle = (e.facingAngle || 0) + diff * 3.0 * dt; 
+            } else { e.facingAngle = targetAngle; }
+        }
+
+        if (e.tauntTimer > 0) {
+            // Taunted (Paladin hammer threat): walk to the taunt point instead of attacking
+            e.tauntTimer -= dt;
+            let [tx, ty, td] = getVector(e.x, e.y, e.tauntX, e.tauntY);
+            if (td > e.size/2 + 25) { e.x += (tx/td)*curSpd*dt; e.y += (ty/td)*curSpd*dt; }
+        } else if (window.EnemyAI[e.type]) {
+            if (e.stunTimer > 0 && !e.type.startsWith('boss_')) {}
+            else window.EnemyAI[e.type](e, dt, curSpd, edx, edy, edist, i);
+        } else {
+            if (e.stunTimer > 0) {}
+            else window.EnemyAI['slime_melee'](e, dt, curSpd, edx, edy, edist, i);
+        }
+        
+        clampToBounds(e, e.size/2);
+    }
+
+    removeDeadEnemies();
+    updateHUD();
+}
+
+function draw() {
+    ctx.fillStyle = '#111'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    if (gameState === STATE.PLAYING) ctx.translate(shakeX, shakeY); // fx.js camera shake
+    
+    if (currentMap.type === 'bridge') {
+        ctx.fillStyle = '#2c2c2c'; ctx.fillRect(currentMap.left, currentMap.top, currentMap.right - currentMap.left, currentMap.bottom - currentMap.top);
+        ctx.fillStyle = '#3e2723'; 
+        ctx.fillRect(currentMap.left, currentMap.top - 10, canvas.width, 10);
+        ctx.fillRect(currentMap.left, currentMap.bottom, canvas.width, 10);
+    } else {
+        ctx.fillStyle = '#1e1e1e'; ctx.fillRect(-10, -10, canvas.width + 20, canvas.height + 20); // overscan for camera shake
+        ctx.strokeStyle = '#2a2a2a'; ctx.lineWidth = 1; const gridSize = 100;
+        for (let i = 0; i < canvas.width; i += gridSize) { ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, canvas.height); ctx.stroke(); }
+        for (let i = 0; i < canvas.height; i += gridSize) { ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(canvas.width, i); ctx.stroke(); }
+    }
+
+    for (const ef of effects) {
+        if (drawSkillGround(ef)) continue; // skillfx.js
+        if (ef.type === 'puddle' || ef.type === 'fire_puddle' || ef.type === 'thorn_patch' || ef.type === 'spore_cloud' || ef.type === 'consecrated_ground') {
+            ctx.fillStyle = ef.color; ctx.globalAlpha = ef.life / ef.maxLife * 0.5; ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.radius, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1.0;
+        } else if (ef.type === 'smoke_bomb') {
+            ctx.fillStyle = ef.color; 
+            let alphaBase = Math.min(1.0, (ef.life / ef.maxLife) * 1.5); // stays thick, fades near end
+            let timeAlive = ef.maxLife - ef.life;
+            if (ef.particles) {
+                ef.particles.forEach(p => {
+                    ctx.globalAlpha = alphaBase * 0.6;
+                    let curX = ef.x + p.xOffset * Math.cos(timeAlive * p.rotSpeed * 0.5);
+                    let curY = ef.y + p.yOffset * Math.sin(timeAlive * p.rotSpeed * 0.5);
+                    let popRatio = Math.min(1, timeAlive * 4); // quick expansion
+                    let curR = p.r * popRatio + Math.sin(timeAlive * 2 + p.startAng) * (p.r * 0.1);
+                    ctx.beginPath();
+                    ctx.arc(curX, curY, Math.max(1, curR), 0, Math.PI * 2);
+                    ctx.fill();
+                });
+                ctx.globalAlpha = alphaBase * 0.3;
+                ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.radius, 0, Math.PI*2); ctx.fill();
+            } else {
+                ctx.globalAlpha = alphaBase * 0.5; ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.radius, 0, Math.PI*2); ctx.fill();
+            }
+            ctx.globalAlpha = 1.0;
+        }
+    }
+
+    drawGroundProjectiles(); // skillfx_e.js: Hallowed Ground, Tesla field
+
+    for (const d of drops) {
+        if (d.type === 'shield_catch') drawShieldCatch(d); // skillfx.js
+        else if (d.type === 'scrap') {
+            ctx.fillStyle = '#ff9800'; ctx.beginPath();
+            for(let j=0; j<6; j++) { let a = (Math.PI*2/6)*j; ctx.lineTo(d.x + Math.cos(a)*d.radius, d.y + Math.sin(a)*d.radius); }
+            ctx.closePath(); ctx.fill(); ctx.fillStyle = '#fff'; ctx.font = '10px monospace'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('⚙', d.x, d.y);
+        }
+        else {
+            if (d.type === 'item') ctx.fillStyle = '#4caf50'; else if (d.type === 'gold') ctx.fillStyle = '#ffd54f'; else ctx.fillStyle = d.type === 'hp' ? '#e53935' : '#ab47bc';
+            ctx.beginPath(); ctx.arc(d.x, d.y, d.radius, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = d.type === 'gold' ? '#000' : '#fff'; ctx.font = '14px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            let icon = d.type === 'hp' ? '+' : d.type === 'dmg' ? '⚔' : d.type === 'gold' ? '$' : '♦'; ctx.fillText(icon, d.x, d.y);
+        }
+    }
+
+    for (const ef of effects) {
+        if (ef.type === 'puddle' || ef.type === 'fire_puddle' || ef.type === 'thorn_patch' || ef.type === 'spore_cloud' || ef.type === 'consecrated_ground' || ef.type === 'smoke_bomb') continue; 
+        
+        ctx.globalAlpha = ef.isWarning ? 1.0 : ef.life / ef.maxLife; 
+        if (drawSkillEffect(ef)) { ctx.globalAlpha = 1.0; continue; } // skillfx.js
+        
+        if (ef.type === 'meteor_drop') {
+            if (!ef.rockPoints) {
+                ef.rockPoints = [];
+                let points = 7 + Math.floor(Math.random() * 4);
+                for(let i=0; i<points; i++) {
+                    let ang = (Math.PI*2/points) * i;
+                    let r = ef.radius * (0.7 + Math.random() * 0.4);
+                    ef.rockPoints.push({r: r, a: ang});
+                }
+            }
+
+            let progress = 1.0 - (ef.life / ef.maxLife);
+            let curY = ef.y - 800 + (800 * progress);
+            let curX = ef.x + 400 - (400 * progress);
+            
+            let tailAng = Math.atan2(-800, 400); 
+            let perp = tailAng + Math.PI/2;
+            
+            ctx.fillStyle = 'rgba(255, 87, 34, 0.6)';
+            ctx.beginPath();
+            ctx.moveTo(curX + Math.cos(perp)*ef.radius, curY + Math.sin(perp)*ef.radius);
+            ctx.lineTo(curX + 150, curY - 300); // Tail stretches away from impact
+            ctx.lineTo(curX - Math.cos(perp)*ef.radius, curY - Math.sin(perp)*ef.radius);
+            ctx.closePath();
+            ctx.fill();
+
+            // Draw the jagged rock
+            ctx.fillStyle = '#3e2723';
+            ctx.strokeStyle = ef.color;
+            ctx.lineWidth = 3;
+            
+            ctx.save();
+            ctx.translate(curX, curY);
+            ctx.rotate(progress * Math.PI * 2); // Spins violently as it falls
+
+            ctx.beginPath();
+            for(let i=0; i<ef.rockPoints.length; i++) {
+                let px = Math.cos(ef.rockPoints[i].a) * ef.rockPoints[i].r;
+                let py = Math.sin(ef.rockPoints[i].a) * ef.rockPoints[i].r;
+                if(i===0) ctx.moveTo(px, py);
+                else ctx.lineTo(px, py);
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            // Draw inner glowing magma cracks
+            if(ef.rockPoints.length >= 4) {
+                ctx.strokeStyle = '#ffca28';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(Math.cos(ef.rockPoints[0].a)*ef.rockPoints[0].r*0.4, Math.sin(ef.rockPoints[0].a)*ef.rockPoints[0].r*0.4);
+                ctx.lineTo(0, 0);
+                ctx.lineTo(Math.cos(ef.rockPoints[3].a)*ef.rockPoints[3].r*0.4, Math.sin(ef.rockPoints[3].a)*ef.rockPoints[3].r*0.4);
+                ctx.stroke();
+            }
+            ctx.restore();
+        } else if (ef.type === 'crater') {
+            if (!ef.cracks) {
+                ef.cracks = [];
+                let numBranches = 4 + Math.floor(Math.random() * 4); 
+                for(let i = 0; i < numBranches; i++) {
+                    let angle = (Math.PI*2/numBranches) * i + (Math.random()*0.5 - 0.25);
+                    let currentRadius = 0;
+                    let path = [{r: 0, a: angle}];
+                    let maxR = ef.radius;
+                    while (currentRadius < maxR) {
+                        currentRadius += maxR/4 + Math.random()*(maxR/4);
+                        angle += (Math.random() - 0.5) * 1.2; 
+                        path.push({r: Math.min(currentRadius, maxR), a: angle});
+                        
+                        if (Math.random() < 0.4 && currentRadius < maxR*0.8) {
+                            let subPath = [{r: currentRadius, a: angle}];
+                            let subAngle = angle + (Math.random() < 0.5 ? 1 : -1) * (0.6 + Math.random()*0.4);
+                            subPath.push({r: currentRadius + maxR/2.5, a: subAngle});
+                            ef.cracks.push(subPath);
+                        }
+                    }
+                    ef.cracks.push(path);
+                }
+            }
+            
+            ctx.lineJoin = 'miter';
+            
+            ctx.strokeStyle = `rgba(15, 15, 15, ${ef.life/ef.maxLife})`; 
+            ctx.lineWidth = 14 * (ef.life/ef.maxLife);
+            ctx.beginPath();
+            for (let path of ef.cracks) {
+                for (let j=0; j<path.length; j++) {
+                    let px = ef.x + Math.cos(path[j].a) * path[j].r;
+                    let py = ef.y + Math.sin(path[j].a) * path[j].r;
+                    if (j === 0) ctx.moveTo(px, py);
+                    else ctx.lineTo(px, py);
+                }
+            }
+            ctx.stroke();
+
+            ctx.strokeStyle = ef.color; 
+            ctx.lineWidth = 4 * (ef.life/ef.maxLife);
+            ctx.stroke();
+        }
+        else if (ef.type === 'iron_bulwark') {
+            ctx.strokeStyle = ef.color; ctx.lineWidth = 4;
+            ctx.beginPath();
+            for(let i=0; i<6; i++) {
+                let ang = (Math.PI*2/6) * i + (ef.life * 2);
+                let px = ef.x + Math.cos(ang) * ef.radius;
+                let py = ef.y + Math.sin(ang) * ef.radius;
+                if(i===0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+            }
+            ctx.closePath(); ctx.stroke();
+            ctx.fillStyle = ef.color; ctx.globalAlpha = (ef.life/ef.maxLife) * 0.3; ctx.fill();
+        }
+        else if (ef.type === 'flames') {
+            ctx.fillStyle = ef.color;
+            ctx.beginPath(); ctx.moveTo(ef.x, ef.y);
+            ctx.arc(ef.x, ef.y, ef.radius, ef.angle - ef.spread/2, ef.angle + ef.spread/2); ctx.closePath(); ctx.fill();
+            ctx.fillStyle = '#ffca28';
+            ctx.beginPath(); ctx.moveTo(ef.x, ef.y);
+            ctx.arc(ef.x, ef.y, ef.radius*0.6, ef.angle - ef.spread/3, ef.angle + ef.spread/3); ctx.closePath(); ctx.fill();
+        }
+        else if (ef.type === 'fiery_explosion') {
+            let p = 1.0 - (ef.life / ef.maxLife);
+            ctx.fillStyle = `rgba(255, 61, 0, ${ef.life/ef.maxLife})`;
+            ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.radius * p, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = `rgba(255, 152, 0, ${ef.life/ef.maxLife})`;
+            ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.radius * p * 0.7, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = `rgba(255, 235, 59, ${ef.life/ef.maxLife})`;
+            ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.radius * p * 0.4, 0, Math.PI*2); ctx.fill();
+        }
+        else if (ef.type === 'random_ice_spikes') {
+            ctx.fillStyle = ef.color; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1;
+            for (let s of ef.spikes) {
+                let prog = ef.life / ef.maxLife;
+                let height = Math.sin(prog * Math.PI) * s.size * 2; 
+                ctx.beginPath();
+                ctx.moveTo(ef.x + s.xOffset, ef.y + s.yOffset - height);
+                ctx.lineTo(ef.x + s.xOffset - s.size*0.5, ef.y + s.yOffset);
+                ctx.lineTo(ef.x + s.xOffset + s.size*0.5, ef.y + s.yOffset);
+                ctx.closePath(); ctx.fill(); ctx.stroke();
+            }
+        }
+        else if (ef.type === 'wind_swirl') {
+            ctx.strokeStyle = ef.color; ctx.lineWidth = 4;
+            let swirlAng = (ef.maxLife - ef.life) * 10;
+            ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.radius, swirlAng, swirlAng + Math.PI); ctx.stroke();
+            ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.radius*0.6, swirlAng + Math.PI/2, swirlAng + Math.PI/2 + Math.PI); ctx.stroke();
+        }
+        else if (ef.type === 'sparkle_poof') {
+            ctx.fillStyle = ef.color;
+            for(let i=0; i<6; i++) {
+                let ang = (Math.PI*2/6) * i;
+                ctx.beginPath(); ctx.arc(ef.x + Math.cos(ang)*ef.radius, ef.y + Math.sin(ang)*ef.radius, 4, 0, Math.PI*2); ctx.fill();
+            }
+        }
+        else if (ef.type === 'v_slash') {
+            ctx.strokeStyle = ef.color; ctx.lineWidth = 6; ctx.lineCap = 'round';
+            ctx.beginPath(); 
+            ctx.moveTo(ef.x + Math.cos(ef.angle - 0.6)*ef.length, ef.y + Math.sin(ef.angle - 0.6)*ef.length);
+            ctx.lineTo(ef.x, ef.y);
+            ctx.lineTo(ef.x + Math.cos(ef.angle + 0.6)*ef.length, ef.y + Math.sin(ef.angle + 0.6)*ef.length);
+            ctx.stroke(); ctx.lineCap = 'butt';
+        }
+        else if (ef.type === 'thrust_edge') {
+            const length = Math.hypot(ef.x2 - ef.x, ef.y2 - ef.y);
+            ctx.save(); ctx.translate(ef.x, ef.y); ctx.rotate(ef.angle);
+            ctx.globalAlpha = ef.life / ef.maxLife;
+            
+            ctx.fillStyle = '#e0e0e0';
+            ctx.beginPath(); 
+            ctx.moveTo(0, -4);
+            ctx.lineTo(length, 0);
+            ctx.lineTo(0, 4);
+            ctx.closePath(); 
+            ctx.fill();
+
+            ctx.fillStyle = ef.color;
+            ctx.beginPath();
+            ctx.moveTo(0, -2);
+            ctx.lineTo(length - 10, 0);
+            ctx.lineTo(0, 2);
+            ctx.closePath();
+            ctx.fill();
+            
+            ctx.restore();
+        }
+        else if (ef.type === 'shield_burst') {
+            ctx.strokeStyle = ef.color; ctx.lineWidth = 4;
+            for(let i=0; i<4; i++) {
+                let ang = (Math.PI*2/4) * i;
+                let dx = ef.x + Math.cos(ang)*ef.radius; let dy = ef.y + Math.sin(ang)*ef.radius;
+                ctx.beginPath(); ctx.moveTo(dx - Math.cos(ang+Math.PI/2)*20, dy - Math.sin(ang+Math.PI/2)*20);
+                ctx.lineTo(dx + Math.cos(ang+Math.PI/2)*20, dy + Math.sin(ang+Math.PI/2)*20); ctx.stroke();
+            }
+        }
+        else if (ef.type === 'dash_trail') {
+            ctx.strokeStyle = ef.color; ctx.lineWidth = 16 * (ef.life/ef.maxLife); ctx.lineCap = 'round';
+            ctx.beginPath(); ctx.moveTo(ef.x1, ef.y1); ctx.lineTo(ef.x2, ef.y2); ctx.stroke(); ctx.lineCap = 'butt';
+        }
+        else if (ef.type === 'flash_line') {
+            ctx.strokeStyle = ef.color; ctx.lineWidth = ef.lineWidth || 4; ctx.lineCap = 'round';
+            ctx.beginPath(); ctx.moveTo(ef.x1, ef.y1); ctx.lineTo(ef.x2, ef.y2); ctx.stroke(); ctx.lineCap = 'butt';
+            
+            // Add a white core for brightness
+            ctx.strokeStyle = '#ffffff'; ctx.lineWidth = (ef.lineWidth || 4) / 2; ctx.lineCap = 'round';
+            ctx.beginPath(); ctx.moveTo(ef.x1, ef.y1); ctx.lineTo(ef.x2, ef.y2); ctx.stroke(); ctx.lineCap = 'butt';
+        }
+        else if (ef.type === 'circle_burst') {
+            ctx.strokeStyle = ef.color; 
+            ctx.lineWidth = 4 * (ef.life/ef.maxLife);
+            let currentRadius = ef.radius * (1.0 - ef.life/ef.maxLife);
+            ctx.beginPath(); ctx.arc(ef.x, ef.y, currentRadius, 0, Math.PI*2); ctx.stroke();
+            
+            // Also draw a fading filled core
+            ctx.fillStyle = ef.color;
+            ctx.beginPath(); ctx.arc(ef.x, ef.y, currentRadius * 0.7, 0, Math.PI*2); ctx.fill();
+        }
+        else if (ef.type === 'repulse_ring') {
+            ctx.strokeStyle = ef.color; 
+            ctx.lineWidth = 6 * (ef.life/ef.maxLife);
+            let currentRadius = ef.radius * (1.0 - (ef.life/ef.maxLife));
+            ctx.beginPath(); ctx.arc(ef.x, ef.y, currentRadius, 0, Math.PI*2); ctx.stroke();
+            
+            // Draw an extra inner ring to look cooler but not completely filled
+            ctx.lineWidth = 2 * (ef.life/ef.maxLife);
+            ctx.beginPath(); ctx.arc(ef.x, ef.y, currentRadius * 0.85, 0, Math.PI*2); ctx.stroke();
+        }
+        else if (ef.type === 'valerius_chain') {
+            ctx.strokeStyle = '#757575'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(ef.x1, ef.y1); ctx.lineTo(ef.x2, ef.y2); ctx.stroke();
+            let ang = Math.atan2(ef.y2 - ef.y1, ef.x2 - ef.x1);
+            ctx.save(); ctx.translate(ef.x2, ef.y2); ctx.rotate(ang);
+            ctx.fillStyle = '#bdbdbd';
+            ctx.beginPath(); ctx.moveTo(20, 0); ctx.lineTo(0, -10); ctx.lineTo(0, 10); ctx.closePath(); ctx.fill();
+            ctx.restore();
+        }
+        else if (ef.type === 'grapple_chain') {
+            ctx.strokeStyle = ef.color; ctx.lineWidth = 2;
+            let [dx, dy, dist] = getVector(ef.x1, ef.y1, ef.x2, ef.y2);
+            ctx.beginPath(); ctx.moveTo(ef.x1, ef.y1); ctx.lineTo(ef.x2, ef.y2); ctx.stroke();
+            ctx.save(); ctx.translate(ef.x2, ef.y2); ctx.rotate(Math.atan2(dy, dx));
+            ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-10, -10); ctx.lineTo(-5, -15); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-10, 10); ctx.lineTo(-5, 15); ctx.stroke();
+            ctx.restore();
+        }
+        else if (ef.type === 'lightning') {
+            ctx.strokeStyle = ef.color; ctx.lineWidth = 3;
+            let segments = 5; let [dx, dy, dist] = getVector(ef.x1, ef.y1, ef.x2, ef.y2);
+            ctx.beginPath(); ctx.moveTo(ef.x1, ef.y1);
+            for(let i=1; i<segments; i++) {
+                let nx = ef.x1 + (dx/dist)*(dist*(i/segments)) + (Math.random()-0.5)*30;
+                let ny = ef.y1 + (dy/dist)*(dist*(i/segments)) + (Math.random()-0.5)*30;
+                ctx.lineTo(nx, ny);
+            }
+            ctx.lineTo(ef.x2, ef.y2); ctx.stroke();
+        }
+        else if (ef.type === 'radiant_flash') {
+            ctx.save();
+            ctx.translate(ef.x, ef.y);
+            ctx.rotate(ef.angle);
+            let prog = ef.life / ef.maxLife;
+            ctx.fillStyle = ef.color;
+            ctx.globalAlpha = prog * 0.8;
+            ctx.beginPath();
+            ctx.moveTo(0, -ef.width/2);
+            ctx.lineTo(ef.length, 0);
+            ctx.lineTo(0, ef.width/2);
+            ctx.closePath();
+            ctx.fill();
+            
+            // core
+            ctx.fillStyle = '#ffffff';
+            ctx.globalAlpha = prog;
+            ctx.beginPath();
+            ctx.moveTo(0, -ef.width/4);
+            ctx.lineTo(ef.length * 0.8, 0);
+            ctx.lineTo(0, ef.width/4);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+        }
+        else if (ef.type === 'void_spike_cascade') {
+            ctx.save();
+            ctx.translate(ef.x, ef.y);
+            ctx.rotate(ef.angle);
+            let progress = 1.0 - (ef.life/ef.maxLife);
+            ctx.strokeStyle = ef.color;
+            ctx.fillStyle = ef.color;
+            
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(ef.length * Math.min(1.0, progress * 2), 0);
+            ctx.stroke();
+
+            for (let i = 1; i <= 6; i++) {
+                let d = (i / 6) * ef.length;
+                if (progress * ef.length * 1.5 >= d) {
+                    let a = 1.0 - ((progress * ef.length * 1.5 - d) / 100); 
+                    if(a<0) a=0; if(a>1) a=1;
+                    ctx.globalAlpha = a;
+                    ctx.beginPath();
+                    ctx.moveTo(d - ef.width/3, 0);
+                    ctx.lineTo(d, -ef.width);
+                    ctx.lineTo(d + ef.width/3, 0);
+                    ctx.lineTo(d, ef.width);
+                    ctx.closePath();
+                    ctx.fill();
+                }
+            }
+            ctx.restore();
+        }
+        else if (ef.type === 'divine_ray_channel') {
+            ctx.save();
+            ctx.translate(ef.x, ef.y);
+            ctx.rotate(ef.angle);
+            ctx.fillStyle = ef.color;
+            // Pulsate transparency
+            ctx.globalAlpha = 0.4 + Math.sin(ef.life * 30) * 0.2;
+            ctx.fillRect(0, -ef.width/2, ef.length, ef.width);
+            
+            ctx.fillStyle = '#fff';
+            ctx.globalAlpha = 0.8 + Math.sin(ef.life * 30) * 0.2;
+            ctx.fillRect(0, -ef.width/6, ef.length, ef.width/3);
+            ctx.restore();
+            ctx.globalAlpha = 1.0;
+        }
+        else if (ef.type === 'circle') { 
+            ctx.fillStyle = ef.color; 
+            ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.radius, 0, Math.PI*2); 
+            if (ef.isWarning) { 
+                ctx.strokeStyle = ef.color; ctx.lineWidth = 2; ctx.stroke(); 
+                if (!ef.outlineOnly) ctx.fill();
+            } else { ctx.fill(); }
+        } 
+        else if (ef.type === 'line') { ctx.strokeStyle = ef.color; ctx.lineWidth = ef.lineWidth || 40; ctx.beginPath(); ctx.moveTo(ef.x1, ef.y1); ctx.lineTo(ef.x2, ef.y2); ctx.stroke(); } 
+        else if (ef.type === 'cone') { ctx.fillStyle = ef.color; ctx.beginPath(); ctx.moveTo(ef.x, ef.y); ctx.arc(ef.x, ef.y, ef.radius, ef.angle - ef.spread/2, ef.angle + ef.spread/2); ctx.closePath(); ctx.fill(); }
+        else if (ef.type === 'slash') {
+            const r = (ef.radius || 50) * 0.8, sweep = Math.PI / 2.5;
+            ctx.fillStyle = ef.color || '#e0e0e0';
+            drawCrescent(ef.x, ef.y, r, ef.angle - sweep, ef.angle + sweep, 22 * (ef.life / ef.maxLife) + 4); ctx.fill();
+            ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.arc(ef.x, ef.y, r, ef.angle - sweep * 0.8, ef.angle + sweep * 0.8); ctx.stroke();
+        }
+        else if (ef.type === 'precision_slash') {
+            ctx.save();
+            ctx.translate(ef.x, ef.y);
+            
+            // Faint gradient fill for the whole slash area
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.arc(0, 0, ef.radius, ef.angle - Math.PI/3.5, ef.angle + Math.PI/3.5);
+            ctx.closePath();
+            
+            let grad = ctx.createRadialGradient(0, 0, ef.radius * 0.3, 0, 0, ef.radius);
+            grad.addColorStop(0, 'rgba(255,255,255,0)');
+            grad.addColorStop(0.8, ef.color || '#00e5ff');
+            grad.addColorStop(1, 'rgba(255,255,255,0)');
+            
+            ctx.fillStyle = grad;
+            ctx.globalAlpha = 0.6 * (ef.life/ef.maxLife);
+            ctx.fill();
+
+            // Sharp outer edge
+            ctx.globalAlpha = 1.0;
+            ctx.beginPath();
+            ctx.arc(0, 0, ef.radius, ef.angle - Math.PI/3.5, ef.angle + Math.PI/3.5);
+            ctx.lineWidth = 4 * (ef.life/ef.maxLife);
+            ctx.strokeStyle = '#ffffff';
+            ctx.stroke();
+            
+            ctx.restore();
+        }
+        else if (ef.type === 'precision_thrust') {
+            ctx.save();
+            ctx.translate(ef.x, ef.y);
+            ctx.rotate(ef.angle);
+            ctx.fillStyle = ef.color;
+            ctx.globalAlpha = (ef.life/ef.maxLife);
+            ctx.beginPath();
+            ctx.moveTo(10, -5); // base
+            ctx.lineTo(ef.radius, 0); // sharp tip
+            ctx.lineTo(10, 5); // base
+            ctx.fill();
+            let grad = ctx.createLinearGradient(0, 0, ef.radius, 0);
+            grad.addColorStop(0, 'rgba(255,255,255,0)');
+            grad.addColorStop(0.5, '#ffffff');
+            grad.addColorStop(1, 'rgba(0, 229, 255, 0)');
+            ctx.strokeStyle = grad;
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(ef.radius + 20, 0);
+            ctx.stroke();
+            ctx.restore();
+        }
+        else if (ef.type === 'bear_trap') { ctx.fillStyle = ef.color; ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.radius, 0, Math.PI*2); ctx.fill(); ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.radius/2, 0, Math.PI*2); ctx.fill(); }
+        else if (ef.type === 'claw_swipe') {
+            // Three tapered claw rakes
+            ctx.fillStyle = ef.color || '#c62828';
+            for (let c = -1; c <= 1; c++) {
+                const offsetAngle = c * 0.15;
+                drawCrescent(ef.x, ef.y, ef.radius * 0.8 + c * 20, ef.angle - Math.PI/3 + offsetAngle, ef.angle + Math.PI/3 + offsetAngle, 10 * (ef.life / ef.maxLife) + 2);
+                ctx.fill();
+            }
+        }
+        else if (ef.type === 'wolf_bite') drawWolfBite(ef); // fx.js
+        else if (ef.type === 'storm_cyclone') {
+            ctx.save();
+            ctx.translate(ef.x, ef.y);
+            ctx.rotate(Date.now() / 50 + ef.angle);
+            ctx.globalAlpha = ef.life / ef.maxLife;
+            // Draw multiple massive curved wind/slash blades
+            for (let i = 0; i < 4; i++) {
+                ctx.rotate(Math.PI / 2);
+                let grad = ctx.createLinearGradient(0, 0, ef.radius, 0);
+                grad.addColorStop(0, 'rgba(0, 229, 255, 0.8)');
+                grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                ctx.fillStyle = grad;
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.arc(0, 0, ef.radius, 0, Math.PI / 2.5);
+                ctx.closePath();
+                ctx.fill();
+            }
+            ctx.restore();
+        }
+        else if (ef.type === 'text') { ctx.fillStyle = ef.color; ctx.font = '16px monospace'; ctx.textAlign = 'center'; ctx.fillText(ef.text, ef.x, ef.y - (1.0 - (ef.life/ef.maxLife)) * 30); }
+        else if (ef.type === 'whirlwind') {
+            ctx.save();
+            ctx.translate(ef.x, ef.y);
+            ctx.rotate((1.0 - ef.life/ef.maxLife) * Math.PI * 8); // Spin rapidly
+            ctx.strokeStyle = ef.color;
+            ctx.lineWidth = 15 * (ef.life/ef.maxLife);
+            ctx.lineCap = 'round';
+            for (let i = 0; i < 4; i++) {
+                ctx.beginPath();
+                ctx.arc(0, 0, ef.radius * (0.5 + 0.5 * (ef.life/ef.maxLife)), (i * Math.PI/2), (i * Math.PI/2) + Math.PI/3);
+                ctx.stroke();
+            }
+            ctx.filter = 'blur(4px)';
+            ctx.fillStyle = 'rgba(0, 229, 255, 0.2)';
+            ctx.beginPath();
+            ctx.arc(0, 0, ef.radius, 0, Math.PI*2);
+            ctx.fill();
+            ctx.restore();
+        }
+        ctx.globalAlpha = 1.0;
+    }
+
+    drawPaladinWorld();
+
+    for (const e of enemies) {
+        if (e.dead || e.state === 'split') continue;
+        ctx.fillStyle = e.hitFlash > 0 ? '#ffffff' : (e.renderColor || e.color);
+        
+        if (e.type === 'shield' || e.type === 'boss_valerius') {
+            ctx.beginPath(); ctx.arc(e.x, e.y, e.size/2, 0, Math.PI*2); ctx.fill();
+            if (e.shieldHp > 0) {
+                ctx.save(); ctx.translate(e.x, e.y); ctx.rotate(e.facingAngle);
+                ctx.fillStyle = '#546e7a'; ctx.fillRect(8, -20, 10, 40);
+                ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(8, -20, 10, 40);
+                ctx.restore();
+            }
+        } 
+        else if (e.type === 'thief') {
+            ctx.fillRect(e.x - e.size/2, e.y - e.size/2, e.size, e.size);
+            ctx.fillStyle = '#9e9e9e';
+            ctx.beginPath(); ctx.moveTo(e.x + 10, e.y); ctx.lineTo(e.x + 20, e.y - 5); ctx.lineTo(e.x + 20, e.y + 5); ctx.fill();
+        }
+        else if (e.type === 'slime_ranged' || e.type.startsWith('boss') || e.type === 'voltaic_ooze' || e.type === 'toxic_sludge' || e.type === 'amalgam_minion' || e.type === 'caster' || e.type === 'spore_slime' || e.type === 'crystal_slime' || e.type === 'slime_warden' || e.type === 'queen_guard') { 
+            ctx.beginPath(); ctx.arc(e.x, e.y, e.size/2, 0, Math.PI*2); ctx.fill(); 
+        } 
+        else { ctx.fillRect(e.x - e.size/2, e.y - e.size/2, e.size, e.size); }
+        
+        drawEnemyStatus(e); // skillfx_e.js
+        drawRmbEnemy(e); // skillfx_rmb.js: Net Shot wrap
+        if (e.markAngle !== undefined) drawDeathMarkSigil(e); // skillfx_ult.js
+
+        if (!e.type.startsWith('boss')) { ctx.fillStyle = '#000'; ctx.fillRect(e.x - e.size/2, e.y - e.size/2 - 12, e.size, 4); ctx.fillStyle = '#4caf50'; ctx.fillRect(e.x - e.size/2, e.y - e.size/2 - 12, e.size * (e.hp/e.maxHp), 4); }
+    }
+
+    for (const p of projectiles) {
+        if (!p.isEnemy && drawPlayerProjectile(p)) continue; // weapons.js
+        if (p.type === 'turret') {
+            ctx.fillStyle = '#424242'; ctx.fillRect(p.x - 12, p.y - 12, 24, 24);
+            ctx.strokeStyle = '#ff9800'; ctx.lineWidth = 2; ctx.strokeRect(p.x - 12, p.y - 12, 24, 24);
+            ctx.fillStyle = '#9e9e9e'; ctx.beginPath(); ctx.arc(p.x, p.y, 8, 0, Math.PI*2); ctx.fill();
+            ctx.strokeStyle = '#e0e0e0'; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x + Math.cos(p.angle)*18, p.y + Math.sin(p.angle)*18); ctx.stroke();
+        } else if (p.type === 'tesla_coil_trap') {
+            ctx.fillStyle = '#1a237e'; ctx.beginPath(); ctx.arc(p.x, p.y, 10, 0, Math.PI*2); ctx.fill();
+            ctx.strokeStyle = '#00e5ff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(p.x, p.y, 14, 0, Math.PI*2); ctx.stroke();
+            if (Math.random() < 0.3) { ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x + (Math.random()-0.5)*20, p.y + (Math.random()-0.5)*20); ctx.stroke(); }
+        } else if (p.shape === 'arrow') {
+            let ang = Math.atan2(p.vy, p.vx);
+            ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(ang);
+            ctx.strokeStyle = p.color; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(-10, 0); ctx.lineTo(10, 0); ctx.stroke();
+            ctx.fillStyle = p.isEnemy ? '#ff5252' : '#e0e0e0';
+            ctx.beginPath(); ctx.moveTo(14, 0); ctx.lineTo(4, -4); ctx.lineTo(4, 4); ctx.fill();
+            ctx.strokeStyle = p.color; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(-10, 0); ctx.lineTo(-14, -4); ctx.moveTo(-10, 0); ctx.lineTo(-14, 4); ctx.stroke();
+            ctx.restore();
+        } else if (p.shape === 'knife') {
+            let ang = Math.atan2(p.vy, p.vx);
+            ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(ang);
+            ctx.fillStyle = p.color;
+            ctx.beginPath(); ctx.moveTo(8, 0); ctx.lineTo(-4, -4); ctx.lineTo(-8, 0); ctx.lineTo(-4, 4); ctx.closePath(); ctx.fill();
+            ctx.restore();
+        } else if (p.shape === 'spear') {
+            let ang = Math.atan2(p.vy, p.vx);
+            ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(ang);
+            ctx.strokeStyle = '#5d4037'; ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.moveTo(-20, 0); ctx.lineTo(10, 0); ctx.stroke();
+            ctx.fillStyle = '#bdbdbd'; 
+            ctx.beginPath(); ctx.moveTo(15, 0); ctx.lineTo(5, -4); ctx.lineTo(5, 4); ctx.closePath(); ctx.fill();
+            ctx.restore();
+        } else if (p.shape === 'bullet') {
+            let ang = Math.atan2(p.vy, p.vx);
+            ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(ang);
+            ctx.fillStyle = p.color; ctx.beginPath(); ctx.roundRect(-6, -3, 12, 6, 3); ctx.fill();
+            ctx.restore();
+        } else if (p.type === 'censer_pulse') {
+            ctx.fillStyle = p.color;
+            ctx.shadowBlur = 10; ctx.shadowColor = p.color;
+            ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2); ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.strokeStyle = '#fff'; ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(p.x - p.radius * 1.5, p.y); ctx.lineTo(p.x + p.radius * 1.5, p.y);
+            ctx.moveTo(p.x, p.y - p.radius * 1.5); ctx.lineTo(p.x, p.y + p.radius * 1.5);
+            ctx.stroke();
+        } else if (p.shape === 'hound') {
+            let ang = Math.atan2(p.vy, p.vx);
+            ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(ang);
+            ctx.fillStyle = p.color; 
+            ctx.beginPath(); ctx.ellipse(0, 0, 14, 8, 0, 0, Math.PI*2); ctx.fill(); 
+            ctx.beginPath(); ctx.arc(10, -5, 6, 0, Math.PI*2); ctx.fill(); 
+            ctx.fillRect(-12, 4, 4, 8); ctx.fillRect(8, 4, 4, 8); 
+            ctx.beginPath(); ctx.moveTo(-10, -4); ctx.lineTo(-18, -8); ctx.lineWidth = 3; ctx.strokeStyle = p.color; ctx.stroke(); 
+            ctx.restore();
+        } else if (p.shape === 'bolas') {
+            p.spin = (p.spin || 0) + 0.5;
+            ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.spin);
+            ctx.strokeStyle = '#8d6e63'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(-15, 0); ctx.lineTo(15, 0); ctx.stroke();
+            ctx.fillStyle = '#4e342e';
+            ctx.beginPath(); ctx.arc(-15, 0, 6, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(15, 0, 6, 0, Math.PI*2); ctx.fill();
+            ctx.restore();
+        } else if (p.shape === 'slime_blob') {
+            ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(p.x + Math.cos(p.life*10)*4, p.y + Math.sin(p.life*10)*4, p.radius*0.6, 0, Math.PI*2); ctx.fill();
+        } else if (p.shape === 'net') {
+            ctx.save(); ctx.translate(p.x, p.y); ctx.rotate((p.life * 5) % (Math.PI * 2));
+            ctx.strokeStyle = p.color; ctx.lineWidth = 2;
+            let sz = p.radius;
+            ctx.beginPath();
+            for(let i= -sz; i <= sz; i += sz/2) {
+                ctx.moveTo(i, -sz); ctx.lineTo(i, sz);
+                ctx.moveTo(-sz, i); ctx.lineTo(sz, i);
+            }
+            ctx.stroke();
+            ctx.restore();
+        } else if (p.shape === 'fireball' || p.type === 'fireball') {
+            let ang = Math.atan2(p.vy, p.vx);
+            ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(ang);
+            ctx.fillStyle = p.color; ctx.shadowBlur = 15; ctx.shadowColor = p.color;
+            ctx.beginPath(); ctx.arc(0, 0, p.radius, -Math.PI/2, Math.PI/2); ctx.lineTo(-p.radius * 2.5, 0); ctx.closePath(); ctx.fill();
+            ctx.fillStyle = '#ffeb3b'; ctx.shadowBlur = 0;
+            ctx.beginPath(); ctx.arc(2, 0, p.radius * 0.5, 0, Math.PI*2); ctx.fill();
+            ctx.restore();
+        } else if (p.shape === 'aura') {
+            ctx.strokeStyle = p.color;
+            ctx.lineWidth = 2 + Math.sin(p.life * 5) * 2;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.fillStyle = p.color;
+            ctx.globalAlpha = 0.2 + Math.sin(p.life * 5) * 0.1;
+            ctx.fill();
+            ctx.globalAlpha = 1.0;
+            
+            // Add some spinning runes or an inner ring
+            ctx.save();
+            ctx.translate(p.x, p.y);
+            ctx.rotate(p.life * 2);
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([10, 15]);
+            ctx.beginPath();
+            ctx.arc(0, 0, p.radius * 0.8, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.restore();
+        } else if (p.shape === 'mini_sword') {
+            ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.angle || 0);
+            ctx.fillStyle = p.color || '#00bcd4';
+            ctx.strokeStyle = '#00e5ff'; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(10, 0); ctx.lineTo(-5, -4); ctx.lineTo(-5, 4); ctx.closePath(); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = '#e0f7fa'; ctx.beginPath(); ctx.moveTo(7, 0); ctx.lineTo(-3, -1); ctx.lineTo(-3, 1); ctx.closePath(); ctx.fill();
+            ctx.restore();
+        } else if (p.shape === 'shield') {
+            p.spinAngle = (p.spinAngle || 0) + 0.3; 
+            ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.spinAngle);
+            ctx.fillStyle = '#78909c'; ctx.beginPath(); ctx.arc(0, 0, p.radius, 0, Math.PI*2); ctx.fill();
+            ctx.strokeStyle = '#cfd8dc'; ctx.lineWidth = 3; ctx.stroke();
+            ctx.fillStyle = '#ffca28'; ctx.beginPath(); ctx.arc(0, 0, p.radius * 0.4, 0, Math.PI*2); ctx.fill();
+            ctx.restore();
+        } else if (p.shape === 'phantom_blade_proj') {
+            let ang = Math.atan2(p.vy, p.vx);
+            ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(ang);
+            ctx.globalAlpha = 0.8;
+            ctx.fillStyle = p.color;
+            ctx.filter = 'blur(4px)';
+            ctx.beginPath(); ctx.ellipse(-20, 0, 60, 15, 0, 0, Math.PI*2); ctx.fill();
+            ctx.filter = 'none';
+            ctx.globalAlpha = 1.0;
+            // Draw blade
+            let bladeGrad = ctx.createLinearGradient(-60, 0, 40, 0);
+            bladeGrad.addColorStop(0, '#e0f7fa'); bladeGrad.addColorStop(0.3, p.color); bladeGrad.addColorStop(1, p.color);
+            ctx.fillStyle = bladeGrad;
+            ctx.beginPath(); ctx.moveTo(-50, 0); ctx.lineTo(-40, -10); ctx.lineTo(40, 0); ctx.lineTo(-40, 10); ctx.closePath(); ctx.fill();
+            // Core
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath(); ctx.moveTo(-45, 0); ctx.lineTo(-38, -4); ctx.lineTo(30, 0); ctx.lineTo(-38, 4); ctx.closePath(); ctx.fill();
+            ctx.restore();
+        } else {
+            ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI*2); ctx.fill();
+            ctx.shadowBlur = 10; ctx.shadowColor = p.color; ctx.fill(); ctx.shadowBlur = 0;
+        }
+    }
+
+    if (player.hp > 0 && gameState !== STATE.MENU && gameState !== STATE.DEAD) {
+        if (player.grappleTarget) drawGrappleCable(player.grappleTarget); // skillfx_space.js
+
+        // Face the way you're dashing; otherwise face the cursor
+        const spin = ultFacing(); // skillfx_ult.js: Blade Whirlwind spins the hero
+        const aimAngle = player.dash ? player.dash.angle : spin !== null ? spin : Math.atan2(mouseY - player.y, mouseX - player.x);
+        updatePlayerSpriteAnim();
+        drawPlayerShadow(aimAngle);
+        drawDashGhosts(); // skillfx_space.js
+        ctx.lineWidth = 4;
+        
+        if (activeClass && activeClass.name === 'Spellweaver' && player.arcaneResonance) { ctx.strokeStyle = '#2196f3'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(player.x, player.y, player.radius + 8, 0, Math.PI*2); ctx.stroke(); }
+        
+        drawUltAuraBack(aimAngle); // skillfx_ult.js: Ascension wings, Overclock heat
+
+        // Leaps lift the hero (and everything they carry) off the ground, above their shadow
+        const lift = player.z || 0;
+        if (lift > 0) { const s = 1 + lift / 300; ctx.save(); ctx.translate(player.x, player.y - lift); ctx.scale(s, s); ctx.translate(-player.x, -player.y); }
+        drawPlayerSprite(aimAngle); // sprites.js (also renders the Druid's Wild Form)
+        drawPlayerWeapon(aimAngle); // weapons.js
+
+        drawPlayerShield(); // skillfx_e.js
+        if (lift > 0) ctx.restore();
+        drawUltAuraFront(aimAngle); // skillfx_ult.js: halo, Overclock gauge
+
+        // Machinist Decoy Projection hologram
+        if (player.phantomDecoy && player.phantomDecoy.life > 0) drawDecoyHologram(player.phantomDecoy, aimAngle); // skillfx_space.js
+    } 
+
+    drawFx(); // fx.js particles
+    drawUltOverlay(); // skillfx_ult.js: things in the air above everything
+    ctx.restore(); // end camera shake
+
+    const boss = enemies.find(e => !e.dead && e.type.startsWith('boss'));
+    if (boss && boss.state !== 'death_throes') {
+        const bw = 400; const bh = 20; const bx = canvas.width/2 - bw/2; const by = 30;
+        ctx.fillStyle = '#111'; ctx.fillRect(bx, by, bw, bh); ctx.fillStyle = '#ffeb3b'; ctx.fillRect(bx, by, bw * (boss.hp/boss.maxHp), bh);
+        ctx.strokeStyle = '#555'; ctx.lineWidth = 2; ctx.strokeRect(bx, by, bw, bh); ctx.fillStyle = '#fff'; ctx.font = '16px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillText(`Wave ${wave} Boss`, canvas.width/2, by - 5);
+    }
+
+    if (gameState === STATE.PAUSED) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.fillStyle = '#fff'; ctx.font = '48px monospace'; ctx.textAlign = 'center'; ctx.fillText('PAUSED', canvas.width/2, canvas.height/2);
+    }
+}
+
+function loop() {
+    const now = performance.now(); let dt = (now - lastTime) / 1000; if (dt > 0.1) dt = 0.1; lastTime = now;
+    
+    if (gameState === STATE.PLAYING && player.hp > 0) {
+        if (hitStopTimer > 0) { hitStopTimer -= dt; } 
+        else { update(dt); }
+    }
+    
+    draw(); requestAnimationFrame(loop);
+}

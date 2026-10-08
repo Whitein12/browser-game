@@ -1,47 +1,848 @@
 {
   "dragonknight": {
-    "name": "Dragonknight", "color": "#e53935", "weapon": "sword", "baseMaxHp": 200, "baseArmor": 5, "dmgMult": 0.8, "basicAttackCD": 0.4, "basicDmg": 15,
+    "name": "Dragonknight",
+    "color": "#e53935",
+    "weapon": "sword",
+    "baseMaxHp": 200,
+    "baseArmor": 5,
+    "dmgMult": 0.8,
+    "basicAttackCD": 0.4,
+    "basicDmg": 15,
     "passive": "Frenzy: Melee hits grant +2% DMG and +2% Attack Speed (Max 10 stacks). Fades after 3s out of combat.",
-    "rareWeapon": { "name": "Wyrmbane Greatsword", "desc": "+100% DMG | RMB: Wyrm Strike", "rmbSkill": "Wyrm Strike" },
-    "rareArmor": { "name": "Dragon Scale Plate", "desc": "+150 Max HP | Heals 5 HP on kill" },
-    "rareAmulet": { "name": "Heart of the Mountain", "desc": "Stomp stuns for 4s & grants +50% Move Speed" },
-    "rareBoots": { "name": "Earthshaker Treads", "desc": "+20 Move Speed | Reduces Leap CD by 2.0s" },
-    "rareGloves": { "name": "Titan Gauntlets", "desc": "+10% Attack Speed | Basic attacks knock enemies back" },
+    "rareWeapon": {
+      "name": "Wyrmbane Greatsword",
+      "desc": "+100% DMG | RMB: Wyrm Strike",
+      "rmbSkill": "Wyrm Strike"
+    },
+    "rareArmor": {
+      "name": "Dragon Scale Plate",
+      "desc": "+240 Max HP | Heals 5 HP on kill"
+    },
+    "rareAmulet": {
+      "name": "Amulet of Power",
+      "desc": "+20% CDR | Skill cast grants +10% DMG (Stacks 5x)"
+    },
+    "rareBoots": {
+      "name": "Ethereal Treads",
+      "desc": "+50 Move Speed | No collision & 50% less DMG while moving"
+    },
+    "rareGloves": {
+      "name": "Vampiric Grips",
+      "desc": "+25% Attack Speed | Heal 2% of damage dealt"
+    },
     "skills": {
-      "1": { "name": "Shield Throw", "level": 0, "maxCd": 4.0, "baseDmg": 30, "selectedUpg": null, "upgA": { "name": "Explosive Impact", "desc": "Deals AoE damage on hit" }, "upgB": { "name": "Aegis Catch", "desc": "Catching shield grants a 50% stronger shield" } },
-      "2": { "name": "Iron Bulwark", "level": 0, "maxCd": 8.0, "baseDmg": 20, "selectedUpg": null, "upgA": { "name": "Spiked Shield", "desc": "Deals AoE damage upon activation" }, "upgB": { "name": "Adrenaline Surge", "desc": "Grants brief MS boost and frenzy stacks" } },
-      "3": { "name": "Thunder Leap", "level": 0, "maxCd": 6.0, "baseDmg": 35, "selectedUpg": null, "upgA": { "name": "Aftershock", "desc": "Leaves a zone that detonates after a delay" }, "upgB": { "name": "Shrapnel Landing", "desc": "Shoots 4 projectiles outward upon landing" } },
-      "4": { "name": "Dragon Breath", "level": 0, "maxCd": 12.0, "baseDmg": 70, "selectedUpg": null, "upgA": { "name": "Glacial Breath", "desc": "Turns blue and heavily slows enemies" }, "upgB": { "name": "Shatter Breath", "desc": "Instantly shatters all enemy shields" } }
+      "1": {
+        "name": "Shield Throw",
+        "level": 0,
+        "maxCd": 4.0,
+        "baseDmg": 30,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Explosive Impact",
+          "desc": "Deals AoE damage on hit"
+        },
+        "upgB": {
+          "name": "Aegis Catch",
+          "desc": "Catching shield grants a 50% stronger shield"
+        }
+      },
+      "2": {
+        "name": "Iron Bulwark",
+        "level": 0,
+        "maxCd": 8.0,
+        "baseDmg": 20,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Spiked Shield",
+          "desc": "Deals AoE damage upon activation"
+        },
+        "upgB": {
+          "name": "Adrenaline Surge",
+          "desc": "Grants brief MS boost and frenzy stacks"
+        }
+      },
+      "3": {
+        "name": "Thunder Leap",
+        "level": 0,
+        "maxCd": 6.0,
+        "baseDmg": 35,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Aftershock",
+          "desc": "Leaves a zone that detonates after a delay"
+        },
+        "upgB": {
+          "name": "Shrapnel Landing",
+          "desc": "Shoots 4 projectiles outward upon landing"
+        }
+      },
+      "4": {
+        "name": "Dragon Breath",
+        "level": 0,
+        "maxCd": 12.0,
+        "baseDmg": 70,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Glacial Breath",
+          "desc": "Turns blue and heavily slows enemies"
+        },
+        "upgB": {
+          "name": "Shatter Breath",
+          "desc": "Instantly shatters all enemy shields"
+        }
+      }
     }
   },
   "spellweaver": {
-    "name": "Spellweaver", "color": "#4fc3f7", "weapon": "staff", "baseMaxHp": 80, "baseArmor": 0, "dmgMult": 1.2, "basicAttackCD": 0.3, "basicDmg": 10,
+    "name": "Spellweaver",
+    "color": "#4fc3f7",
+    "weapon": "staff",
+    "baseMaxHp": 80,
+    "baseArmor": 0,
+    "dmgMult": 1.2,
+    "basicAttackCD": 0.3,
+    "basicDmg": 10,
     "passive": "Arcane Resonance: Casting spells empowers your next basic attack to explode in an AoE.",
-    "rareWeapon": { "name": "Archmagus Staff", "desc": "+100% DMG | RMB: Arcane Beam", "rmbSkill": "Arcane Beam" },
-    "rareArmor": { "name": "Robes of the Magi", "desc": "+60 Max HP | Basic attacks pierce 1 enemy" },
-    "rareAmulet": { "name": "Chronos Pendant", "desc": "Kills reduce all cooldowns by 0.5s" },
-    "rareBoots": { "name": "Aether Treads", "desc": "+20 Move Speed | +50% Blink Range" },
-    "rareGloves": { "name": "Spellbinder Wraps", "desc": "+10% Attack Speed | Basic attacks bounce once" },
+    "rareWeapon": {
+      "name": "Archmagus Staff",
+      "desc": "+100% DMG | RMB: Arcane Beam",
+      "rmbSkill": "Arcane Beam"
+    },
+    "rareArmor": {
+      "name": "Robes of the Magi",
+      "desc": "+240 Max HP | Basic attacks pierce 1 enemy"
+    },
+    "rareAmulet": {
+      "name": "Amulet of Power",
+      "desc": "+20% CDR | Skill cast grants +10% DMG (Stacks 5x)"
+    },
+    "rareBoots": {
+      "name": "Ethereal Treads",
+      "desc": "+50 Move Speed | No collision & 50% less DMG while moving"
+    },
+    "rareGloves": {
+      "name": "Vampiric Grips",
+      "desc": "+25% Attack Speed | Heal 2% of damage dealt"
+    },
     "skills": {
-      "1": { "name": "Fireball", "level": 0, "maxCd": 2.0, "baseDmg": 25, "selectedUpg": null, "upgA": { "name": "Velocity", "desc": "+100% Projectile Speed" }, "upgB": { "name": "Scorched Earth", "desc": "Leaves a burning surface for 0.75s" } },
-      "2": { "name": "Frost Nova", "level": 0, "maxCd": 5.0, "baseDmg": 20, "selectedUpg": null, "upgA": { "name": "Deep Freeze", "desc": "Completely freezes enemies (0 Speed)" }, "upgB": { "name": "Ice Barrier", "desc": "Grants a slight personal shield" } },
-      "3": { "name": "Blink", "level": 0, "maxCd": 4.0, "baseDmg": 25, "selectedUpg": null, "upgA": { "name": "Arcane Arrival", "desc": "Shoots missile at nearest enemy" }, "upgB": { "name": "Frost Departure", "desc": "Leaves a small Frost Nova at start position" } },
-      "4": { "name": "Meteor", "level": 0, "maxCd": 10.0, "baseDmg": 120, "selectedUpg": null, "upgA": { "name": "Accelerated Drop", "desc": "Reduces impact delay by 0.25s" }, "upgB": { "name": "Echo Blast", "desc": "Smaller secondary explosion after 1.5s" } }
+      "1": {
+        "name": "Fireball",
+        "level": 0,
+        "maxCd": 2.0,
+        "baseDmg": 25,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Velocity",
+          "desc": "+100% Projectile Speed"
+        },
+        "upgB": {
+          "name": "Scorched Earth",
+          "desc": "Leaves a burning surface for 0.75s"
+        }
+      },
+      "2": {
+        "name": "Frost Nova",
+        "level": 0,
+        "maxCd": 5.0,
+        "baseDmg": 20,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Deep Freeze",
+          "desc": "Completely freezes enemies (0 Speed)"
+        },
+        "upgB": {
+          "name": "Ice Barrier",
+          "desc": "Grants a slight personal shield"
+        }
+      },
+      "3": {
+        "name": "Blink",
+        "level": 0,
+        "maxCd": 4.0,
+        "baseDmg": 25,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Arcane Arrival",
+          "desc": "Shoots missile at nearest enemy"
+        },
+        "upgB": {
+          "name": "Frost Departure",
+          "desc": "Leaves a small Frost Nova at start position"
+        }
+      },
+      "4": {
+        "name": "Meteor",
+        "level": 0,
+        "maxCd": 10.0,
+        "baseDmg": 120,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Accelerated Drop",
+          "desc": "Reduces impact delay by 0.25s"
+        },
+        "upgB": {
+          "name": "Echo Blast",
+          "desc": "Smaller secondary explosion after 1.5s"
+        }
+      }
     }
   },
   "ranger": {
-    "name": "Ranger", "color": "#81c784", "weapon": "bow", "baseMaxHp": 120, "baseArmor": 2, "dmgMult": 1.0, "basicAttackCD": 0.25, "basicDmg": 8,
+    "name": "Ranger",
+    "color": "#81c784",
+    "weapon": "bow",
+    "baseMaxHp": 120,
+    "baseArmor": 2,
+    "dmgMult": 1.0,
+    "basicAttackCD": 0.25,
+    "basicDmg": 8,
     "passive": "Fleetfoot: Continuous movement builds up momentum, granting up to +20% Damage. Stopping clears it.",
-    "rareWeapon": { "name": "Stormcaller Bow", "desc": "+100% DMG | RMB: Lightning Volley", "rmbSkill": "Lightning Volley" },
-    "rareArmor": { "name": "Windrunner Tunic", "desc": "+80 Max HP | +30% Base Move Speed" },
-    "rareAmulet": { "name": "Pendant of the Hunt", "desc": "Basic attacks fire two arrows" },
-    "rareBoots": { "name": "Zephyr Striders", "desc": "+30 Move Speed | Dash range +50%" },
-    "rareGloves": { "name": "Sniper's Grips", "desc": "+10% Attack Speed | Basic attacks pierce +1 target" },
+    "rareWeapon": {
+      "name": "Stormcaller Bow",
+      "desc": "+100% DMG | RMB: Lightning Volley",
+      "rmbSkill": "Lightning Volley"
+    },
+    "rareArmor": {
+      "name": "Windrunner Tunic",
+      "desc": "+240 Max HP | +30% Base Move Speed"
+    },
+    "rareAmulet": {
+      "name": "Amulet of Power",
+      "desc": "+20% CDR | Skill cast grants +10% DMG (Stacks 5x)"
+    },
+    "rareBoots": {
+      "name": "Ethereal Treads",
+      "desc": "+50 Move Speed | No collision & 50% less DMG while moving"
+    },
+    "rareGloves": {
+      "name": "Vampiric Grips",
+      "desc": "+25% Attack Speed | Heal 2% of damage dealt"
+    },
     "skills": {
-      "1": { "name": "Ricochet Shot", "level": 0, "maxCd": 3.0, "baseDmg": 18, "bounces": 3, "selectedUpg": null, "upgA": { "name": "Chain Reaction", "desc": "Bounces to more enemies" }, "upgB": { "name": "Barbed Tips", "desc": "Slows target and applies bleeding" } },
-      "2": { "name": "Nature's Stride", "level": 0, "maxCd": 8.0, "baseDmg": 0, "selectedUpg": null, "upgA": { "name": "Mending Winds", "desc": "Increases healing amount" }, "upgB": { "name": "Tailwind", "desc": "Increases movement speed boost" } },
-      "3": { "name": "Vault", "level": 0, "maxCd": 5.0, "baseDmg": 30, "selectedUpg": null, "upgA": { "name": "Parting Shot", "desc": "Launches an attack toward nearest enemy" }, "upgB": { "name": "Acrobatics", "desc": "Bigger jump range" } },
-      "4": { "name": "Volley", "level": 0, "maxCd": 10.0, "baseDmg": 30, "selectedUpg": null, "upgA": { "name": "Heavy Shafts", "desc": "Arrows pierce 1 enemy" }, "upgB": { "name": "Rain of Arrows", "desc": "Fires +2 additional arrows" } }
+      "1": {
+        "name": "Ricochet Shot",
+        "level": 0,
+        "maxCd": 3.0,
+        "baseDmg": 18,
+        "bounces": 3,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Chain Reaction",
+          "desc": "Bounces to more enemies"
+        },
+        "upgB": {
+          "name": "Barbed Tips",
+          "desc": "Slows target and applies bleeding"
+        }
+      },
+      "2": {
+        "name": "Nature's Stride",
+        "level": 0,
+        "maxCd": 8.0,
+        "baseDmg": 0,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Mending Winds",
+          "desc": "Increases healing amount"
+        },
+        "upgB": {
+          "name": "Tailwind",
+          "desc": "Increases movement speed boost"
+        }
+      },
+      "3": {
+        "name": "Vault",
+        "level": 0,
+        "maxCd": 5.0,
+        "baseDmg": 30,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Parting Shot",
+          "desc": "Launches an attack toward nearest enemy"
+        },
+        "upgB": {
+          "name": "Acrobatics",
+          "desc": "Bigger jump range"
+        }
+      },
+      "4": {
+        "name": "Volley",
+        "level": 0,
+        "maxCd": 10.0,
+        "baseDmg": 30,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Heavy Shafts",
+          "desc": "Heavier arrows: wider impacts that briefly slow enemies"
+        },
+        "upgB": {
+          "name": "Rain of Arrows",
+          "desc": "Looses more arrows over a larger area"
+        }
+      }
+    }
+  },
+  "nightblade": {
+    "name": "Nightblade",
+    "color": "#9c27b0",
+    "weapon": "dagger",
+    "baseMaxHp": 60,
+    "baseArmor": 1,
+    "dmgMult": 1.5,
+    "basicAttackCD": 0.3,
+    "basicDmg": 12,
+    "passive": "Expose Weakness: Periodically marks random nearby enemies. Hitting a marked enemy consumes the mark, dealing massive True Damage and granting a brief MS burst.",
+    "rareWeapon": {
+      "name": "Shadowstrike Daggers",
+      "desc": "+100% DMG | RMB: Execute (Resets on kill)",
+      "rmbSkill": "Execute"
+    },
+    "rareArmor": {
+      "name": "Nightblade's Cowl",
+      "desc": "+240 Max HP | 100% Evade for 2s when dropping below 30% HP"
+    },
+    "rareAmulet": {
+      "name": "Amulet of Power",
+      "desc": "+20% CDR | Skill cast grants +10% DMG (Stacks 5x)"
+    },
+    "rareBoots": {
+      "name": "Ethereal Treads",
+      "desc": "+50 Move Speed | No collision & 50% less DMG while moving"
+    },
+    "rareGloves": {
+      "name": "Vampiric Grips",
+      "desc": "+25% Attack Speed | Heal 2% of damage dealt"
+    },
+    "skills": {
+      "1": {
+        "name": "Fan of Knives",
+        "level": 0,
+        "maxCd": 3.0,
+        "baseDmg": 5,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Surgical Steel",
+          "desc": "Daggers pierce multiple enemies"
+        },
+        "upgB": {
+          "name": "Returning Blades",
+          "desc": "Daggers instantly return, hitting twice"
+        }
+      },
+      "2": {
+        "name": "Smoke Bomb",
+        "level": 0,
+        "maxCd": 8.0,
+        "baseDmg": 0,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Toxic Fumes",
+          "desc": "Enemies in smoke take heavy continuous poison damage"
+        },
+        "upgB": {
+          "name": "Thick Fog",
+          "desc": "Larger radius; cleanses all negative debuffs on cast"
+        }
+      },
+      "3": {
+        "name": "Phantom Dash",
+        "level": 0,
+        "maxCd": 4.0,
+        "baseDmg": 5,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Assassination",
+          "desc": "Doubles range; deals 200% more damage to marked targets"
+        },
+        "upgB": {
+          "name": "Acrobatics",
+          "desc": "Grants a second stored charge"
+        }
+      },
+      "4": {
+        "name": "Death Mark",
+        "level": 0,
+        "maxCd": 15.0,
+        "baseDmg": 80,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Bloodlust",
+          "desc": "Popping a Weak Point while active heals 10% Max HP"
+        },
+        "upgB": {
+          "name": "Chain Reaction",
+          "desc": "When a marked enemy dies, they explode and spread the mark"
+        }
+      }
+    }
+  },
+  "machinist": {
+    "name": "Machinist",
+    "color": "#ff9800",
+    "weapon": "scattergun",
+    "baseMaxHp": 140,
+    "baseArmor": 3,
+    "dmgMult": 1.0,
+    "basicAttackCD": 0.4,
+    "basicDmg": 10,
+    "passive": "Salvage Economy: 25% chance for enemies to drop Scrap on death. Scrap heals 5 HP and reduces all cooldowns by 0.5s.",
+    "rareWeapon": {
+      "name": "Underbarrel Net Gun",
+      "desc": "+100% DMG | RMB: Shoot Net",
+      "rmbSkill": "Net Shot"
+    },
+    "rareArmor": {
+      "name": "Hazard Suit",
+      "desc": "+240 Max HP | Immune to poison and slow effects"
+    },
+    "rareAmulet": {
+      "name": "Amulet of Power",
+      "desc": "+20% CDR | Skill cast grants +10% DMG (Stacks 5x)"
+    },
+    "rareBoots": {
+      "name": "Ethereal Treads",
+      "desc": "+50 Move Speed | No collision & 50% less DMG while moving"
+    },
+    "rareGloves": {
+      "name": "Vampiric Grips",
+      "desc": "+25% Attack Speed | Heal 2% of damage dealt"
+    },
+    "skills": {
+      "1": {
+        "name": "Sentry Turret",
+        "level": 0,
+        "maxCd": 6.0,
+        "baseDmg": 15,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Laser Optics",
+          "desc": "Turret fires piercing laser beams"
+        },
+        "upgB": {
+          "name": "Volatile Casing",
+          "desc": "Explodes massively when its duration expires"
+        }
+      },
+      "2": {
+        "name": "Tesla Coil",
+        "level": 0,
+        "maxCd": 8.0,
+        "baseDmg": 10,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "High Voltage",
+          "desc": "Roots enemies for 1s upon entering the field"
+        },
+        "upgB": {
+          "name": "Arc Network",
+          "desc": "Draws lightning to nearby Sentry Turrets"
+        }
+      },
+      "3": {
+        "name": "Magnetic Grapple",
+        "level": 0,
+        "maxCd": 5.0,
+        "baseDmg": 0,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Kinetic Shield",
+          "desc": "Gain a heavy shield upon grappling"
+        },
+        "upgB": {
+          "name": "Decoy Projection",
+          "desc": "Leaves a distracting hologram at the launch point"
+        }
+      },
+      "4": {
+        "name": "Overclock Protocol",
+        "level": 0,
+        "maxCd": 20.0,
+        "baseDmg": 0,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Nuclear Payload",
+          "desc": "When Overclock ends, all active turrets violently detonate"
+        },
+        "upgB": {
+          "name": "Automated Assembly",
+          "desc": "Casting instantly spawns two free Sentry Turrets at your location"
+        }
+      }
+    }
+  },
+  "swordsaint": {
+    "name": "Swordsaint",
+    "color": "#00bcd4",
+    "weapon": "phantom_blade",
+    "baseMaxHp": 100,
+    "baseArmor": 1,
+    "dmgMult": 1.2,
+    "basicAttackCD": 0.3,
+    "basicDmg": 12,
+    "passive": "Flow & Stance: Toggle stances with E. Melee strikes build Flow, boosting Airborne Blade power.",
+    "rareWeapon": {
+      "name": "Shattered Reality",
+      "desc": "+100% DMG | RMB: Phantom Wind (Emergency Dash & Sweep)",
+      "rmbSkill": "Phantom Wind"
+    },
+    "rareArmor": {
+      "name": "Saint's Silk Shroud",
+      "desc": "Taking Handheld damage grants 5% Flow. Airborne damage grants 2.5% Flow + 10% Dodge."
+    },
+    "rareAmulet": {
+      "name": "Prismatic Core",
+      "desc": "+25% Max Flow | 15% CDR"
+    },
+    "rareBoots": {
+      "name": "Windwalker Steps",
+      "desc": "+60 Move Speed | Shadow Step distance +30%"
+    },
+    "rareGloves": {
+      "name": "Aether Grips",
+      "desc": "+30% Attack Speed | Basic attacks generate 10% more Flow"
+    },
+    "skills": {
+      "1": {
+        "name": "Parry Thrust / Blade Surge",
+        "level": 0,
+        "maxCd": 4.0,
+        "baseDmg": 50,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Flawless Execution",
+          "desc": "Successful parry grants Maximum Flow and resets its cooldown. (Handheld)"
+        },
+        "upgB": {
+          "name": "Deflecting Storm",
+          "desc": "The sweep area is increased and destroying projectiles restores Flow. (Airborne)"
+        }
+      },
+      "2": {
+        "name": "Deploy / Recall (Toggle)",
+        "level": 0,
+        "maxCd": 1.0,
+        "baseDmg": 0,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Aegis Return",
+          "desc": "Recalling grants 0.5s Invulnerability. (Handheld)"
+        },
+        "upgB": {
+          "name": "Instant Flow",
+          "desc": "Deploying grants 30% Max Flow. (Airborne)"
+        }
+      },
+      "3": {
+        "name": "Shadow Step / Spatial Swap",
+        "level": 0,
+        "maxCd": 5.0,
+        "baseDmg": 40,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Path of Blades",
+          "desc": "A phantom blade follows your dash, piercing through enemies. (Handheld)"
+        },
+        "upgB": {
+          "name": "Surge Reset",
+          "desc": "Spatial Swap resets Blade Surge (Q) cooldown. (Airborne)"
+        }
+      },
+      "4": {
+        "name": "Blade Whirlwind / Shatter Storm",
+        "level": 0,
+        "maxCd": 12.0,
+        "baseDmg": 60,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Vortex",
+          "desc": "Whirlwind pulls enemies in aggressively. (Handheld)"
+        },
+        "upgB": {
+          "name": "Piercing Shrapnel",
+          "desc": "Shatter Storm knives pierce multiple enemies. (Airborne)"
+        }
+      }
+    }
+  },
+  "cleric": {
+    "name": "Cleric",
+    "color": "#fbc02d",
+    "weapon": "censer",
+    "baseMaxHp": 120,
+    "baseArmor": 2,
+    "dmgMult": 1.0,
+    "basicAttackCD": 0.4,
+    "basicDmg": 12,
+    "passive": "Active Zeal Engine: Attacks generate Zeal. Spells consume Zeal. 0 Zeal casts have 50% DMG/AoE.",
+    "rareWeapon": {
+      "name": "Censer of the Twilight Horizon",
+      "desc": "RMB triggers a repulsive aura to keep enemies away.",
+      "rmbSkill": "Twilight Repulse"
+    },
+    "rareArmor": {
+      "name": "Vestments of the Fractured Soul",
+      "desc": "Adapts to Skill 1: Reflect 15% projectile DMG (Holy) or Free Desecration < 25% HP (Shadow)."
+    },
+    "rareAmulet": {
+      "name": "Amulet of Power",
+      "desc": "+20% CDR | Skill cast grants +10% DMG (Stacks 5x)"
+    },
+    "rareBoots": {
+      "name": "Ethereal Treads",
+      "desc": "+50 Move Speed | No collision & 50% less DMG while moving"
+    },
+    "rareGloves": {
+      "name": "Vampiric Grips",
+      "desc": "+25% Attack Speed | Heal 2% of damage dealt"
+    },
+    "skills": {
+      "1": {
+        "name": "Divine Ray",
+        "level": 0,
+        "maxCd": 4.0,
+        "baseDmg": 15,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Radiant Flash (Holy)",
+          "desc": "Instant blind. Grants Zeal on successful blind."
+        },
+        "upgB": {
+          "name": "Void Spike (Shadow)",
+          "desc": "+40% DMG if <50% HP. Uses all Zeal for bigger cascade, or drains HP if 0 Zeal."
+        }
+      },
+      "2": {
+        "name": "Hallowed Ground",
+        "level": 0,
+        "maxCd": 8.0,
+        "baseDmg": 0,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Sanctuary (Holy)",
+          "desc": "Doubles regen, knocks back enemies, basic attacks grant double Zeal."
+        },
+        "upgB": {
+          "name": "Desecration (Shadow)",
+          "desc": "Strips defenses, deals shadow ticking DMG, 40% slow, shatters shields."
+        }
+      },
+      "3": {
+        "name": "Phase Shift",
+        "level": 0,
+        "maxCd": 6.0,
+        "baseDmg": 0,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Divine Transposition (Holy)",
+          "desc": "Swap places with nearest enemy & stun surrounding targets."
+        },
+        "upgB": {
+          "name": "Raven Flight (Shadow)",
+          "desc": "Drains Zeal/HP to move. Leaves a Siphon mark on passed enemies."
+        }
+      },
+      "4": {
+        "name": "Ascension",
+        "level": 0,
+        "maxCd": 20.0,
+        "baseDmg": 0,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Avatar of Renewal (Holy)",
+          "desc": "Permanent 100% Zeal. Casting vents homing light bolts."
+        },
+        "upgB": {
+          "name": "Aspect of the Reaper (Shadow)",
+          "desc": "-50% CDs, no Zeal. Skills cost 8% HP. +50% DMG. Kills heal 25% missing HP."
+        }
+      }
+    }
+  },
+  "druid": {
+    "name": "Druid",
+    "color": "#4caf50",
+    "weapon": "totem",
+    "baseMaxHp": 120,
+    "baseArmor": 3,
+    "dmgMult": 1.0,
+    "basicAttackCD": 0.35,
+    "basicDmg": 12,
+    "passive": "Spore Generation: Spells infect enemies with Spore Seeds that deal damage over time. Wild Form melee attacks detonate Spores for burst damage. Every 3rd Wild Form attack is a lunging Bite (+75% DMG, briefly staggers).",
+    "rareWeapon": {
+      "name": "Gnarled Heartwood Totem",
+      "desc": "+100% DMG | RMB: Thistle-Grip Claws | Every 3s an enemy spends spored grants +10% DMG to next Feral Pounce (Max 5)",
+      "rmbSkill": "Thistle-Grip Claws"
+    },
+    "rareArmor": {
+      "name": "Mantle of the Living Grove",
+      "desc": "+240 Max HP | Barkskin Shift roots rushing enemies"
+    },
+    "rareAmulet": {
+      "name": "Amulet of Power",
+      "desc": "+20% CDR | Skill cast grants +10% DMG (Stacks 5x)"
+    },
+    "rareBoots": {
+      "name": "Ethereal Treads",
+      "desc": "+50 Move Speed | No collision & 50% less DMG while moving"
+    },
+    "rareGloves": {
+      "name": "Vampiric Grips",
+      "desc": "+25% Attack Speed | Heal 2% of damage dealt"
+    },
+    "skills": {
+      "1": {
+        "name": "Bramble Core",
+        "level": 0,
+        "maxCd": 6.0,
+        "baseDmg": 20,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Bramble Core+ (Caster)",
+          "desc": "+50% radius, slows enemies by 50%."
+        },
+        "upgB": {
+          "name": "Vine Whip (Wild)",
+          "desc": "Forward line strike, pulls enemies. CD resets if hitting an enemy in a thorn patch."
+        }
+      },
+      "2": {
+        "name": "Barkskin Shift",
+        "level": 0,
+        "maxCd": 10.0,
+        "baseDmg": 0,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Accelerated Decay (Caster)",
+          "desc": "While active, Spores tick 50% faster globally."
+        },
+        "upgB": {
+          "name": "Splintering Shell (Wild)",
+          "desc": "When broken/expires, explodes dealing high physical damage locally."
+        }
+      },
+      "3": {
+        "name": "Spore Burst / Feral Pounce",
+        "level": 0,
+        "maxCd": 8.0,
+        "baseDmg": 30,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Spore Surge (Caster)",
+          "desc": "Temporarily grants +15% move speed per enemy hit."
+        },
+        "upgB": {
+          "name": "Predatory Momentum (Wild)",
+          "desc": "Gains a 2nd maximum charge. Ultimate instantly readies 1 charge."
+        }
+      },
+      "4": {
+        "name": "Aspect of the Wild",
+        "level": 1,
+        "maxCd": 2.0,
+        "baseDmg": 50,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Savage Blooms (Caster)",
+          "desc": "Leaves a massive, permanent Spore Cloud at the cast location for the duration."
+        },
+        "upgB": {
+          "name": "Apex Predator (Wild)",
+          "desc": "Popping a Spore with a claw attack heals you for 2% of Max HP."
+        }
+      }
+    }
+  },
+  "paladin": {
+    "name": "Paladin",
+    "color": "#cfd8dc",
+    "weapon": "mace",
+    "baseMaxHp": 170,
+    "baseArmor": 6,
+    "dmgMult": 1.1,
+    "basicAttackCD": 0.35,
+    "basicDmg": 12,
+    "passive": "Celestial Anchor: Q throws your Grand Mace into the ground. Catch the returning hammer to reset Q: it homes in on you, then commits to a straight line for the last stretch. Your skills change depending on whether the hammer is Equipped or Deployed. While away from it you raise a light shield: -15% basic damage, +15% armor.",
+    "rareWeapon": {
+      "name": "The World-Breaker Grand Mace",
+      "desc": "+100% DMG | Smash shockwaves leave fault lines for 2s. Throwing Judgment Hammer into a fault line drags every enemy on the fracture to the hammer."
+    },
+    "rareArmor": {
+      "name": "Plate of the Gilded Bastion",
+      "desc": "+240 Max HP | While your hammer is deployed, gain 1% DMG reduction per 15 units of distance from it (max 25%)"
+    },
+    "rareAmulet": {
+      "name": "Amulet of Power",
+      "desc": "+20% CDR | Skill cast grants +10% DMG (Stacks 5x)"
+    },
+    "rareBoots": {
+      "name": "Ethereal Treads",
+      "desc": "+50 Move Speed | No collision & 50% less DMG while moving"
+    },
+    "rareGloves": {
+      "name": "Vampiric Grips",
+      "desc": "+25% Attack Speed | Heal 2% of damage dealt"
+    },
+    "skills": {
+      "1": {
+        "name": "Judgment Hammer",
+        "level": 1,
+        "maxCd": 6.0,
+        "baseDmg": 30,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Handheld Purity",
+          "desc": "Recalling the hammer triggers a seismic shockwave when it snaps back into your hand, stunning close enemies for 1.5s (once per 6s)."
+        },
+        "upgB": {
+          "name": "Conduit Shock",
+          "desc": "While stuck in the ground, the hammer shoots holy lightning at the 2 nearest enemies within 200 range every 0.5s."
+        }
+      },
+      "2": {
+        "name": "Bastion Dome",
+        "level": 0,
+        "maxCd": 12.0,
+        "baseDmg": 0,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Holy Sanctuary",
+          "desc": "Standing inside the dome regenerates your health, and temporary shields do not decay while inside."
+        },
+        "upgB": {
+          "name": "Retribution Barrier",
+          "desc": "Every enemy projectile stopped by the dome wall reflects a holy homing bolt back at the attacker."
+        }
+      },
+      "3": {
+        "name": "Righteous Charge / Iron Pull",
+        "level": 0,
+        "maxCd": 6.0,
+        "baseDmg": 30,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Unstoppable Juggernaut",
+          "desc": "Shield-charge distance +50%, and you are immune to all damage during the dash. (Equipped)"
+        },
+        "upgB": {
+          "name": "Gravitational Crashing",
+          "desc": "Landing on your hammer via Iron Pull grounds and slows surrounding enemies by 50% for 3s. (Deployed)"
+        }
+      },
+      "4": {
+        "name": "Consecrated Wrath",
+        "level": 0,
+        "maxCd": 18.0,
+        "baseDmg": 25,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Divine Aura",
+          "desc": "The consecrated ground follows you as a moving aura instead of staying in place."
+        },
+        "upgB": {
+          "name": "Hammer of the Gods",
+          "desc": "Cast while the hammer is deployed: it grows colossal and spins into an iron hurricane that pulls enemies toward it."
+        }
+      }
     }
   }
 }
