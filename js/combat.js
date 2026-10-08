@@ -45,6 +45,7 @@ function generateItem(tierLevel) {
 }
 
 function applyDamage(enemy, amount, source = 'player', projAngle = null) {
+    if (enemy.dead) return;
     amount *= 0.6; // Global player damage reduction
     
     if (source === 'melee_basic') hitStopTimer = 0.04;
@@ -199,11 +200,16 @@ function takeDamage(amount, isContinuous = false, sourceObj = null) {
         }
     }
 
-    if (!isContinuous) amount = Math.max(1, amount - player.armor); 
+    let armor = player.armor;
+    if (activeClass && activeClass.name === 'Paladin') {
+        amount *= paladinDamageTakenMult(); // Bastion Dome, Plate of the Gilded Bastion
+        armor *= paladinArmorMult();       // light shield while the hammer is away
+    }
+    if (!isContinuous) amount = Math.max(1, amount - armor);
     
     if (player.shield > 0) {
         if (player.shield >= amount) { player.shield -= amount; return; }
-        else { amount -= player.shield; player.shield = 0; }
+        else { amount -= player.shield; player.shield = 0; player.shieldTimer = 0; }
     }
     
     // Saint's Silk Shroud override
@@ -251,7 +257,7 @@ function checkEnemyDeath(e) {
             if (nearest) nearest.markAngle = Math.random() * Math.PI * 2;
         }
 
-        if (e.type === 'boss_slime_queen' || e.type === 'boss_valerius') {
+        if ((e.type === 'boss_slime_queen' || e.type === 'boss_valerius') && !isEndlessMode) {
             gameState = STATE.VICTORY;
             el('intermission-title').innerText = "DUNGEON CLEARED!";
             el('intermission-title').style.color = "#00e676";
@@ -273,9 +279,6 @@ function checkEnemyDeath(e) {
         }
 
         if (activeClass.name === 'Dragonknight' && equipment.armor && equipment.armor.name === 'Dragon Scale Plate') player.hp = Math.min(player.maxHp, player.hp + 5);
-        if (activeClass.name === 'Spellweaver' && equipment.amulet && equipment.amulet.name === 'Chronos Pendant') {
-            for(let i=1; i<=4; i++) cooldowns[`s${i}`] = Math.max(0, cooldowns[`s${i}`] - 0.5); cooldowns.rmb = Math.max(0, cooldowns.rmb - 0.5);
-        }
 
         const rates = itemDataConfig.dropChances;
         if (e.type.startsWith('boss')) {
@@ -292,7 +295,7 @@ function checkEnemyDeath(e) {
             drops.push({ x: e.x, y: e.y, type: 'scrap', radius: 10, life: 15.0 });
         }
         
-        gainXP(e.xp); const idx = enemies.indexOf(e); if (idx > -1) enemies.splice(idx, 1);
+        gainXP(e.xp); // the corpse is removed from `enemies` by removeDeadEnemies()
         activeEnemies--; score++; updateHUD();
 
         if (enemiesToSpawn <= 0 && activeEnemies <= 0) {

@@ -18,7 +18,7 @@ var RangedAI = (e, dt, curSpd, edx, edy, edist, i) => {
     e.attackTimer -= dt;
     if (e.attackTimer <= 0 && edist <= 400 && e.frozenTimer <= 0) {
         let projShape = e.type === 'archer' ? 'arrow' : 'slime_blob';
-        projectiles.push({ x: e.x, y: e.y, vx: (edx/edist)*350, vy: (edy/edist)*350, radius: 6, color: e.type==='archer' ? '#8d6e63' : '#ba68c8', life: 3.0, isEnemy: true, damage: e.dmg, shape: projShape });
+        projectiles.push({ x: e.x, y: e.y, vx: (edx/edist)*350, vy: (edy/edist)*350, radius: 6, color: e.type==='archer' ? '#8d6e63' : '#ba68c8', life: 3.0, isEnemy: true, owner: e, damage: e.dmg, shape: projShape });
         if (e.type === 'archer') { e.ammo--; if (e.ammo <= 0) { e.ammo = 3; e.attackTimer = 2.0; } else { e.attackTimer = 0.4; } } 
         else { e.attackTimer = 2.5; }
     }
@@ -31,7 +31,7 @@ var EnemyAI = {
     'valerius_archer': (e, dt, curSpd, edx, edy, edist, i) => {
         e.attackTimer -= dt;
         if (e.attackTimer <= 0 && e.frozenTimer <= 0) {
-            projectiles.push({ x: e.x, y: e.y, vx: (edx/edist)*400, vy: (edy/edist)*400, radius: 6, color: '#ff5722', life: 5.0, isEnemy: true, damage: e.dmg, shape: 'arrow' });
+            projectiles.push({ x: e.x, y: e.y, vx: (edx/edist)*400, vy: (edy/edist)*400, radius: 6, color: '#ff5722', life: 5.0, isEnemy: true, owner: e, damage: e.dmg, shape: 'arrow' });
             e.attackTimer = 1.2; 
         }
     },
@@ -47,7 +47,7 @@ var EnemyAI = {
         } else if (e.state === 'knife_volley') {
             if (e.stateTimer <= 0) {
                 const baseAngle = Math.atan2(edy, edx);
-                for(let r=-2; r<=2; r++) { projectiles.push({ x: e.x, y: e.y, vx: Math.cos(baseAngle+(r*0.15))*500, vy: Math.sin(baseAngle+(r*0.15))*500, radius: 6, color: '#ff9800', life: 2.0, isEnemy: true, damage: e.dmg, shape: 'knife' }); }
+                for(let r=-2; r<=2; r++) { projectiles.push({ x: e.x, y: e.y, vx: Math.cos(baseAngle+(r*0.15))*500, vy: Math.sin(baseAngle+(r*0.15))*500, radius: 6, color: '#ff9800', life: 2.0, isEnemy: true, owner: e, damage: e.dmg, shape: 'knife' }); }
                 e.state = 'idle'; e.stateTimer = 2.0;
             }
         } else if (e.state === 'dash_telegraph') {
@@ -68,7 +68,7 @@ var EnemyAI = {
         if (edist > 300) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; } else if (edist < 200) { e.x -= (edx/edist)*curSpd*dt; e.y -= (edy/edist)*curSpd*dt; } 
         e.attackTimer -= dt;
         if (e.attackTimer <= 0 && edist <= 450 && e.frozenTimer <= 0) {
-            for(let r=0; r<3; r++) { const offX = (Math.random() - 0.5) * 150; const offY = (Math.random() - 0.5) * 150; projectiles.push({ x: e.x, y: e.y, targetX: player.x + offX, targetY: player.y + offY, vx: 0, vy: 0, radius: 8, color: '#5d4037', life: 1.0, isEnemy: true, damage: 0, type: 'trap_throw' }); }
+            for(let r=0; r<3; r++) { const offX = (Math.random() - 0.5) * 150; const offY = (Math.random() - 0.5) * 150; projectiles.push({ x: e.x, y: e.y, targetX: player.x + offX, targetY: player.y + offY, vx: 0, vy: 0, radius: 8, color: '#5d4037', life: 1.0, isEnemy: true, owner: e, damage: 0, type: 'trap_throw' }); }
             e.attackTimer = 4.0;
         }
     },
@@ -96,7 +96,7 @@ var EnemyAI = {
         if (edist > 250) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
         e.attackTimer -= dt;
         if (e.attackTimer <= 0 && edist <= 400 && e.frozenTimer <= 0) {
-            projectiles.push({ x: e.x, y: e.y, targetX: player.x, targetY: player.y, speed: 400, radius: 8, color: '#cddc39', life: 2.0, isEnemy: true, damage: e.dmg, type: 'spore' });
+            projectiles.push({ x: e.x, y: e.y, targetX: player.x, targetY: player.y, speed: 400, radius: 8, color: '#cddc39', life: 2.0, isEnemy: true, owner: e, damage: e.dmg, type: 'spore' });
             e.attackTimer = 3.0;
         }
     },
@@ -104,7 +104,7 @@ var EnemyAI = {
         e.stateTimer -= dt;
         if (e.stateTimer <= 0) {
             e.reflective = !e.reflective; e.stateTimer = e.reflective ? 3.0 : 4.0;
-            if (e.reflective) { for(let r=0; r<8; r++) { const angle = (Math.PI*2/8) * r; projectiles.push({ x: e.x, y: e.y, vx: Math.cos(angle)*200, vy: Math.sin(angle)*200, radius: 6, color: '#9c27b0', life: 2.0, isEnemy: true, damage: e.dmg }); } }
+            if (e.reflective) { for(let r=0; r<8; r++) { const angle = (Math.PI*2/8) * r; projectiles.push({ x: e.x, y: e.y, vx: Math.cos(angle)*200, vy: Math.sin(angle)*200, radius: 6, color: '#9c27b0', life: 2.0, isEnemy: true, owner: e, damage: e.dmg }); } }
         }
         if (e.reflective) { e.renderColor = '#9c27b0'; effects.push({ type: 'circle', x: e.x, y: e.y, radius: e.size/2 + 5, color: 'rgba(156, 39, 176, 0.4)', life: 0.1, maxLife: 0.1 }); } 
         else { e.renderColor = e.color; MeleeAI(e, dt, curSpd, edx, edy, edist, i); }
@@ -127,7 +127,7 @@ var EnemyAI = {
             if (e.stateTimer <= 0 && e.frozenTimer <= 0) { if (Math.random() < 0.5) { e.state = 'bounce_telegraph'; e.stateTimer = 0.6; e.dashTargetX = player.x; e.dashTargetY = player.y; } else { e.state = 'fireball'; e.stateTimer = 0.5; } }
         } else if (e.state === 'fireball') {
             if (e.stateTimer <= 0) {
-                for(let r=0; r<4; r++) { const angle = (Math.PI*2/4) * r + (Math.PI/4); projectiles.push({ x: e.x, y: e.y, vx: Math.cos(angle)*300, vy: Math.sin(angle)*300, radius: 10, color: '#ff3d00', life: 4.0, isEnemy: true, damage: e.dmg }); }
+                for(let r=0; r<4; r++) { const angle = (Math.PI*2/4) * r + (Math.PI/4); projectiles.push({ x: e.x, y: e.y, vx: Math.cos(angle)*300, vy: Math.sin(angle)*300, radius: 10, color: '#ff3d00', life: 4.0, isEnemy: true, owner: e, damage: e.dmg }); }
                 e.state = 'idle'; e.stateTimer = 2.0;
             }
         } else if (e.state === 'bounce_telegraph') {
@@ -143,7 +143,7 @@ var EnemyAI = {
     'boss_slime_queen': (e, dt, curSpd, edx, edy, edist, i) => {
         if (e.state === 'death_throes') {
             e.stateTimer -= dt; e.size = Math.max(0, e.originalSize * (e.stateTimer / 5.0)); e.bulletAngle = (e.bulletAngle || 0) + dt * 10; 
-            if (Math.random() < 0.5) { for(let j=0; j<3; j++) { let angle = e.bulletAngle + (Math.PI*2/3)*j; projectiles.push({ x: e.x, y: e.y, vx: Math.cos(angle)*350, vy: Math.sin(angle)*350, radius: 8, color: '#f06292', life: 3.0, isEnemy: true, damage: e.dmg }); } }
+            if (Math.random() < 0.5) { for(let j=0; j<3; j++) { let angle = e.bulletAngle + (Math.PI*2/3)*j; projectiles.push({ x: e.x, y: e.y, vx: Math.cos(angle)*350, vy: Math.sin(angle)*350, radius: 8, color: '#f06292', life: 3.0, isEnemy: true, owner: e, damage: e.dmg }); } }
             if (e.stateTimer <= 0) { e.invulnerable = false; e.hp = 0; checkEnemyDeath(e); }
             return; 
         }
@@ -152,7 +152,7 @@ var EnemyAI = {
             if (edist > 150) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
             if (e.stateTimer <= 0) {
                 if (Math.random() < 0.5) { for(let k=0; k<2; k++) { const offX = (Math.random() - 0.5) * 100; const offY = (Math.random() - 0.5) * 100; enemies.push({ x: e.x + offX, y: e.y + offY, size: 28, color: '#8bc34a', speed: 115, hp: 40, maxHp: 40, type: 'slime_melee', dmg: 10, xp: 0, meleeTimer: 0 }); activeEnemies++; } } 
-                else { for(let k=-1; k<=1; k++) { let angle = Math.atan2(edy, edx) + k*0.3; projectiles.push({ x: e.x, y: e.y, vx: Math.cos(angle)*400, vy: Math.sin(angle)*400, radius: 12, color: '#cddc39', life: 3.0, isEnemy: true, damage: e.dmg, type: 'boss_slimeball' }); } }
+                else { for(let k=-1; k<=1; k++) { let angle = Math.atan2(edy, edx) + k*0.3; projectiles.push({ x: e.x, y: e.y, vx: Math.cos(angle)*400, vy: Math.sin(angle)*400, radius: 12, color: '#cddc39', life: 3.0, isEnemy: true, owner: e, damage: e.dmg, type: 'boss_slimeball' }); } }
                 e.stateTimer = 2.5;
             }
         } else if (hpPercent > 0.3) {
@@ -162,13 +162,13 @@ var EnemyAI = {
             }
             let guardsAlive = 0;
             for(let g of e.guards) {
-                if (enemies.includes(g)) { guardsAlive++; g.angleOffset += dt * 1.5; g.x = e.x + Math.cos(g.angleOffset)*150; g.y = e.y + Math.sin(g.angleOffset)*150; effects.push({type: 'lightning', x1: e.x, y1: e.y, x2: g.x, y2: g.y, color: '#03a9f4', life: 0.1, maxLife: 0.1}); if (distToSegment(player.x, player.y, e.x, e.y, g.x, g.y) < player.radius + 5) takeDamage(15*dt, true); }
+                if (!g.dead && enemies.includes(g)) { guardsAlive++; g.angleOffset += dt * 1.5; g.x = e.x + Math.cos(g.angleOffset)*150; g.y = e.y + Math.sin(g.angleOffset)*150; effects.push({type: 'lightning', x1: e.x, y1: e.y, x2: g.x, y2: g.y, color: '#03a9f4', life: 0.1, maxLife: 0.1}); if (distToSegment(player.x, player.y, e.x, e.y, g.x, g.y) < player.radius + 5) takeDamage(15*dt, true); }
             }
             e.invulnerable = guardsAlive > 0;
             if (e.invulnerable) effects.push({ type: 'circle', x: e.x, y: e.y, radius: e.size/2 + 10, color: 'rgba(3, 169, 244, 0.4)', life: 0.1, maxLife: 0.1 });
             if (e.stateTimer <= 0) {
                 effects.push({ type: 'circle', x: player.x, y: player.y, radius: 60, color: 'rgba(3, 169, 244, 0.3)', life: 0.5, maxLife: 0.5, isWarning: true }); let tx = player.x, ty = player.y;
-                setTimeout(() => { if(gameState!==STATE.PLAYING) return; effects.push({ type: 'circle', x: tx, y: ty, radius: 60, color: '#03a9f4', life: 0.3, maxLife: 0.3 }); if (Math.hypot(tx-player.x, ty-player.y) <= 60 + player.radius) { takeDamage(e.dmg * 1.5); buffs.slowed = 1.0; } }, 500);
+                after(0.5, () => { effects.push({ type: 'circle', x: tx, y: ty, radius: 60, color: '#03a9f4', life: 0.3, maxLife: 0.3 }); if (Math.hypot(tx-player.x, ty-player.y) <= 60 + player.radius) { takeDamage(e.dmg * 1.5); buffs.slowed = 1.0; } });
                 e.stateTimer = 1.0;
             }
         } else {
@@ -176,7 +176,7 @@ var EnemyAI = {
             if (e.stateTimer <= 0) {
                 e.x = currentMap.left + Math.random() * (currentMap.right - currentMap.left - 200) + 100; e.y = currentMap.top + Math.random() * (currentMap.bottom - currentMap.top - 200) + 100;
                 effects.push({ type: 'puddle', x: e.x, y: e.y, radius: 200, color: 'rgba(0, 150, 136, 0.5)', life: 2.0, maxLife: 2.0 });
-                for(let r=0; r<16; r++) { const angle = (Math.PI*2/16) * r; projectiles.push({ x: e.x, y: e.y, vx: Math.cos(angle)*300, vy: Math.sin(angle)*300, radius: 8, color: '#ff3d00', life: 4.0, isEnemy: true, damage: e.dmg }); }
+                for(let r=0; r<16; r++) { const angle = (Math.PI*2/16) * r; projectiles.push({ x: e.x, y: e.y, vx: Math.cos(angle)*300, vy: Math.sin(angle)*300, radius: 8, color: '#ff3d00', life: 4.0, isEnemy: true, owner: e, damage: e.dmg }); }
                 e.stateTimer = 1.5;
             }
         }
@@ -200,7 +200,7 @@ var EnemyAI = {
             if (e.stateTimer <= 0) { e.state = 'idle'; e.stateTimer = 1.5; }
         } else if (e.state === 'nova') {
             if (e.stateTimer <= 0) {
-                for (let r=0; r<12; r++) { const angle = (Math.PI*2/12) * r; projectiles.push({ x: e.x, y: e.y, vx: Math.cos(angle)*400, vy: Math.sin(angle)*400, radius: 10, color: '#009688', life: 2.5, isEnemy: true, damage: e.dmg, type: 'boss_slimeball' }); }
+                for (let r=0; r<12; r++) { const angle = (Math.PI*2/12) * r; projectiles.push({ x: e.x, y: e.y, vx: Math.cos(angle)*400, vy: Math.sin(angle)*400, radius: 10, color: '#009688', life: 2.5, isEnemy: true, owner: e, damage: e.dmg, type: 'boss_slimeball' }); }
                 e.state = 'idle'; e.stateTimer = 2.0;
             }
         } else if (e.state === 'summon') {
@@ -232,14 +232,14 @@ var EnemyAI = {
         } else if (e.state === 'bolas') {
             if (e.stateTimer <= 0) {
                 const baseAngle = Math.atan2(edy, edx);
-                for(let r=-1; r<=1; r++) { const angle = baseAngle + (r*0.2); projectiles.push({ x: e.x, y: e.y, vx: Math.cos(angle)*700, vy: Math.sin(angle)*700, radius: 15, color: '#795548', life: 2.0, isEnemy: true, damage: e.dmg, type: 'bolas' }); }
+                for(let r=-1; r<=1; r++) { const angle = baseAngle + (r*0.2); projectiles.push({ x: e.x, y: e.y, vx: Math.cos(angle)*700, vy: Math.sin(angle)*700, radius: 15, color: '#795548', life: 2.0, isEnemy: true, owner: e, damage: e.dmg, type: 'bolas' }); }
                 e.state = 'idle'; e.stateTimer = 2.5 * enrageMult;
             }
         } else if (e.state === 'hounds') {
             if (e.stateTimer <= 0) {
                 const baseAngle = Math.atan2(edy, edx);
-                projectiles.push({ x: e.x, y: e.y, vx: Math.cos(baseAngle - 0.5)*400, vy: Math.sin(baseAngle - 0.5)*400, speed: 450, radius: 12, color: '#d7ccc8', life: 4.0, isEnemy: true, damage: e.dmg, type: 'hound', trackTimer: 1.5 });
-                projectiles.push({ x: e.x, y: e.y, vx: Math.cos(baseAngle + 0.5)*400, vy: Math.sin(baseAngle + 0.5)*400, speed: 450, radius: 12, color: '#d7ccc8', life: 4.0, isEnemy: true, damage: e.dmg, type: 'hound', trackTimer: 1.5 });
+                projectiles.push({ x: e.x, y: e.y, vx: Math.cos(baseAngle - 0.5)*400, vy: Math.sin(baseAngle - 0.5)*400, speed: 450, radius: 12, color: '#d7ccc8', life: 4.0, isEnemy: true, owner: e, damage: e.dmg, type: 'hound', trackTimer: 1.5 });
+                projectiles.push({ x: e.x, y: e.y, vx: Math.cos(baseAngle + 0.5)*400, vy: Math.sin(baseAngle + 0.5)*400, speed: 450, radius: 12, color: '#d7ccc8', life: 4.0, isEnemy: true, owner: e, damage: e.dmg, type: 'hound', trackTimer: 1.5 });
                 e.state = 'idle'; e.stateTimer = 3.0 * enrageMult;
             }
         } else if (e.state === 'joust_prep') {
@@ -356,7 +356,7 @@ var EnemyAI = {
             e.volleyAngle += dt * 1.5; 
             if (e.stateTimer > 0 && e.stateTimer % 0.2 < 0.05) {
                 // ADDED shape: 'spear' to the end of this projectile push
-                projectiles.push({ x: e.x, y: e.y, vx: Math.cos(e.volleyAngle)*600, vy: Math.sin(e.volleyAngle)*600, radius: 8, color: '#ff9800', life: 3.0, isEnemy: true, damage: e.dmg, shape: 'spear' });
+                projectiles.push({ x: e.x, y: e.y, vx: Math.cos(e.volleyAngle)*600, vy: Math.sin(e.volleyAngle)*600, radius: 8, color: '#ff9800', life: 3.0, isEnemy: true, owner: e, damage: e.dmg, shape: 'spear' });
             }
             if (e.stateTimer <= 0) { e.state = 'idle'; e.stateTimer = 2.0; e.facingAngle = Math.atan2(player.y - e.y, player.x - e.x); }
         }
@@ -367,7 +367,7 @@ var EnemyAI = {
             } else if (!e.hookFired) {
                 e.hookFired = true;
                 const [hx, hy, hdist] = getVector(e.x, e.y, e.hookTargetX, e.hookTargetY);
-                projectiles.push({ x: e.x, y: e.y, vx: (hx/hdist)*1200, vy: (hy/hdist)*1200, radius: 15, color: '#757575', life: 2.0, isEnemy: true, damage: e.dmg, type: 'chain_hook', sourceBoss: e });
+                projectiles.push({ x: e.x, y: e.y, vx: (hx/hdist)*1200, vy: (hy/hdist)*1200, radius: 15, color: '#757575', life: 2.0, isEnemy: true, owner: e, damage: e.dmg, type: 'chain_hook', sourceBoss: e });
             }
             if (e.stateTimer <= 0 && e.hookFired) { e.stateTimer = 0.1; } 
         }
@@ -400,11 +400,11 @@ var EnemyAI = {
         }
     },
     'amalgam_minion': (e, dt, curSpd, edx, edy, edist, i) => { 
-        const boss = enemies.find(en => en.type === 'boss_amalgam');
+        const boss = enemies.find(en => !en.dead && en.type === 'boss_amalgam');
         if (boss) {
             const [bx, by, bdist] = getVector(e.x, e.y, boss.x, boss.y);
             if (bdist > boss.size/2) { e.x += (bx/bdist)*curSpd*dt; e.y += (by/bdist)*curSpd*dt; } 
-            else { boss.state = 'devastate'; boss.stateTimer = 1.0; boss.hp = Math.min(boss.maxHp, boss.hp + boss.maxHp * 0.1); effects.push({ type: 'text', text: 'ABSORBED!', x: boss.x, y: boss.y - 40, color: '#ff5252', life: 1.0, maxLife: 1.0 }); if (i !== undefined) { enemies.splice(i, 1); activeEnemies--; } }
+            else { boss.state = 'devastate'; boss.stateTimer = 1.0; boss.hp = Math.min(boss.maxHp, boss.hp + boss.maxHp * 0.1); effects.push({ type: 'text', text: 'ABSORBED!', x: boss.x, y: boss.y - 40, color: '#ff5252', life: 1.0, maxLife: 1.0 }); e.dead = true; activeEnemies--; } // absorbed: removed without XP or loot
         } else {
             if (edist > 0) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
             if (edist < player.radius + e.size / 2 + 5 && e.meleeTimer <= 0) { takeDamage(e.dmg); e.meleeTimer = 1.0; }

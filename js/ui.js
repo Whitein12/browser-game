@@ -34,9 +34,9 @@ function updateHUD() {
     for(let i=1; i<=4; i++) { 
         let sk = activeClass.skills[i];
         let cd = Math.max(0, cooldowns[`s${i}`] || 0);
-        let maxCd = sk.maxCd || 1;
-        
-        let pcd = cd / maxCd * 100;
+        let maxCd = cooldownMax[`s${i}`] || sk.maxCd || 1;
+
+        let pcd = Math.min(100, cd / maxCd * 100);
         let isReady = cd <= 0;
         let isLocked = sk.level === 0;
 
@@ -54,14 +54,14 @@ function updateHUD() {
         `;
     }
 
-    if (equipment.weapon && equipment.weapon.rarity === 'rare') {
+    if (equipment.weapon && equipment.weapon.rarity === 'rare' && activeClass.rareWeapon.rmbSkill) {
         let cdRmb = Math.max(0, cooldowns.rmb || 0);
         let maxCdRmb = 4.0 * getCDR();
         let pcdRmb = cdRmb / maxCdRmb * 100;
         let isReadyRmb = cdRmb <= 0;
         let boxClassRmb = isReadyRmb ? 'cd-box ready' : 'cd-box cooldown';
         let cdTextStrRmb = isReadyRmb ? '' : cdRmb.toFixed(1);
-        let shortNameRmb = activeClass.rareWeapon.rmbSkill.substring(0, 8);
+        let shortNameRmb = (activeClass.rareWeapon.rmbSkill || 'Special').substring(0, 8);
 
         cdTrackerHtml += `
             <div class="${boxClassRmb}">
@@ -84,6 +84,14 @@ function updateHUD() {
     if (buffs.weakened > 0) passives.push(`WEAKENED`);
 
     if (activeClass.name === 'Machinist' && buffs.overclockTimer > 0) passives.push(`OVERCLOCK: ${buffs.overclockTimer.toFixed(1)}s`);
+    if (activeClass.name === 'Paladin' && player.hammer) {
+        const st = player.hammer.state;
+        passives.push(st === 'equipped' ? 'Hammer: In Hand' : st === 'deployed' ? 'Hammer: Deployed | Light Shield (+15% Armor)' : 'Hammer: In Flight');
+        if (player.dome) passives.push(`Dome: ${player.dome.life.toFixed(1)}s`);
+        if (gildedPlateReduction() > 0) passives.push(`Bastion DR: ${Math.round(gildedPlateReduction() * 100)}%`);
+    }
+    if (activeClass.name === 'Druid' && buffs.pounceStacks > 0) passives.push(`Pounce: +${buffs.pounceStacks * 10}%`);
+    if (activeClass.name === 'Druid' && buffs.sporeSurgeTimer > 0) passives.push(`Spore Surge: +${Math.round(buffs.sporeSurgeBonus * 100)}% MS`);
     el('perm-display').innerText = passives.join(' | ');
 }
 
@@ -178,7 +186,7 @@ function triggerLevelUp(customTitle = null) {
         const btn = document.createElement('button'); btn.className = 'btn'; btn.style.borderColor = '#00e676'; btn.style.color = '#00e676'; btn.innerText = "All Skills Maxed! Gain +20 Max HP & +5% DMG";
         btn.onclick = () => {
             if (isProcessingClick) return; isProcessingClick = true;
-            player.maxHp += 20; player.hp += 20; player.bonusDmg += 0.05; finishLevelUp();
+            player.bonusMaxHp += 20; recalcStats(); player.hp += 20; player.bonusDmg += 0.05; finishLevelUp();
         };
         container.appendChild(btn);
     }
@@ -231,7 +239,11 @@ window.devJumpWave = function() {
 }
 window.devLevelUp = function() { gainXP(player.maxXp - player.xp); }
 window.devAddGold = function() { player.gold += 1000; updateHUD(); }
-window.devKillAll = function() { for(let i = enemies.length - 1; i >= 0; i--) { enemies[i].hp = 0; checkEnemyDeath(enemies[i]); } closeDevMenu(); }
+window.devKillAll = function() {
+    closeDevMenu(); // back to PLAYING first, so the last kill can trigger the wave-cleared screen
+    for(let i = enemies.length - 1; i >= 0; i--) { enemies[i].hp = 0; checkEnemyDeath(enemies[i]); }
+    removeDeadEnemies();
+}
 window.devToggleCooldowns = function() { devNoCooldowns = !devNoCooldowns; el('btn-dev-cd').innerText = devNoCooldowns ? "Cooldowns: OFF" : "Cooldowns: Normal"; }
 window.devOpenShop = function() { closeDevMenu(); openShop(); }
 window.closeDevMenu = function() { el('dev-screen').classList.add('hidden'); gameState = STATE.PLAYING; lastTime = performance.now(); }

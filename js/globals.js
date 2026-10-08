@@ -32,7 +32,8 @@ let inventory = []; let shopItems = [];
 let evolvingSkillId = null; let isProcessingClick = false; 
 
 const cooldowns = { basic: 0, s1: 0, s2: 0, s3: 0, s4: 0, rmb: 0 };
-const buffs = { rapidFire: 0, msBoost: 0, slowed: 0, ironBulwark: 0, rooted: 0, powerSurgeStacks: 0, powerSurgeTimer: 0, weakened: 0, evade100: 0, deathMarkActive: 0, overclockTimer: 0, bladeCascade: 0, cascadeTimer: 0, avatarOfRenewal: 0, aspectOfReaper: 0, ascension: 0, zealLocked: false, lastSpellClass: null, wildFormTimer: 0 };
+const cooldownMax = { basic: 0, s1: 0, s2: 0, s3: 0, s4: 0 }; // full length of the last cooldown started (HUD overlay, swing animations)
+const buffs = { rapidFire: 0, msBoost: 0, slowed: 0, ironBulwark: 0, rooted: 0, powerSurgeStacks: 0, powerSurgeTimer: 0, weakened: 0, evade100: 0, deathMarkActive: 0, overclockTimer: 0, avatarOfRenewal: 0, aspectOfReaper: 0, ascension: 0, zealLocked: false, lastSpellClass: null, inSanctuary: false, wildFormTimer: 0, barkskin: false, barkskinDmg: 0, sporeSurgeTimer: 0, sporeSurgeBonus: 0, pounceStacks: 0 };
 const enemies = []; const projectiles = []; const effects = []; const drops = [];
 const el = (id) => document.getElementById(id);
 

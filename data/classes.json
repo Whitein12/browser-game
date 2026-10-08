@@ -670,7 +670,8 @@
     "passive": "Spore Generation: Spells infect enemies with Spore Seeds that deal damage over time. Wild Form melee attacks detonate Spores for burst damage.",
     "rareWeapon": {
       "name": "Gnarled Heartwood Totem",
-      "desc": "+100% DMG | RMB: Thistle-Grip Claws | Every 3s an enemy spends spored grants +10% DMG to next Feral Pounce (Max 5)"
+      "desc": "+100% DMG | RMB: Thistle-Grip Claws | Every 3s an enemy spends spored grants +10% DMG to next Feral Pounce (Max 5)",
+      "rmbSkill": "Thistle-Grip Claws"
     },
     "rareArmor": {
       "name": "Mantle of the Living Grove",
@@ -747,6 +748,99 @@
         "upgB": {
           "name": "Apex Predator (Wild)",
           "desc": "Popping a Spore with a claw attack heals you for 2% of Max HP."
+        }
+      }
+    }
+  },
+  "paladin": {
+    "name": "Paladin",
+    "color": "#cfd8dc",
+    "weapon": "mace",
+    "baseMaxHp": 170,
+    "baseArmor": 6,
+    "dmgMult": 1.1,
+    "basicAttackCD": 0.35,
+    "basicDmg": 12,
+    "passive": "Celestial Anchor: Q throws your Grand Mace into the ground. Catch the returning hammer to reset Q: it homes in on you, then commits to a straight line for the last stretch. Your skills change depending on whether the hammer is Equipped or Deployed. While away from it you raise a light shield: -15% basic damage, +15% armor.",
+    "rareWeapon": {
+      "name": "The World-Breaker Grand Mace",
+      "desc": "+100% DMG | Smash shockwaves leave fault lines for 2s. Throwing Judgment Hammer into a fault line drags every enemy on the fracture to the hammer."
+    },
+    "rareArmor": {
+      "name": "Plate of the Gilded Bastion",
+      "desc": "+240 Max HP | While your hammer is deployed, gain 1% DMG reduction per 15 units of distance from it (max 25%)"
+    },
+    "rareAmulet": {
+      "name": "Amulet of Power",
+      "desc": "+20% CDR | Skill cast grants +10% DMG (Stacks 5x)"
+    },
+    "rareBoots": {
+      "name": "Ethereal Treads",
+      "desc": "+50 Move Speed | No collision & 50% less DMG while moving"
+    },
+    "rareGloves": {
+      "name": "Vampiric Grips",
+      "desc": "+25% Attack Speed | Heal 2% of damage dealt"
+    },
+    "skills": {
+      "1": {
+        "name": "Judgment Hammer",
+        "level": 1,
+        "maxCd": 6.0,
+        "baseDmg": 30,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Handheld Purity",
+          "desc": "Recalling the hammer triggers a seismic shockwave when it snaps back into your hand, stunning close enemies for 1.5s (once per 6s)."
+        },
+        "upgB": {
+          "name": "Conduit Shock",
+          "desc": "While stuck in the ground, the hammer shoots holy lightning at the 2 nearest enemies within 200 range every 0.5s."
+        }
+      },
+      "2": {
+        "name": "Bastion Dome",
+        "level": 0,
+        "maxCd": 12.0,
+        "baseDmg": 0,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Holy Sanctuary",
+          "desc": "Standing inside the dome regenerates your health, and temporary shields do not decay while inside."
+        },
+        "upgB": {
+          "name": "Retribution Barrier",
+          "desc": "Every enemy projectile stopped by the dome wall reflects a holy homing bolt back at the attacker."
+        }
+      },
+      "3": {
+        "name": "Righteous Charge / Iron Pull",
+        "level": 0,
+        "maxCd": 6.0,
+        "baseDmg": 30,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Unstoppable Juggernaut",
+          "desc": "Shield-charge distance +50%, and you are immune to all damage during the dash. (Equipped)"
+        },
+        "upgB": {
+          "name": "Gravitational Crashing",
+          "desc": "Landing on your hammer via Iron Pull grounds and slows surrounding enemies by 50% for 3s. (Deployed)"
+        }
+      },
+      "4": {
+        "name": "Consecrated Wrath",
+        "level": 0,
+        "maxCd": 18.0,
+        "baseDmg": 25,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Divine Aura",
+          "desc": "The consecrated ground follows you as a moving aura instead of staying in place."
+        },
+        "upgB": {
+          "name": "Hammer of the Gods",
+          "desc": "Cast while the hammer is deployed: it grows colossal and spins into an iron hurricane that pulls enemies toward it."
         }
       }
     }

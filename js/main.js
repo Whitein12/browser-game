@@ -8,7 +8,7 @@ window.selectDungeon = (did) => { activeDungeonId = did; activeDungeon = enemyDa
 function startGame(className) {
     activeClass = JSON.parse(JSON.stringify(classDataConfig[className])); 
     player.color = activeClass.color; player.x = canvas.width / 2; player.y = canvas.height / 2;
-    player.level = 1; player.xp = 0; player.maxXp = 50; player.gold = 0; player.bonusDmg = 0.0; player.skillPoints = 1;
+    player.level = 1; player.xp = 0; player.maxXp = 50; player.gold = 0; player.bonusDmg = 0.0; player.bonusMaxHp = 0; player.skillPoints = 1;
     wave = 0; equipment = { weapon: null, armor: null, amulet: null, boots: null, gloves: null }; inventory = [];
     isEndlessMode = false;
     
@@ -18,8 +18,10 @@ function startGame(className) {
     player.flowGainTimer = 0; // for decay tracking
 
     recalcStats(); player.hp = player.maxHp; player.shield = 0; player.shieldTimer = 0; player.markTimer = 0; player.cowlCooldown = 0; player.iFrames = 0;
-    buffs.rooted = 0; buffs.powerSurgeStacks = 0; buffs.powerSurgeTimer = 0; buffs.weakened = 0; buffs.evade100 = 0; buffs.deathMarkActive = 0; buffs.overclockTimer = 0; buffs.bladeCascade = 0;
-    enemies.length = 0; projectiles.length = 0; effects.length = 0; drops.length = 0;
+    buffs.rooted = 0; buffs.powerSurgeStacks = 0; buffs.powerSurgeTimer = 0; buffs.weakened = 0; buffs.evade100 = 0; buffs.deathMarkActive = 0; buffs.overclockTimer = 0;
+    player.phantomDecoy = null; player.pounceCharges = 0; player.pounceRecharge = 0;
+    resetPaladinState();
+    enemies.length = 0; projectiles.length = 0; effects.length = 0; drops.length = 0; gameTimers.length = 0;
     
     el('start-screen').classList.add('hidden'); 
     el('hud').classList.remove('hidden');
@@ -34,11 +36,15 @@ window.startEndlessMode = function() {
     <button class="btn" onclick="openInventory()">Open Inventory</button>
     <button class="btn btn-gold hidden" id="btn-shop" onclick="openShop()">Visit Shop</button>
     <button class="btn" onclick="startNextWave()" style="border-color:#4caf50; color:#4caf50;">Start Next Wave</button>`;
+    // Clear leftovers from the final boss fight (summoned guards, archers, corpses) so the wave counter starts clean
+    enemies.length = 0; projectiles.length = 0; effects.length = 0; drops.length = 0; gameTimers.length = 0;
+    activeEnemies = 0; enemiesToSpawn = 0;
     startNextWave();
 }
 
 window.startNextWave = function() {
-    wave++; 
+    wave++;
+    resetPaladinState(); // the Paladin's hammer returns to hand between waves
     isBossWave = (wave % 5 === 0); 
     bossSpawned = false;
     enemiesToSpawn = isBossWave ? 4 : 3 + Math.floor(wave * 2.5); 
@@ -92,12 +98,13 @@ initializeData();
 
 function recalcStats() {
     let gearHp = equipment.armor ? equipment.armor.val : 0;
-    player.maxHp = activeClass.baseMaxHp + gearHp;
+    player.maxHp = activeClass.baseMaxHp + gearHp + (player.bonusMaxHp || 0);
     player.armor = activeClass.baseArmor;
     if (player.hp > player.maxHp) player.hp = player.maxHp;
-    
+
     let gearMs = equipment.boots ? equipment.boots.val : 0;
     player.speed = 250 + gearMs;
+    if (equipment.armor && equipment.armor.name === 'Windrunner Tunic') player.speed *= 1.3;
     
     player.maxFlow = 100;
     if (activeClass && activeClass.name === 'Swordsaint' && equipment.amulet && equipment.amulet.name === 'Prismatic Core') {
@@ -125,11 +132,10 @@ function spawnEnemy() {
     }
 
     const stage = isEndlessMode ? Math.floor(Math.random() * 3) + 1 : (wave > 10 ? 3 : (wave > 5 ? 2 : 1));
-    let minionList = activeDungeon[`stage${stage}_minions`] || activeDungeon.stage1_minions;
-
-    if (isEndlessMode && activeDungeon === enemyDataConfig['slime_caves']) {
-        minionList = [...activeDungeon.stage1_minions, ...activeDungeon.stage2_minions, ...activeDungeon.stage3_minions];
-    }
+    const allMinions = [...(activeDungeon.stage1_minions || []), ...(activeDungeon.stage2_minions || []), ...(activeDungeon.stage3_minions || [])];
+    let minionList = activeDungeon[`stage${stage}_minions`];
+    // Slime Caves mixes every stage in Endless; any stage without minions (Bandit Bastion stage 3) falls back to the full pool
+    if (!minionList || minionList.length === 0 || (isEndlessMode && activeDungeonId === 'slime_caves')) minionList = allMinions;
 
     if (isBossWave && !bossSpawned && enemiesToSpawn === 0) {
         bossSpawned = true; 
@@ -143,9 +149,10 @@ function spawnEnemy() {
         updateHUD(); return;
     }
 
-    if (minionList.length === 0) return;
+    if (minionList.length === 0) { activeEnemies--; updateHUD(); return; }
 
-    const roll = Math.random(); let cumulative = 0; let m = minionList[0];
+    const totalWeight = minionList.reduce((sum, mn) => sum + mn.weight, 0);
+    const roll = Math.random() * totalWeight; let cumulative = 0; let m = minionList[0];
     for (const minion of minionList) { cumulative += minion.weight; if (roll <= cumulative) { m = minion; break; } }
     
     const speed = m.baseSpeed + Math.random() * m.speedVar + (wave * 2.5); 
@@ -156,12 +163,9 @@ function spawnEnemy() {
 window.addEventListener('mousemove', e => { mouseX = e.clientX; mouseY = e.clientY; });
 window.addEventListener('mousedown', e => { 
     if (e.button === 0) isMouseDown = true; 
-    if (e.button === 2 && equipment.weapon && equipment.weapon.rarity === 'rare' && (cooldowns.rmb <= 0 || devNoCooldowns) && gameState === STATE.PLAYING) {
+    if (e.button === 2 && equipment.weapon && equipment.weapon.rarity === 'rare' && activeClass.rareWeapon.rmbSkill && (cooldowns.rmb <= 0 || devNoCooldowns) && gameState === STATE.PLAYING) {
         cooldowns.rmb = devNoCooldowns ? 0 : 4.0 * getCDR();
         window.SkillRegistry[activeClass.name]['rmb']();
-    }
-    if (e.button === 0 && buffs.bladeCascade > 0 && activeClass.skills[4].selectedUpg !== 'A' && gameState === STATE.PLAYING) {
-        window.spawnBladeDrop(mouseX + (Math.random()-0.5)*80, mouseY + (Math.random()-0.5)*80, player.blade.cascadeDmg);
     }
 });
 window.addEventListener('mouseup', e => { if (e.button === 0) isMouseDown = false; });
@@ -191,6 +195,9 @@ window.addEventListener('keydown', e => {
                 effects.push({ type: 'text', text: 'Not Enough Flow!', x: player.x, y: player.y - 40, color: '#ff5252', life: 0.6, maxLife: 0.6 });
                 return;
             }
+            // Optional per-class gate (e.g. Paladin's Bastion Dome needs a deployed hammer); refusing keeps the cooldown unspent
+            const canCast = window.SkillRegistry[activeClass.name].canCast;
+            if (canCast && !canCast(i)) return;
 
             const sk = activeClass.skills[i];
             let cdReduction = getCDR();
@@ -201,8 +208,8 @@ window.addEventListener('keydown', e => {
                 baseCd = calcCooldown(baseCd, sk.level);
             }
 
-            if (activeClass.name === 'Dragonknight' && i === 3 && equipment.boots && equipment.boots.name === 'Earthshaker Treads') baseCd = Math.max(1, baseCd - 2.0);
             cooldowns[`s${i}`] = devNoCooldowns ? 0 : baseCd * cdReduction;
+            cooldownMax[`s${i}`] = cooldowns[`s${i}`];
             
             if (equipment.amulet && equipment.amulet.name === 'Amulet of Power') {
                 buffs.powerSurgeStacks = Math.min(5, buffs.powerSurgeStacks + 1);
@@ -250,6 +257,8 @@ window.addEventListener('keyup', e => {
 });
 
 function update(dt) {
+    updateGameTimers(dt);
+    updatePaladin(dt);
     if (enemiesToSpawn > 0) { enemySpawnTimer -= dt; if (enemySpawnTimer <= 0) { spawnEnemy(); enemySpawnTimer = Math.max(0.5, 2.0 - (wave * 0.1)); } }
     if (cooldowns.basic > 0) cooldowns.basic -= dt;
     if (cooldowns.rmb > 0) cooldowns.rmb -= dt;
@@ -268,8 +277,26 @@ function update(dt) {
     if (player.phantomDecoy && player.phantomDecoy.life > 0) player.phantomDecoy.life -= dt;
 
     if (buffs.powerSurgeTimer > 0) { buffs.powerSurgeTimer -= dt; if (buffs.powerSurgeTimer <= 0) buffs.powerSurgeStacks = 0; }
-    if (player.shield > 0) { player.shieldTimer -= dt; if (player.shieldTimer <= 0) { player.shield = 0; updateHUD(); } }
+    if (player.shield > 0 && !buffs.shieldDecayPaused) { player.shieldTimer -= dt; if (player.shieldTimer <= 0) { player.shield = 0; updateHUD(); } }
     if (activeClass && activeClass.name === 'Dragonknight') { if (player.frenzyTimer > 0) { player.frenzyTimer -= dt; if (player.frenzyTimer <= 0) player.frenzyStacks = 0; } }
+    if (equipment.armor && equipment.armor.name === 'Hazard Suit') buffs.slowed = 0;
+
+    if (activeClass && activeClass.name === 'Druid') {
+        // Barkskin Shift ends when its shield breaks or expires
+        if (buffs.barkskin && player.shield <= 0) {
+            buffs.barkskin = false;
+            if (activeClass.skills[2].selectedUpg === 'B') { // Splintering Shell
+                effects.push({ type: 'circle_burst', x: player.x, y: player.y, radius: 180, color: 'rgba(121, 85, 72, 0.8)', life: 0.4, maxLife: 0.4 });
+                for (const e of enemies) if (Math.hypot(e.x - player.x, e.y - player.y) <= 180 + e.size/2) applyDamage(e, buffs.barkskinDmg, 'physical');
+            }
+        }
+        if (buffs.sporeSurgeTimer > 0) buffs.sporeSurgeTimer -= dt;
+        // Predatory Momentum: the extra Feral Pounce charge refills on its own timer
+        if (activeClass.skills[3].selectedUpg === 'B' && player.pounceCharges < 1) {
+            player.pounceRecharge -= dt;
+            if (player.pounceRecharge <= 0) player.pounceCharges = 1;
+        }
+    }
 
     if (activeClass && activeClass.name === 'Nightblade') {
         player.markTimer = (player.markTimer || 0) - dt;
@@ -290,6 +317,8 @@ function update(dt) {
     }
     
     if (activeClass && activeClass.name === 'Cleric') {
+        // Standing in a Sanctuary (Holy Hallowed Ground) doubles Zeal from basic attacks
+        buffs.inSanctuary = projectiles.some(p => p.type === 'hallowed_ground' && p.isHoly && Math.hypot(player.x - p.x, player.y - p.y) <= p.radius);
         if (buffs.avatarOfRenewal > 0) {
             buffs.avatarOfRenewal -= dt;
             buffs.zealLocked = true;
@@ -548,22 +577,30 @@ function update(dt) {
     
     let currentSpeed = player.speed; 
     if (buffs.msBoost > 0) currentSpeed *= 1.5;
+    if (buffs.sporeSurgeTimer > 0) currentSpeed *= 1 + buffs.sporeSurgeBonus;
     if (buffs.slowed > 0) currentSpeed *= 0.5;
     if (buffs.rooted > 0) currentSpeed = 0;
 
     if (player.grappleTarget) {
-        let [gx, gy, gdist] = getVector(player.x, player.y, player.grappleTarget.x, player.grappleTarget.y);
-        let gSpeed = 2000;
-        if (gdist <= gSpeed * dt) {
-            player.x = player.grappleTarget.x;
-            player.y = player.grappleTarget.y;
+        // Forced movement to a point (Machinist grapple, Paladin charge / Iron Pull).
+        // Optional fields: speed, iFrames (default true), onStep(), onArrive(), noLine, color.
+        const gt = player.grappleTarget;
+        let [gx, gy, gdist] = getVector(player.x, player.y, gt.x, gt.y);
+        let gSpeed = gt.speed || 2000;
+        gt.time = (gt.time || 0) + dt;
+        let arrived = gdist <= gSpeed * dt || gt.time > 1.5; // time cap so a blocked path can't trap the player
+        if (arrived) {
+            player.x = gt.x;
+            player.y = gt.y;
             player.grappleTarget = null;
         } else {
             player.x += (gx/gdist) * gSpeed * dt;
             player.y += (gy/gdist) * gSpeed * dt;
         }
-        player.iFrames = 0.1;
+        if (gt.iFrames !== false) player.iFrames = 0.1;
         clampToBounds(player, player.radius);
+        if (gt.onStep) gt.onStep(dt);
+        if (arrived && gt.onArrive) gt.onArrive();
     } else if (mag > 0 && currentSpeed > 0) {
         player.x += (vx / mag) * currentSpeed * dt; player.y += (vy / mag) * currentSpeed * dt;
         clampToBounds(player, player.radius);
@@ -602,13 +639,15 @@ function update(dt) {
                     if (effects[i].poison) applyDamage(enemies[k], effects[i].dmg * dt, 'dot');
                 }
             }
-        } else if (effects[i].type === 'fire_puddle' || effects[i].type === 'thorn_patch') {
+        } else if (effects[i].type === 'fire_puddle' || effects[i].type === 'thorn_patch' || effects[i].type === 'consecrated_ground') {
             for(let k=enemies.length-1; k>=0; k--) {
-                if (Math.hypot(enemies[k].x - effects[i].x, enemies[k].y - effects[i].y) <= effects[i].radius + enemies[k].size/2) {
-                    applyDamage(enemies[k], effects[i].dmg * dt, 'dot');
-                    if (effects[i].type === 'thorn_patch' && effects[i].slow) {
-                        enemies[k].slowTimer = 0.5; // continuous refresh
-                        enemies[k].slowAmount = effects[i].slow;
+                const ek = enemies[k];
+                if (Math.hypot(ek.x - effects[i].x, ek.y - effects[i].y) <= effects[i].radius + ek.size/2) {
+                    applyDamage(ek, effects[i].dmg * dt, 'dot');
+                    // Zone slows refresh continuously, but never override a stronger slow that is already active
+                    if (effects[i].slow && (!(ek.slowTimer > 0) || effects[i].slow >= ek.slowAmount)) {
+                        ek.slowTimer = Math.max(ek.slowTimer || 0, 0.5);
+                        ek.slowAmount = effects[i].slow;
                     }
                 }
             }
@@ -693,10 +732,6 @@ function update(dt) {
             if (p.type === 'boss_slimeball') { effects.push({ type: 'puddle', x: p.x, y: p.y, radius: 30, color: '#009688', life: 1.5, maxLife: 1.5 }); }
             if (p.type === 'trap_throw') { effects.push({ type: 'bear_trap', x: p.x, y: p.y, radius: 15, color: '#5d4037', life: 8.0, maxLife: 8.0, dmg: p.damage }); }
             if (p.type === 'spore') { effects.push({ type: 'spore_cloud', x: p.x, y: p.y, radius: 100, color: 'rgba(205, 220, 57, 0.4)', life: 3.0, maxLife: 3.0 }); }
-            if (p.type === 'phantom_blade_drop') {
-                effects.push({ type: 'circle', x: p.x, y: p.y, radius: 60, color: '#00e5ff', life: 0.1, maxLife: 0.1 });
-                for(let e of enemies) { if (Math.hypot(e.x - p.x, e.y - p.y) < e.size/2 + 60) applyDamage(e, p.damage); }
-            }
             if (p.type === 'chain_hook' && p.sourceBoss) { 
                 p.sourceBoss.state = 'hook_pull'; 
                 p.sourceBoss.pullTargetX = Math.max(currentMap.left + 20, Math.min(currentMap.right - 20, p.x)); 
@@ -749,6 +784,7 @@ function update(dt) {
             let hit = false;
             for (let j = enemies.length - 1; j >= 0; j--) {
                 const e = enemies[j];
+                if (e.dead) continue;
                 if (Math.hypot(p.x - e.x, p.y - e.y) < e.size/2 + p.radius) {
                     if ((p.pierce || p.type === 'shield_throw' || p.type === 'fan_of_knives' || p.type === 'scattergun' || p.type === 'censer_pulse') && p.hitList.includes(e)) continue;
 
@@ -771,11 +807,11 @@ function update(dt) {
                         }
                     } else if (p.type === 'ricochet') {
                         applyDamage(e, p.damage, 'ranged');
-                        if (p.sourceSkill && p.sourceSkill.selectedUpg === 'B') { e.frozenTimer = 1.0; e.bleedTimer = 3.0; e.bleedDmg = p.damage * 0.4; } 
+                        if (p.sourceSkill && p.sourceSkill.selectedUpg === 'B') { e.slowTimer = 1.5; e.slowAmount = 0.5; e.bleedTimer = 3.0; e.bleedDmg = p.damage * 0.4; }
                         if (p.bounces > 0) {
                             p.bounces--; p.hitList.push(e);
                             let nextT = null; let minDist = 400;
-                            for(const et of enemies) { if (p.hitList.includes(et)) continue; const dist = Math.hypot(et.x - p.x, et.y - p.y); if(dist < minDist) { minDist = dist; nextT = et; } }
+                            for(const et of enemies) { if (et.dead || p.hitList.includes(et)) continue; const dist = Math.hypot(et.x - p.x, et.y - p.y); if(dist < minDist) { minDist = dist; nextT = et; } }
                             if (nextT) { const [nx, ny, nd] = getVector(p.x, p.y, nextT.x, nextT.y); p.vx = (nx/nd)*900; p.vy = (ny/nd)*900; } 
                             else { hit = true; } 
                         } else { hit = true; }
@@ -811,9 +847,6 @@ function update(dt) {
                             if (p.isInSanctuary) zealGain *= 2.0;
                             player.zeal = Math.min(player.maxZeal, player.zeal + zealGain);
                         }
-                        if (p.isSiphon) {
-                            player.hp = Math.min(player.maxHp, player.hp + ((player.maxHp - player.hp) * 0.03));
-                        }
                     }
 
                     if (p.pierce || p.type === 'shield_throw' || p.type === 'ricochet' || p.type === 'fan_of_knives' || p.type === 'scattergun' || p.type === 'censer_pulse') { if (p.type !== 'ricochet') p.hitList.push(e); } else { hit = true; break; }
@@ -826,10 +859,12 @@ function update(dt) {
     let hasCasterAura = false;
     for (let i = enemies.length - 1; i >= 0; i--) {
         const e = enemies[i];
+        if (e.dead) continue;
         if (e.frozenTimer > 0) { e.frozenTimer -= dt; e.renderColor = '#90caf9'; } 
         else if (e.rootedTimer > 0) { e.rootedTimer -= dt; e.renderColor = '#b0bec5'; }
         else if (e.stunTimer > 0) { e.stunTimer -= dt; e.renderColor = '#ffeb3b'; }
         else if (e.blindTimer > 0) { e.blindTimer -= dt; e.renderColor = '#e0e0e0'; }
+        else if (e.slowTimer > 0 && e.slowAmount > 0) { e.renderColor = '#4fc3f7'; }
         else { e.renderColor = e.color; }
 
         if (e.bleedTimer > 0) {
@@ -843,16 +878,23 @@ function update(dt) {
             
             let myDps = e.sporeDps || 0;
             // Spore ticks 50% faster if Barkskin Shift Accelerated Decay is active
-            if (activeClass && activeClass.name === 'Druid' && activeClass.skills[2].selectedUpg === 'A' && player.shieldTimer > 0) {
+            if (activeClass && activeClass.name === 'Druid' && activeClass.skills[2].selectedUpg === 'A' && buffs.barkskin) {
                 myDps *= 1.5;
             }
-            
+
             applyDamage(e, myDps * dt, 'dot');
             if (Math.random() < 0.15) {
                 effects.push({ type: 'circle', x: e.x + (Math.random()-0.5)*e.size, y: e.y + (Math.random()-0.5)*e.size, radius: 3 + Math.random()*3, color: '#cddc39', life: 0.4, maxLife: 0.4 });
             }
+
+            // Gnarled Heartwood Totem: every 3s an enemy spends spored grants +10% DMG to the next Feral Pounce (max 5)
+            if (equipment.weapon && equipment.weapon.name === 'Gnarled Heartwood Totem') {
+                e.sporedTime = (e.sporedTime || 0) + dt;
+                if (e.sporedTime >= 3.0) { e.sporedTime -= 3.0; buffs.pounceStacks = Math.min(5, buffs.pounceStacks + 1); }
+            }
         }
-        
+        if (e.dead) continue; // killed by a DoT this frame
+
         if (e.aoeResistTimer > 0) {
             e.aoeResistTimer -= dt;
             if (e.aoeResistTimer <= 0) e.aoeResistStacks = 0;
@@ -860,17 +902,26 @@ function update(dt) {
 
         if (e.shockTimer > 0) e.shockTimer -= dt;
 
-        let isImmobilized = (e.frozenTimer > 0 || (e.rootedTimer && e.rootedTimer > 0) || e.stunTimer > 0);
-        let curSpd = (e.speed === 0 || isImmobilized) ? ((e.speed === 0 || isImmobilized) ? 0 : e.speed * 0.3) : e.speed;
+        let isImmobilized = (e.frozenTimer > 0 || e.rootedTimer > 0 || e.stunTimer > 0);
+        let curSpd = isImmobilized ? 0 : e.speed;
         if (e.shockTimer > 0) curSpd *= 0.5;
+        if (e.slowTimer > 0) { e.slowTimer -= dt; curSpd *= 1 - (e.slowAmount !== undefined ? e.slowAmount : 0.4); }
         
         hasCasterAura = false;
         for(let j=0; j<enemies.length; j++) { if (enemies[j].type === 'caster' && Math.hypot(e.x - enemies[j].x, e.y - enemies[j].y) < 400) hasCasterAura = true; }
         if (hasCasterAura) curSpd *= 2.0;
 
         let [edx, edy, edist] = getVector(e.x, e.y, player.x, player.y);
+
+        // Mantle of the Living Grove: enemies that rush into an active Barkskin get rooted (once per 3s each)
+        if (e.mantleRootCd > 0) e.mantleRootCd -= dt;
+        if (buffs.barkskin && equipment.armor && equipment.armor.name === 'Mantle of the Living Grove' && !(e.mantleRootCd > 0) && edist < player.radius + e.size / 2 + 10) {
+            e.rootedTimer = 1.5; e.mantleRootCd = 3.0;
+            effects.push({ type: 'text', text: 'ROOTED', x: e.x, y: e.y - 20, color: '#8bc34a', life: 0.6, maxLife: 0.6 });
+        }
+
         if (player.inSmoke || e.blindTimer > 0) { edx = 0; edy = 0; edist = Infinity; }
-        if (e.meleeTimer > 0) e.meleeTimer -= dt; 
+        if (e.meleeTimer > 0) e.meleeTimer -= dt;
 
         if (edist < player.radius + e.size / 2 && e.state !== 'dash_execute' && e.state !== 'bounce_telegraph' && e.state !== 'charge' && e.state !== 'jousting' && e.state !== 'death_throes') {
             if (!(equipment.boots && equipment.boots.name === 'Ethereal Treads')) {
@@ -886,7 +937,12 @@ function update(dt) {
             } else { e.facingAngle = targetAngle; }
         }
 
-        if (window.EnemyAI[e.type]) {
+        if (e.tauntTimer > 0) {
+            // Taunted (Paladin hammer threat): walk to the taunt point instead of attacking
+            e.tauntTimer -= dt;
+            let [tx, ty, td] = getVector(e.x, e.y, e.tauntX, e.tauntY);
+            if (td > e.size/2 + 25) { e.x += (tx/td)*curSpd*dt; e.y += (ty/td)*curSpd*dt; }
+        } else if (window.EnemyAI[e.type]) {
             if (e.stunTimer > 0 && !e.type.startsWith('boss_')) {}
             else window.EnemyAI[e.type](e, dt, curSpd, edx, edy, edist, i);
         } else {
@@ -896,7 +952,8 @@ function update(dt) {
         
         clampToBounds(e, e.size/2);
     }
-    
+
+    removeDeadEnemies();
     updateHUD();
 }
 
@@ -916,7 +973,7 @@ function draw() {
     }
 
     for (const ef of effects) {
-        if (ef.type === 'puddle' || ef.type === 'fire_puddle' || ef.type === 'thorn_patch' || ef.type === 'spore_cloud') {
+        if (ef.type === 'puddle' || ef.type === 'fire_puddle' || ef.type === 'thorn_patch' || ef.type === 'spore_cloud' || ef.type === 'consecrated_ground') {
             ctx.fillStyle = ef.color; ctx.globalAlpha = ef.life / ef.maxLife * 0.5; ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.radius, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1.0;
         } else if (ef.type === 'smoke_bomb') {
             ctx.fillStyle = ef.color; 
@@ -958,7 +1015,7 @@ function draw() {
     }
 
     for (const ef of effects) {
-        if (ef.type === 'puddle' || ef.type === 'fire_puddle' || ef.type === 'thorn_patch' || ef.type === 'spore_cloud' || ef.type === 'smoke_bomb') continue; 
+        if (ef.type === 'puddle' || ef.type === 'fire_puddle' || ef.type === 'thorn_patch' || ef.type === 'spore_cloud' || ef.type === 'consecrated_ground' || ef.type === 'smoke_bomb') continue; 
         
         ctx.globalAlpha = ef.isWarning ? 1.0 : ef.life / ef.maxLife; 
         
@@ -1354,7 +1411,6 @@ function draw() {
             ctx.restore();
         }
         else if (ef.type === 'bear_trap') { ctx.fillStyle = ef.color; ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.radius, 0, Math.PI*2); ctx.fill(); ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.radius/2, 0, Math.PI*2); ctx.fill(); }
-        else if (ef.type === 'slash') { ctx.strokeStyle = ef.color || '#e0e0e0'; ctx.lineWidth = 25 * (ef.life/ef.maxLife); ctx.lineCap = 'round'; ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.radius * 0.8, ef.angle - Math.PI/2.5, ef.angle + Math.PI/2.5); ctx.stroke(); ctx.lineCap = 'butt'; }
         else if (ef.type === 'claw_swipe') {
             ctx.strokeStyle = ef.color || '#c62828';
             ctx.lineWidth = 12 * (ef.life/ef.maxLife);
@@ -1410,8 +1466,10 @@ function draw() {
         ctx.globalAlpha = 1.0;
     }
 
+    drawPaladinWorld();
+
     for (const e of enemies) {
-        if (e.state === 'split') continue; 
+        if (e.dead || e.state === 'split') continue;
         ctx.fillStyle = e.renderColor || e.color;
         
         if (e.type === 'shield' || e.type === 'boss_valerius') {
@@ -1596,15 +1654,15 @@ function draw() {
     }
 
     if (player.hp > 0 && gameState !== STATE.MENU && gameState !== STATE.DEAD) {
-        if (player.grappleTarget) {
-            ctx.strokeStyle = '#9e9e9e'; ctx.lineWidth = 4;
+        if (player.grappleTarget && !player.grappleTarget.noLine) {
+            ctx.strokeStyle = player.grappleTarget.color || '#9e9e9e'; ctx.lineWidth = 4;
             ctx.beginPath();
             ctx.moveTo(player.x, player.y);
             ctx.lineTo(player.grappleTarget.x, player.grappleTarget.y);
             ctx.stroke();
-            
+
             // Draw hook at the end
-            ctx.fillStyle = '#616161';
+            ctx.fillStyle = player.grappleTarget.color || '#616161';
             ctx.beginPath();
             ctx.arc(player.grappleTarget.x, player.grappleTarget.y, 6, 0, Math.PI * 2);
             ctx.fill();
@@ -1899,6 +1957,8 @@ function draw() {
                 }
             }
 
+        } else if (activeClass && activeClass.weapon === 'mace') {
+            drawPaladinWeapon(aimAngle);
         } else if (activeClass && activeClass.weapon === 'dagger') {
             const handleColor = equipment.weapon && equipment.weapon.rarity === 'rare' ? '#4a148c' : '#9c27b0';
             const perp = aimAngle + Math.PI/2;
@@ -2014,7 +2074,7 @@ function draw() {
         }
     } 
 
-    const boss = enemies.find(e => e.type.startsWith('boss'));
+    const boss = enemies.find(e => !e.dead && e.type.startsWith('boss'));
     if (boss && boss.state !== 'death_throes') {
         const bw = 400; const bh = 20; const bx = canvas.width/2 - bw/2; const by = 30;
         ctx.fillStyle = '#111'; ctx.fillRect(bx, by, bw, bh); ctx.fillStyle = '#ffeb3b'; ctx.fillRect(bx, by, bw * (boss.hp/boss.maxHp), bh);
