@@ -106,8 +106,10 @@ function applyDamage(enemy, amount, source = 'player', projAngle = null) {
             let trueDmg = activeClass.basicDmg * 5; 
             if (isNightblade && activeClass.skills[3].selectedUpg === 'A' && source === 'phantom_dash') trueDmg *= 3;
             
-            enemy.hp -= trueDmg; 
-            buffs.msBoost = 1.0; 
+            enemy.hp -= trueDmg;
+            buffs.msBoost = 1.0;
+            addShake(4);
+            burst(enemy.x, enemy.y, hitAngle + Math.PI, 2.2, 14, { kind: 'spark', color: '#ea80fc', size: 3, life: 0.35, speed: [200, 520], drag: 5 });
             effects.push({ type: 'text', text: 'WEAKPOINT!', x: enemy.x, y: enemy.y - 40, color: '#e1bee7', life: 0.8, maxLife: 0.8 });
             
             if (isNightblade && activeClass.skills[3].level > 0 && source === 'phantom_dash') {
@@ -116,7 +118,7 @@ function applyDamage(enemy, amount, source = 'player', projAngle = null) {
             
             if (buffs.deathMarkActive > 0) {
                 if (isNightblade && activeClass.skills[4].selectedUpg === 'A') player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.1);
-                effects.push({ type: 'circle', x: enemy.x, y: enemy.y, radius: 100, color: 'rgba(156, 39, 176, 0.4)', life: 0.3, maxLife: 0.3 });
+                effects.push({ type: 'holy_nova', x: enemy.x, y: enemy.y, radius: 100, color: '#ce93d8', life: 0.35, maxLife: 0.35 }); // skillfx_space.js
                 
                 for(let k=enemies.length-1; k>=0; k--) {
                     let et = enemies[k];
@@ -134,6 +136,7 @@ function applyDamage(enemy, amount, source = 'player', projAngle = null) {
 
     if (activeClass.name === 'Ranger' && activeClass.skills[1].selectedUpg === 'B' && source !== 'magic' && source !== 'dot') enemy.hp -= (amount * 1.2); 
     else enemy.hp -= amount;
+    spawnHitFx(enemy, source, projAngle);
 
     if (equipment.gloves && equipment.gloves.name === 'Vampiric Grips') player.hp = Math.min(player.maxHp, player.hp + amount * 0.02);
 
@@ -149,6 +152,7 @@ function takeDamage(amount, isContinuous = false, sourceObj = null) {
 
     if (player.parryTimer > 0 && !isContinuous) {
         effects.push({ type: 'text', text: 'Parried!', x: player.x, y: player.y - 30, color: '#00e5ff', life: 0.6, maxLife: 0.6 });
+        onParry(sourceObj);
         
         let flowGain = player.maxFlow * 0.2; // Base parry flow gain
         
@@ -227,7 +231,9 @@ function takeDamage(amount, isContinuous = false, sourceObj = null) {
     }
 
     player.hp -= amount;
-    
+    if (!isContinuous) player.hurtFlash = 0.2; // sprite hit flash
+    if (!isContinuous && amount >= player.maxHp * 0.08) addShake(3);
+
     if (equipment.armor && equipment.armor.name === "Nightblade's Cowl" && player.hp / player.maxHp < 0.3 && (player.cowlCooldown || 0) <= 0) {
         buffs.evade100 = 2.0; player.cowlCooldown = 15.0; 
         effects.push({ type: 'text', text: 'ELUSIVE!', x: player.x, y: player.y - 50, color: '#e1bee7', life: 1.0, maxLife: 1.0 });

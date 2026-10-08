@@ -273,11 +273,11 @@
         "selectedUpg": null,
         "upgA": {
           "name": "Heavy Shafts",
-          "desc": "Arrows pierce 1 enemy"
+          "desc": "Heavier arrows: wider impacts that briefly slow enemies"
         },
         "upgB": {
           "name": "Rain of Arrows",
-          "desc": "Fires +2 additional arrows"
+          "desc": "Looses more arrows over a larger area"
         }
       }
     }
@@ -667,7 +667,7 @@
     "dmgMult": 1.0,
     "basicAttackCD": 0.35,
     "basicDmg": 12,
-    "passive": "Spore Generation: Spells infect enemies with Spore Seeds that deal damage over time. Wild Form melee attacks detonate Spores for burst damage.",
+    "passive": "Spore Generation: Spells infect enemies with Spore Seeds that deal damage over time. Wild Form melee attacks detonate Spores for burst damage. Every 3rd Wild Form attack is a lunging Bite (+75% DMG, briefly staggers).",
     "rareWeapon": {
       "name": "Gnarled Heartwood Totem",
       "desc": "+100% DMG | RMB: Thistle-Grip Claws | Every 3s an enemy spends spored grants +10% DMG to next Feral Pounce (Max 5)",

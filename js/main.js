@@ -20,8 +20,10 @@ function startGame(className) {
     recalcStats(); player.hp = player.maxHp; player.shield = 0; player.shieldTimer = 0; player.markTimer = 0; player.cowlCooldown = 0; player.iFrames = 0;
     buffs.rooted = 0; buffs.powerSurgeStacks = 0; buffs.powerSurgeTimer = 0; buffs.weakened = 0; buffs.evade100 = 0; buffs.deathMarkActive = 0; buffs.overclockTimer = 0;
     player.phantomDecoy = null; player.pounceCharges = 0; player.pounceRecharge = 0;
+    player.dash = null; player.z = 0; player.grappleTarget = null; dashGhosts.length = 0;
+    player.wolfComboStep = 0; player.wolfComboTimer = 0; player.lastWolfStep = 0;
     resetPaladinState();
-    enemies.length = 0; projectiles.length = 0; effects.length = 0; drops.length = 0; gameTimers.length = 0;
+    enemies.length = 0; projectiles.length = 0; effects.length = 0; drops.length = 0; gameTimers.length = 0; particles.length = 0;
     
     el('start-screen').classList.add('hidden'); 
     el('hud').classList.remove('hidden');
@@ -57,6 +59,7 @@ window.startNextWave = function() {
         currentMap.type = 'open';
     }
     updateMapBounds();
+    player.dash = null; player.z = 0; player.grappleTarget = null; // never carry a dash across a map change
 
     if (activeDungeonId === 'bandit_bastion' && wave === 11 && !isEndlessMode) {
         currentMap.valeriusTriggered = false;
@@ -230,7 +233,7 @@ window.addEventListener('keydown', e => {
                     let angle = Math.random() * Math.PI * 2;
                     projectiles.push({
                         x: player.x, y: player.y, vx: Math.cos(angle)*400, vy: Math.sin(angle)*400,
-                        radius: 8, color: '#fff', life: 3.0, type: 'basic', shape: 'fireball', damage: activeClass.skills[4].baseDmg ? calcDmg(activeClass.skills[4].baseDmg, activeClass.skills[4].level) : 50, pierce: false, isEnemy: false,
+                        radius: 8, color: '#fff', life: 3.0, type: 'basic', shape: 'light_spear', damage: activeClass.skills[4].baseDmg ? calcDmg(activeClass.skills[4].baseDmg, activeClass.skills[4].level) : 50, pierce: false, isEnemy: false,
                         customUpdate: function(dt, p) {
                             let nearest = getNearestEnemyFromPoint(p.x, p.y, 400);
                             if (nearest) {
@@ -258,6 +261,7 @@ window.addEventListener('keyup', e => {
 
 function update(dt) {
     updateGameTimers(dt);
+    updateFx(dt);
     updatePaladin(dt);
     if (enemiesToSpawn > 0) { enemySpawnTimer -= dt; if (enemySpawnTimer <= 0) { spawnEnemy(); enemySpawnTimer = Math.max(0.5, 2.0 - (wave * 0.1)); } }
     if (cooldowns.basic > 0) cooldowns.basic -= dt;
@@ -286,7 +290,7 @@ function update(dt) {
         if (buffs.barkskin && player.shield <= 0) {
             buffs.barkskin = false;
             if (activeClass.skills[2].selectedUpg === 'B') { // Splintering Shell
-                effects.push({ type: 'circle_burst', x: player.x, y: player.y, radius: 180, color: 'rgba(121, 85, 72, 0.8)', life: 0.4, maxLife: 0.4 });
+                effects.push({ type: 'bark_burst', x: player.x, y: player.y, radius: 180, life: 0.4, maxLife: 0.4 });
                 for (const e of enemies) if (Math.hypot(e.x - player.x, e.y - player.y) <= 180 + e.size/2) applyDamage(e, buffs.barkskinDmg, 'physical');
             }
         }
@@ -335,6 +339,11 @@ function update(dt) {
             buffs.ascension -= dt;
             // Maybe slight passive healing/dmg boost which we handle in dmg calc
         }
+    }
+
+    if (player.wolfComboTimer > 0) { // Druid Wild Form combo
+        player.wolfComboTimer -= dt;
+        if (player.wolfComboTimer <= 0) player.wolfComboStep = 0;
     }
 
     if (activeClass && activeClass.name === 'Swordsaint') {
@@ -581,7 +590,9 @@ function update(dt) {
     if (buffs.slowed > 0) currentSpeed *= 0.5;
     if (buffs.rooted > 0) currentSpeed = 0;
 
-    if (player.grappleTarget) {
+    if (player.dash) {
+        updateDash(dt); // skillfx_space.js: timed dashes and leaps
+    } else if (player.grappleTarget) {
         // Forced movement to a point (Machinist grapple, Paladin charge / Iron Pull).
         // Optional fields: speed, iFrames (default true), onStep(), onArrive(), noLine, color.
         const gt = player.grappleTarget;
@@ -630,6 +641,7 @@ function update(dt) {
 
     player.inSmoke = false;
     for (let i = effects.length - 1; i >= 0; i--) { 
+        if (effects[i].life === undefined) effects[i].life = effects[i].maxLife = 0.35; // some effects are pushed without a lifetime
         effects[i].life -= dt; 
         if (effects[i].customUpdate) effects[i].customUpdate(dt, effects[i]);
         if (effects[i].type === 'smoke_bomb') {
@@ -738,7 +750,7 @@ function update(dt) {
                 p.sourceBoss.pullTargetY = Math.max(currentMap.top + 20, Math.min(currentMap.bottom - 20, p.y)); 
             }
             if (p.type === 'turret' && p.volatile) {
-                effects.push({ type: 'circle', x: p.x, y: p.y, radius: 150, color: '#ff5722', life: 0.3, maxLife: 0.3 });
+                effects.push({ type: 'fiery_explosion', x: p.x, y: p.y, radius: 150, life: 0.5, maxLife: 0.5 });
                 for(let e of enemies) { if (Math.hypot(e.x - p.x, e.y - p.y) < e.size/2 + 150) applyDamage(e, p.damage * 3, 'magic'); }
             }
             projectiles.splice(i, 1); continue; 
@@ -800,7 +812,7 @@ function update(dt) {
                     } else if (p.type === 'shield_throw') {
                         applyDamage(e, p.damage, 'melee');
                         if (p.sourceSkill && p.sourceSkill.selectedUpg === 'A') {
-                            effects.push({ type: 'circle', x: e.x, y: e.y, radius: 60, color: '#e0e0e0', life: 0.2, maxLife: 0.2 });
+                            effects.push({ type: 'shield_blast', x: e.x, y: e.y, radius: 60, life: 0.3, maxLife: 0.3 });
                             for(let k=enemies.length-1; k>=0; k--) {
                                 if (e !== enemies[k] && Math.hypot(e.x - enemies[k].x, e.y - enemies[k].y) <= 60 + enemies[k].size/2) applyDamage(enemies[k], p.damage*0.5, 'melee');
                             }
@@ -821,7 +833,7 @@ function update(dt) {
                         if (!e.type.startsWith('boss') && ebd > 0) { e.x += (ebx/ebd)*15; e.y += (eby/ebd)*15; clampToBounds(e, e.size/2); }
                     } else if (p.type === 'net_throw') {
                         applyDamage(e, p.damage, 'ranged');
-                        e.rootedTimer = 2.0;
+                        e.rootedTimer = 2.0; e.netTimer = 2.0;
                     } else if (p.type === 'druid_spore' || p.type === 'bramble_core') {
                         applyDamage(e, p.damage, 'magic');
                         // Apply Spores: 5 seconds duration, DPS based on player scale (e.g. 50% of hit dmg per second)
@@ -959,6 +971,8 @@ function update(dt) {
 
 function draw() {
     ctx.fillStyle = '#111'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    if (gameState === STATE.PLAYING) ctx.translate(shakeX, shakeY); // fx.js camera shake
     
     if (currentMap.type === 'bridge') {
         ctx.fillStyle = '#2c2c2c'; ctx.fillRect(currentMap.left, currentMap.top, currentMap.right - currentMap.left, currentMap.bottom - currentMap.top);
@@ -966,13 +980,14 @@ function draw() {
         ctx.fillRect(currentMap.left, currentMap.top - 10, canvas.width, 10);
         ctx.fillRect(currentMap.left, currentMap.bottom, canvas.width, 10);
     } else {
-        ctx.fillStyle = '#1e1e1e'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#1e1e1e'; ctx.fillRect(-10, -10, canvas.width + 20, canvas.height + 20); // overscan for camera shake
         ctx.strokeStyle = '#2a2a2a'; ctx.lineWidth = 1; const gridSize = 100;
         for (let i = 0; i < canvas.width; i += gridSize) { ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, canvas.height); ctx.stroke(); }
         for (let i = 0; i < canvas.height; i += gridSize) { ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(canvas.width, i); ctx.stroke(); }
     }
 
     for (const ef of effects) {
+        if (drawSkillGround(ef)) continue; // skillfx.js
         if (ef.type === 'puddle' || ef.type === 'fire_puddle' || ef.type === 'thorn_patch' || ef.type === 'spore_cloud' || ef.type === 'consecrated_ground') {
             ctx.fillStyle = ef.color; ctx.globalAlpha = ef.life / ef.maxLife * 0.5; ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.radius, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1.0;
         } else if (ef.type === 'smoke_bomb') {
@@ -999,8 +1014,10 @@ function draw() {
         }
     }
 
+    drawGroundProjectiles(); // skillfx_e.js: Hallowed Ground, Tesla field
+
     for (const d of drops) {
-        if (d.type === 'shield_catch') { ctx.strokeStyle = '#78909c'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(d.x, d.y, d.radius, 0, Math.PI*2); ctx.stroke(); }
+        if (d.type === 'shield_catch') drawShieldCatch(d); // skillfx.js
         else if (d.type === 'scrap') {
             ctx.fillStyle = '#ff9800'; ctx.beginPath();
             for(let j=0; j<6; j++) { let a = (Math.PI*2/6)*j; ctx.lineTo(d.x + Math.cos(a)*d.radius, d.y + Math.sin(a)*d.radius); }
@@ -1018,6 +1035,7 @@ function draw() {
         if (ef.type === 'puddle' || ef.type === 'fire_puddle' || ef.type === 'thorn_patch' || ef.type === 'spore_cloud' || ef.type === 'consecrated_ground' || ef.type === 'smoke_bomb') continue; 
         
         ctx.globalAlpha = ef.isWarning ? 1.0 : ef.life / ef.maxLife; 
+        if (drawSkillEffect(ef)) { ctx.globalAlpha = 1.0; continue; } // skillfx.js
         
         if (ef.type === 'meteor_drop') {
             if (!ef.rockPoints) {
@@ -1357,7 +1375,13 @@ function draw() {
         } 
         else if (ef.type === 'line') { ctx.strokeStyle = ef.color; ctx.lineWidth = ef.lineWidth || 40; ctx.beginPath(); ctx.moveTo(ef.x1, ef.y1); ctx.lineTo(ef.x2, ef.y2); ctx.stroke(); } 
         else if (ef.type === 'cone') { ctx.fillStyle = ef.color; ctx.beginPath(); ctx.moveTo(ef.x, ef.y); ctx.arc(ef.x, ef.y, ef.radius, ef.angle - ef.spread/2, ef.angle + ef.spread/2); ctx.closePath(); ctx.fill(); }
-        else if (ef.type === 'slash') { ctx.strokeStyle = ef.color || '#e0e0e0'; ctx.lineWidth = 25 * (ef.life/ef.maxLife); ctx.lineCap = 'round'; ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.radius * 0.8, ef.angle - Math.PI/2.5, ef.angle + Math.PI/2.5); ctx.stroke(); ctx.lineCap = 'butt'; }
+        else if (ef.type === 'slash') {
+            const r = (ef.radius || 50) * 0.8, sweep = Math.PI / 2.5;
+            ctx.fillStyle = ef.color || '#e0e0e0';
+            drawCrescent(ef.x, ef.y, r, ef.angle - sweep, ef.angle + sweep, 22 * (ef.life / ef.maxLife) + 4); ctx.fill();
+            ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.arc(ef.x, ef.y, r, ef.angle - sweep * 0.8, ef.angle + sweep * 0.8); ctx.stroke();
+        }
         else if (ef.type === 'precision_slash') {
             ctx.save();
             ctx.translate(ef.x, ef.y);
@@ -1412,17 +1436,15 @@ function draw() {
         }
         else if (ef.type === 'bear_trap') { ctx.fillStyle = ef.color; ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.radius, 0, Math.PI*2); ctx.fill(); ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.radius/2, 0, Math.PI*2); ctx.fill(); }
         else if (ef.type === 'claw_swipe') {
-            ctx.strokeStyle = ef.color || '#c62828';
-            ctx.lineWidth = 12 * (ef.life/ef.maxLife);
-            ctx.lineCap = 'round';
-            for(let c=-1; c<=1; c++) {
-                let offsetAngle = c * 0.15;
-                ctx.beginPath();
-                ctx.arc(ef.x, ef.y, ef.radius * 0.8 + c * 20, ef.angle - Math.PI/3 + offsetAngle, ef.angle + Math.PI/3 + offsetAngle);
-                ctx.stroke();
+            // Three tapered claw rakes
+            ctx.fillStyle = ef.color || '#c62828';
+            for (let c = -1; c <= 1; c++) {
+                const offsetAngle = c * 0.15;
+                drawCrescent(ef.x, ef.y, ef.radius * 0.8 + c * 20, ef.angle - Math.PI/3 + offsetAngle, ef.angle + Math.PI/3 + offsetAngle, 10 * (ef.life / ef.maxLife) + 2);
+                ctx.fill();
             }
-            ctx.lineCap = 'butt';
         }
+        else if (ef.type === 'wolf_bite') drawWolfBite(ef); // fx.js
         else if (ef.type === 'storm_cyclone') {
             ctx.save();
             ctx.translate(ef.x, ef.y);
@@ -1470,7 +1492,7 @@ function draw() {
 
     for (const e of enemies) {
         if (e.dead || e.state === 'split') continue;
-        ctx.fillStyle = e.renderColor || e.color;
+        ctx.fillStyle = e.hitFlash > 0 ? '#ffffff' : (e.renderColor || e.color);
         
         if (e.type === 'shield' || e.type === 'boss_valerius') {
             ctx.beginPath(); ctx.arc(e.x, e.y, e.size/2, 0, Math.PI*2); ctx.fill();
@@ -1491,19 +1513,15 @@ function draw() {
         } 
         else { ctx.fillRect(e.x - e.size/2, e.y - e.size/2, e.size, e.size); }
         
-        if (e.markAngle !== undefined) {
-            ctx.strokeStyle = '#e1bee7'; ctx.lineWidth = 3;
-            let mx = e.x + Math.cos(e.markAngle) * (e.size/2 + 15);
-            let my = e.y + Math.sin(e.markAngle) * (e.size/2 + 15);
-            ctx.beginPath(); ctx.moveTo(mx, my - 6); ctx.lineTo(mx + 6, my); ctx.lineTo(mx, my + 6); ctx.lineTo(mx - 6, my); ctx.closePath(); ctx.stroke();
-            ctx.strokeStyle = 'rgba(225, 190, 231, 0.4)'; ctx.lineWidth = 2;
-            ctx.beginPath(); ctx.arc(e.x, e.y, e.size/2 + 15, e.markAngle - 0.4, e.markAngle + 0.4); ctx.stroke();
-        }
+        drawEnemyStatus(e); // skillfx_e.js
+        drawRmbEnemy(e); // skillfx_rmb.js: Net Shot wrap
+        if (e.markAngle !== undefined) drawDeathMarkSigil(e); // skillfx_ult.js
 
         if (!e.type.startsWith('boss')) { ctx.fillStyle = '#000'; ctx.fillRect(e.x - e.size/2, e.y - e.size/2 - 12, e.size, 4); ctx.fillStyle = '#4caf50'; ctx.fillRect(e.x - e.size/2, e.y - e.size/2 - 12, e.size * (e.hp/e.maxHp), 4); }
     }
 
     for (const p of projectiles) {
+        if (!p.isEnemy && drawPlayerProjectile(p)) continue; // weapons.js
         if (p.type === 'turret') {
             ctx.fillStyle = '#424242'; ctx.fillRect(p.x - 12, p.y - 12, 24, 24);
             ctx.strokeStyle = '#ff9800'; ctx.lineWidth = 2; ctx.strokeRect(p.x - 12, p.y - 12, 24, 24);
@@ -1654,425 +1672,37 @@ function draw() {
     }
 
     if (player.hp > 0 && gameState !== STATE.MENU && gameState !== STATE.DEAD) {
-        if (player.grappleTarget && !player.grappleTarget.noLine) {
-            ctx.strokeStyle = player.grappleTarget.color || '#9e9e9e'; ctx.lineWidth = 4;
-            ctx.beginPath();
-            ctx.moveTo(player.x, player.y);
-            ctx.lineTo(player.grappleTarget.x, player.grappleTarget.y);
-            ctx.stroke();
+        if (player.grappleTarget) drawGrappleCable(player.grappleTarget); // skillfx_space.js
 
-            // Draw hook at the end
-            ctx.fillStyle = player.grappleTarget.color || '#616161';
-            ctx.beginPath();
-            ctx.arc(player.grappleTarget.x, player.grappleTarget.y, 6, 0, Math.PI * 2);
-            ctx.fill();
-        }
-
-        const aimAngle = Math.atan2(mouseY - player.y, mouseX - player.x); 
+        // Face the way you're dashing; otherwise face the cursor
+        const spin = ultFacing(); // skillfx_ult.js: Blade Whirlwind spins the hero
+        const aimAngle = player.dash ? player.dash.angle : spin !== null ? spin : Math.atan2(mouseY - player.y, mouseX - player.x);
+        updatePlayerSpriteAnim();
+        drawPlayerShadow(aimAngle);
+        drawDashGhosts(); // skillfx_space.js
         ctx.lineWidth = 4;
         
         if (activeClass && activeClass.name === 'Spellweaver' && player.arcaneResonance) { ctx.strokeStyle = '#2196f3'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(player.x, player.y, player.radius + 8, 0, Math.PI*2); ctx.stroke(); }
         
-        if (activeClass && activeClass.weapon === 'staff') {
-            ctx.strokeStyle = '#795548'; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(player.x, player.y);
-            const tipX = player.x + Math.cos(aimAngle)*45; const tipY = player.y + Math.sin(aimAngle)*45; ctx.lineTo(tipX, tipY); ctx.stroke();
-            ctx.fillStyle = equipment.weapon && equipment.weapon.rarity === 'rare' ? '#e3f2fd' : '#4fc3f7'; 
-            ctx.beginPath(); ctx.arc(tipX, tipY, 8, 0, Math.PI*2); ctx.fill();
-            ctx.shadowBlur = 15; ctx.shadowColor = ctx.fillStyle; ctx.fill(); ctx.shadowBlur = 0;
-            ctx.strokeStyle = '#ffca28'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(tipX, tipY); ctx.lineTo(tipX - Math.cos(aimAngle)*10, tipY - Math.sin(aimAngle)*10); ctx.stroke();
-        } else if (activeClass && activeClass.weapon === 'bow') {
-            ctx.strokeStyle = equipment.weapon && equipment.weapon.rarity === 'rare' ? '#2196f3' : '#8d6e63'; 
-            ctx.lineWidth = 5; ctx.beginPath(); 
-            ctx.arc(player.x + Math.cos(aimAngle)*15, player.y + Math.sin(aimAngle)*15, 25, aimAngle - Math.PI/2.2, aimAngle + Math.PI/2.2); ctx.stroke();
-            ctx.strokeStyle = '#e0e0e0'; ctx.lineWidth = 2; ctx.beginPath(); 
-            let p1x = player.x + Math.cos(aimAngle)*15 + Math.cos(aimAngle - Math.PI/2.2)*25;
-            let p1y = player.y + Math.sin(aimAngle)*15 + Math.sin(aimAngle - Math.PI/2.2)*25;
-            let p2x = player.x + Math.cos(aimAngle)*15 + Math.cos(aimAngle + Math.PI/2.2)*25;
-            let p2y = player.y + Math.sin(aimAngle)*15 + Math.sin(aimAngle + Math.PI/2.2)*25;
-            let drawX = cooldowns.basic <= 0 ? player.x + Math.cos(aimAngle)*5 : player.x + Math.cos(aimAngle)*15;
-            let drawY = cooldowns.basic <= 0 ? player.y + Math.sin(aimAngle)*5 : player.y + Math.sin(aimAngle)*15;
-            ctx.moveTo(p1x, p1y); ctx.lineTo(drawX, drawY); ctx.lineTo(p2x, p2y); ctx.stroke();
-            if (cooldowns.basic <= 0) { ctx.strokeStyle = '#00e5ff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(drawX, drawY); ctx.lineTo(drawX + Math.cos(aimAngle)*30, drawY + Math.sin(aimAngle)*30); ctx.stroke(); }
-        } else if (activeClass && activeClass.weapon === 'censer') {
-            let relicDist = 35;
-            let endX = player.x + Math.cos(aimAngle) * relicDist;
-            let endY = player.y + Math.sin(aimAngle) * relicDist;
-            
-            // A floating magical tether (soft glowing line instead of rigid chain)
-            ctx.strokeStyle = 'rgba(251, 192, 45, 0.4)'; ctx.lineWidth = 2;
-            ctx.beginPath(); ctx.moveTo(player.x, player.y); ctx.lineTo(endX, endY); ctx.stroke();
+        drawUltAuraBack(aimAngle); // skillfx_ult.js: Ascension wings, Overclock heat
 
-            // The Relic / Censer core pulsing with energy
-            let pulse = Math.sin(Date.now() / 150) * 1.5; // Slight pulsing size
-            let coreColor = equipment.weapon && equipment.weapon.rarity === 'rare' ? '#9c27b0' : '#fbc02d'; // Gold or Purple
-            
-            // Outer golden ring
-            ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
-            ctx.beginPath(); ctx.arc(endX, endY, 12 + pulse * 0.5, 0, Math.PI*2); ctx.stroke();
-            
-            // Inner glowing core
-            ctx.fillStyle = coreColor;
-            ctx.shadowBlur = 15; ctx.shadowColor = coreColor;
-            ctx.beginPath(); ctx.arc(endX, endY, 6 + pulse, 0, Math.PI*2); ctx.fill();
-            ctx.shadowBlur = 0;
-            
-            // Cross geometry over the core
-            ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5;
-            ctx.beginPath();
-            ctx.moveTo(endX - 8, endY); ctx.lineTo(endX + 8, endY);
-            ctx.moveTo(endX, endY - 8); ctx.lineTo(endX, endY + 8);
-            ctx.stroke();
-        } else if (activeClass && activeClass.weapon === 'sword') {
-            let swordAng = aimAngle;
-            if (cooldowns.basic > 0) {
-                let progress = 1.0 - (cooldowns.basic / activeClass.basicAttackCD);
-                let eased = Math.min(1, progress * 3); 
-                swordAng = aimAngle - Math.PI/1.5 + (Math.PI * 1.2) * eased; 
-            } else {
-                swordAng = aimAngle - Math.PI/4; 
-            }
-            
-            ctx.strokeStyle = equipment.weapon && equipment.weapon.rarity === 'rare' ? '#2196f3' : '#bdbdbd'; 
-            ctx.lineWidth = 12; ctx.lineCap = 'round'; ctx.beginPath(); 
-            ctx.moveTo(player.x + Math.cos(swordAng)*15, player.y + Math.sin(swordAng)*15); 
-            ctx.lineTo(player.x + Math.cos(swordAng)*60, player.y + Math.sin(swordAng)*60); ctx.stroke();
-            ctx.strokeStyle = '#ffca28'; ctx.lineWidth = 6; ctx.beginPath(); 
-            const cx = player.x + Math.cos(swordAng)*20; const cy = player.y + Math.sin(swordAng)*20; const perp = swordAng + Math.PI/2;
-            ctx.moveTo(cx + Math.cos(perp)*20, cy + Math.sin(perp)*20); ctx.lineTo(cx - Math.cos(perp)*20, cy - Math.sin(perp)*20); ctx.stroke(); ctx.lineCap = 'butt';
-        } else if (activeClass && activeClass.weapon === 'scattergun') {
-            ctx.save();
-            ctx.translate(player.x, player.y);
-            ctx.rotate(aimAngle);
+        // Leaps lift the hero (and everything they carry) off the ground, above their shadow
+        const lift = player.z || 0;
+        if (lift > 0) { const s = 1 + lift / 300; ctx.save(); ctx.translate(player.x, player.y - lift); ctx.scale(s, s); ctx.translate(-player.x, -player.y); }
+        drawPlayerSprite(aimAngle); // sprites.js (also renders the Druid's Wild Form)
+        drawPlayerWeapon(aimAngle); // weapons.js
 
-            let recoil = 0;
-            if (cooldowns.basic > 0 && activeClass.basicAttackCD) {
-                let progress = cooldowns.basic / activeClass.basicAttackCD;
-                if (progress > 0.8) recoil = -6; 
-            }
+        drawPlayerShield(); // skillfx_e.js
+        if (lift > 0) ctx.restore();
+        drawUltAuraFront(aimAngle); // skillfx_ult.js: halo, Overclock gauge
 
-            ctx.translate(recoil, 0);
-
-            // Wooden Stock
-            ctx.fillStyle = '#5d4037';
-            ctx.beginPath();
-            ctx.moveTo(8, -4);
-            ctx.lineTo(20, -3);
-            ctx.lineTo(20, 3);
-            ctx.lineTo(8, 4);
-            ctx.closePath();
-            ctx.fill();
-
-            // Breech/Mechanism
-            ctx.fillStyle = '#424242';
-            ctx.fillRect(20, -5, 10, 10);
-
-            // Double Barrels
-            ctx.fillStyle = '#9e9e9e';
-            ctx.fillRect(30, -4, 25, 3); 
-            ctx.fillRect(30, 1, 25, 3);
-
-            // Glow if Overclocked
-            if (buffs.overclockTimer > 0) {
-                ctx.strokeStyle = '#ffca28';
-                ctx.lineWidth = 1;
-                ctx.strokeRect(28, -5, 29, 12);
-            }
-
-            ctx.restore();
-        } else if (activeClass && activeClass.weapon === 'phantom_blade') {
-            let ab = player.airborneBlade;
-            let ang, bx, by;
-            let thrustExt = 0;
-            
-            if (player.stance === 'handheld') {
-                ang = aimAngle - Math.PI/4; // Default resting
-                let pivotAng = aimAngle;
-                
-                if (player.qAnimTimer > 0) {
-                    let progress = 1.0 - (player.qAnimTimer / 0.25);
-                    let eased = Math.min(1, progress * 2); // Big sweep
-                    ang = aimAngle - Math.PI/1.2 + (Math.PI * 1.6) * eased;
-                    thrustExt = Math.sin(eased * Math.PI) * 20; // Short reach outward
-                } else if (cooldowns.basic > 0) {
-                    let progress = 1.0 - (cooldowns.basic / activeClass.basicAttackCD);
-                    let eased = Math.min(1, progress * 4); 
-                    let step = player.lastAttackStep || 0;
-                    
-                    if (step === 0) {
-                        // Swing Left to Right (Proper arc, no 360 spin)
-                        ang = aimAngle - Math.PI/2.5 + (Math.PI * 0.8) * eased;
-                    } else if (step === 1) {
-                        // Swing Right to Left
-                        ang = aimAngle + Math.PI/2.5 - (Math.PI * 0.8) * eased;
-                    } else {
-                        // Thrust Forward
-                        ang = aimAngle;
-                        thrustExt = Math.sin(eased * Math.PI) * 45;
-                    }
-                }
-                bx = player.x + Math.cos(pivotAng)*15 + Math.cos(aimAngle)*thrustExt;
-                by = player.y + Math.sin(pivotAng)*15 + Math.sin(aimAngle)*thrustExt;
-            } else {
-                ang = ab.angle;
-                bx = ab.x;
-                by = ab.y;
-            }
-
-            let flowRatio = player.flow / player.maxFlow;
-            let perp = ang + Math.PI/2;
-            let p1 = { x: bx + Math.cos(ang)*20, y: by + Math.sin(ang)*20 }; // base of blade
-            let p2 = { x: bx + Math.cos(ang)*85, y: by + Math.sin(ang)*85 }; // tip
-            
-            // Render beautiful phantom blade
-            ctx.save();
-            ctx.translate(bx, by);
-            ctx.rotate(ang);
-
-            // Shroud main blade if mini blades are active
-            let isShattered = player.stance === 'airborne' && player.miniBlades && player.miniBlades.length > 0;
-            
-            if (!isShattered) {
-                // Aura glow behind blade
-                if (flowRatio >= 1.0 || player.empoweredAirborne) {
-                ctx.globalAlpha = 0.8;
-                ctx.fillStyle = player.empoweredAirborne ? '#84ffff' : '#00e5ff';
-                ctx.filter = 'blur(6px)';
-                ctx.beginPath();
-                ctx.ellipse(50, 0, 45, 12, 0, 0, Math.PI*2);
-                ctx.fill();
-                ctx.filter = 'none';
-                ctx.globalAlpha = 1.0;
-            }
-
-            // Hilt - more intricate
-            ctx.fillStyle = '#5d4037';
-            ctx.fillRect(5, -3, 15, 6);
-            ctx.fillStyle = '#ffca28';
-            ctx.fillRect(5, -4, 4, 8);
-            ctx.fillRect(16, -4, 4, 8);
-
-            // Guard - swept back wings
-            ctx.fillStyle = '#1a237e';
-            ctx.beginPath();
-            ctx.moveTo(20, 0); // center
-            ctx.lineTo(15, -18); // top wing tip
-            ctx.lineTo(25, -5); // top wing inner
-            ctx.lineTo(30, 0); // center point
-            ctx.lineTo(25, 5); // bottom wing inner
-            ctx.lineTo(15, 18); // bottom wing tip
-            ctx.closePath();
-            ctx.fill();
-
-            // Guard highlight
-            ctx.strokeStyle = '#8c9eff';
-            ctx.lineWidth = 1;
-            ctx.stroke();
-
-            // The energy blade itself
-            let bladeGrad = ctx.createLinearGradient(20, 0, 85, 0);
-                if (flowRatio >= 1.0 || player.empoweredAirborne) {
-                    bladeGrad.addColorStop(0, player.empoweredAirborne ? '#84ffff' : '#e0f7fa');
-                    bladeGrad.addColorStop(0.3, player.empoweredAirborne ? '#00e5ff' : '#00bcd4');
-                    bladeGrad.addColorStop(1, player.empoweredAirborne ? '#00e5ff' : '#00e5ff');
-                } else {
-                    bladeGrad.addColorStop(0, '#ffffff');
-                    bladeGrad.addColorStop(0.3, '#bdbdbd');
-                    bladeGrad.addColorStop(1, '#757575');
-                }
-                
-                ctx.fillStyle = bladeGrad;
-                ctx.beginPath();
-                ctx.moveTo(25, 0); // inner base
-                ctx.lineTo(35, -8); // top edge
-                ctx.lineTo(85, 0); // tip
-                ctx.lineTo(35, 8); // bottom edge
-                ctx.closePath();
-                ctx.fill();
-
-                // Inner bright core
-                if (flowRatio >= 1.0 || player.empoweredAirborne) {
-                    ctx.fillStyle = '#ffffff';
-                    ctx.beginPath();
-                    ctx.moveTo(28, 0);
-                    ctx.lineTo(38, -3);
-                    ctx.lineTo(80, 0);
-                    ctx.lineTo(38, 3);
-                    ctx.closePath();
-                    ctx.fill();
-                }
-            } else {
-                ctx.beginPath();
-                ctx.arc(20, 0, 10, 0, Math.PI * 2);
-                ctx.fillStyle = player.empoweredAirborne ? '#ffffff' : '#e0f7fa';
-                ctx.shadowBlur = 15;
-                ctx.shadowColor = player.empoweredAirborne ? '#84ffff' : '#00e5ff';
-                ctx.fill();
-                ctx.shadowBlur = 0;
-            }
-
-            // Airborne floating trail
-            if (player.stance === 'airborne' && (Math.abs(ab.overrideX) > 0 || player.flow > 0)) {
-                ctx.globalAlpha = player.empoweredAirborne ? 0.7 : 0.5;
-                ctx.fillStyle = player.empoweredAirborne ? '#00e5ff' : '#00e5ff';
-                ctx.beginPath();
-                ctx.moveTo(25, 0);
-                ctx.lineTo(-20, -4);
-                ctx.lineTo(-20, 4);
-                ctx.closePath();
-                ctx.fill();
-                ctx.globalAlpha = 1.0;
-            }
-
-            ctx.restore();
-
-            // Render Shatter Storm mini-blades
-            if (player.miniBlades && player.miniBlades.length > 0) {
-                ctx.fillStyle = player.empoweredAirborne ? '#ffffff' : '#00bcd4';
-                ctx.strokeStyle = '#00e5ff';
-                ctx.lineWidth = 1;
-                for (const mb of player.miniBlades) {
-                    ctx.save();
-                    ctx.translate(mb.x, mb.y);
-                    ctx.rotate(mb.angle);
-                    
-                    // Draw a mini dagger
-                    ctx.beginPath();
-                    ctx.moveTo(10, 0); // Tip
-                    ctx.lineTo(-5, -4); // Top edge
-                    ctx.lineTo(-5, 4); // Bottom edge
-                    ctx.closePath();
-                    ctx.fill();
-                    ctx.stroke();
-
-                    // Glow core
-                    ctx.fillStyle = '#e0f7fa';
-                    ctx.beginPath();
-                    ctx.moveTo(7, 0);
-                    ctx.lineTo(-3, -1);
-                    ctx.lineTo(-3, 1);
-                    ctx.closePath();
-                    ctx.fill();
-                    
-                    ctx.restore();
-                }
-            }
-
-        } else if (activeClass && activeClass.weapon === 'mace') {
-            drawPaladinWeapon(aimAngle);
-        } else if (activeClass && activeClass.weapon === 'dagger') {
-            const handleColor = equipment.weapon && equipment.weapon.rarity === 'rare' ? '#4a148c' : '#9c27b0';
-            const perp = aimAngle + Math.PI/2;
-            let strikeExt = 0;
-            if (cooldowns.basic > 0) {
-                let progress = 1.0 - (cooldowns.basic / activeClass.basicAttackCD);
-                let eased = Math.min(1, progress * 4); // fast stab
-                strikeExt = Math.sin(eased * Math.PI) * 20; // pushes out and returns
-            }
-
-            for(let j of [-1, 1]) {
-                let dx = player.x + Math.cos(aimAngle + j*0.5)*18 + Math.cos(aimAngle)*strikeExt; 
-                let dy = player.y + Math.sin(aimAngle + j*0.5)*18 + Math.sin(aimAngle)*strikeExt;
-                ctx.strokeStyle = handleColor; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(dx, dy); ctx.lineTo(dx + Math.cos(aimAngle)*8, dy + Math.sin(aimAngle)*8); ctx.stroke();
-                ctx.strokeStyle = '#bdbdbd'; ctx.beginPath(); ctx.moveTo(dx + Math.cos(aimAngle)*8, dy + Math.sin(aimAngle)*8); ctx.lineTo(dx + Math.cos(aimAngle)*26, dy + Math.sin(aimAngle)*26); ctx.stroke();
-                ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(dx + Math.cos(aimAngle)*26, dy + Math.sin(aimAngle)*26); ctx.lineTo(dx + Math.cos(aimAngle)*32, dy + Math.sin(aimAngle)*32); ctx.stroke();
-                ctx.strokeStyle = '#ffca28'; ctx.beginPath(); let cx = dx + Math.cos(aimAngle)*8; let cy = dy + Math.sin(aimAngle)*8;
-                ctx.moveTo(cx + Math.cos(perp)*8, cy + Math.sin(perp)*8); ctx.lineTo(cx - Math.cos(perp)*8, cy - Math.sin(perp)*8); ctx.stroke();
-            }
-        }
-        
-        if (player.shield > 0) { 
-            ctx.strokeStyle = 'rgba(129, 212, 250, 0.8)'; ctx.lineWidth = 6; 
-            ctx.beginPath(); ctx.arc(player.x, player.y, player.radius + 12, aimAngle - Math.PI/3, aimAngle + Math.PI/3); ctx.stroke();
-            ctx.strokeStyle = '#0288d1'; ctx.lineWidth = 2; 
-            ctx.beginPath(); ctx.arc(player.x, player.y, player.radius + 18, aimAngle - Math.PI/3.5, aimAngle + Math.PI/3.5); ctx.stroke();
-        }
-
-        // Cleric Ultimate Auras
-        if (buffs.aspectOfReaper > 0) {
-            ctx.strokeStyle = '#9c27b0'; ctx.lineWidth = 4 + Math.sin(performance.now() / 150) * 2;
-            ctx.beginPath(); ctx.arc(player.x, player.y, player.radius + 14, 0, Math.PI*2); ctx.stroke();
-        } else if (buffs.avatarOfRenewal > 0) {
-            ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 4 + Math.sin(performance.now() / 150) * 2;
-            ctx.beginPath(); ctx.arc(player.x, player.y, player.radius + 14, 0, Math.PI*2); ctx.stroke();
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-            ctx.beginPath(); ctx.arc(player.x, player.y, player.radius + 14, 0, Math.PI*2); ctx.fill();
-        } else if (buffs.ascension > 0) {
-            ctx.strokeStyle = '#fbc02d'; ctx.lineWidth = 4 + Math.sin(performance.now() / 150) * 2;
-            ctx.beginPath(); ctx.arc(player.x, player.y, player.radius + 14, 0, Math.PI*2); ctx.stroke();
-        }
-        
-        let pColor = buffs.wildFormTimer > 0 ? '#5d4037' : player.color;
-        let pRad = buffs.wildFormTimer > 0 ? player.radius + 5 : player.radius;
-        
-        ctx.fillStyle = pColor; ctx.beginPath(); ctx.arc(player.x, player.y, pRad, 0, Math.PI*2); ctx.fill();
-        
-        // Druid Wolf Rendering
-        if (buffs.wildFormTimer > 0) {
-            // Snout
-            ctx.fillStyle = '#4e342e';
-            ctx.beginPath();
-            ctx.arc(player.x + Math.cos(aimAngle)*pRad, player.y + Math.sin(aimAngle)*pRad, 10, 0, Math.PI*2);
-            ctx.fill();
-            // Nose
-            ctx.fillStyle = '#000000';
-            ctx.beginPath();
-            ctx.arc(player.x + Math.cos(aimAngle)*(pRad + 6), player.y + Math.sin(aimAngle)*(pRad + 6), 4, 0, Math.PI*2);
-            ctx.fill();
-
-            // Ears
-            ctx.fillStyle = '#3e2723';
-            ctx.beginPath(); 
-            let earAngle1 = aimAngle - Math.PI/4;
-            let earAngle2 = aimAngle + Math.PI/4;
-            // Left ear
-            ctx.moveTo(player.x + Math.cos(earAngle1)*pRad, player.y + Math.sin(earAngle1)*pRad);
-            ctx.lineTo(player.x + Math.cos(earAngle1 - 0.3)*(pRad+10), player.y + Math.sin(earAngle1 - 0.3)*(pRad+10));
-            ctx.lineTo(player.x + Math.cos(earAngle1 + 0.3)*pRad, player.y + Math.sin(earAngle1 + 0.3)*pRad);
-            ctx.fill();
-            // Right ear
-            ctx.beginPath();
-            ctx.moveTo(player.x + Math.cos(earAngle2)*pRad, player.y + Math.sin(earAngle2)*pRad);
-            ctx.lineTo(player.x + Math.cos(earAngle2 + 0.3)*(pRad+10), player.y + Math.sin(earAngle2 + 0.3)*(pRad+10));
-            ctx.lineTo(player.x + Math.cos(earAngle2 - 0.3)*pRad, player.y + Math.sin(earAngle2 - 0.3)*pRad);
-            ctx.fill();
-
-            // Tail
-            ctx.fillStyle = '#3e2723';
-            ctx.beginPath();
-            let tailBaseAng = aimAngle + Math.PI;
-            // Simple wavy tail
-            let tailWag = Math.sin(Date.now() / 200) * 0.3;
-            ctx.moveTo(player.x + Math.cos(tailBaseAng)*pRad, player.y + Math.sin(tailBaseAng)*pRad);
-            let tailEndAng = tailBaseAng + tailWag; 
-            ctx.arc(player.x + Math.cos(tailBaseAng)*pRad + Math.cos(tailEndAng)*15, 
-                    player.y + Math.sin(tailBaseAng)*pRad + Math.sin(tailEndAng)*15, 
-                    6, 0, Math.PI*2);
-            ctx.fill();
-            ctx.beginPath();
-            ctx.lineWidth = 10;
-            ctx.lineCap = 'round';
-            ctx.strokeStyle = '#3e2723';
-            ctx.moveTo(player.x + Math.cos(tailBaseAng)*pRad, player.y + Math.sin(tailBaseAng)*pRad);
-            ctx.lineTo(player.x + Math.cos(tailBaseAng)*pRad + Math.cos(tailEndAng)*15, 
-                       player.y + Math.sin(tailBaseAng)*pRad + Math.sin(tailEndAng)*15);
-            ctx.stroke();
-            ctx.lineCap = 'butt';
-        }
-        
-        // Draw Phantom Decoy
-        if (player.phantomDecoy && player.phantomDecoy.life > 0) {
-            ctx.save();
-            ctx.globalAlpha = 0.5 * (player.phantomDecoy.life / 2); // 2s max duration
-            ctx.fillStyle = player.color;
-            ctx.beginPath();
-            ctx.arc(player.phantomDecoy.x, player.phantomDecoy.y, player.radius, 0, Math.PI*2);
-            ctx.fill();
-            ctx.strokeStyle = '#8bc34a'; // distinct color
-            ctx.lineWidth = 2;
-            ctx.stroke();
-            ctx.restore();
-        }
+        // Machinist Decoy Projection hologram
+        if (player.phantomDecoy && player.phantomDecoy.life > 0) drawDecoyHologram(player.phantomDecoy, aimAngle); // skillfx_space.js
     } 
+
+    drawFx(); // fx.js particles
+    drawUltOverlay(); // skillfx_ult.js: things in the air above everything
+    ctx.restore(); // end camera shake
 
     const boss = enemies.find(e => !e.dead && e.type.startsWith('boss'));
     if (boss && boss.state !== 'death_throes') {

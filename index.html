@@ -31,6 +31,7 @@
         .grid-container { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; max-width: 1000px; margin-top: 20px; }
         .class-card { background: #222; border: 2px solid; padding: 20px; border-radius: 8px; cursor: pointer; transition: transform 0.2s; position: relative; }
         .class-card:hover { transform: scale(1.05); }
+        .class-preview { float: right; width: 96px; height: 96px; margin: -10px -10px 0 6px; }
         .class-title { font-size: 24px; font-weight: bold; margin-bottom: 10px; text-shadow: 1px 1px 0 #000; }
         .diff-tag { position: absolute; bottom: 15px; right: 15px; font-size: 12px; padding: 4px 8px; border-radius: 4px; background: rgba(0,0,0,0.8); border: 1px solid; }        
         .inventory-grid { display: flex; gap: 20px; max-width: 1000px; width: 100%; max-height: 75vh; padding: 20px; box-sizing: border-box; }
@@ -107,58 +108,67 @@
                 <h1 style="font-size: 48px; margin-bottom: 10px; text-shadow: 2px 2px 0 #000;">CHOOSE YOUR CLASS</h1>
                 <div class="grid-container">
                     <div class="class-card" style="border-color: #e53935;" onclick="chooseClass('dragonknight')">
+                        <canvas class="class-preview" data-class="dragonknight"></canvas>
                         <div class="diff-tag" style="border-color:#4caf50; color:#4caf50;">Difficulty: Low</div>
                         <div class="class-title" style="color: #e53935;">Dragonknight</div>
                         <p style="color: #ccc;">A heavy melee bruiser who builds Frenzy stacks in combat to increase damage and attack speed.</p>
                         <p style="color: #888; font-size: 14px;">Weapon: Sword | High HP | Low Mobility</p>
                     </div>
                     <div class="class-card" style="border-color: #81c784;" onclick="chooseClass('ranger')">
+                        <canvas class="class-preview" data-class="ranger"></canvas>
                         <div class="diff-tag" style="border-color:#4caf50; color:#4caf50;">Difficulty: Low</div>
                         <div class="class-title" style="color: #81c784;">Ranger</div>
                         <p style="color: #ccc;">A highly mobile archer. Continuous movement builds momentum, increasing overall damage.</p>
                         <p style="color: #888; font-size: 14px;">Weapon: Bow | Med HP | High Mobility</p>
                     </div>
+                    <div class="class-card" style="border-color: #ffd54f;" onclick="chooseClass('paladin')">
+                        <canvas class="class-preview" data-class="paladin"></canvas>
+                        <div class="diff-tag" style="border-color:#8bc34a; color:#8bc34a;">Difficulty: Easy / Medium</div>
+                        <div class="class-title" style="color: #ffd54f;">Paladin</div>
+                        <p style="color: #ccc;">A holy anchor. Hurl your Grand Mace into the ground, then fight around it: your skills change depending on whether the hammer is in hand or deployed.</p>
+                        <p style="color: #888; font-size: 14px;">Weapon: Grand Mace | High HP | Zone Control</p>
+                    </div>
                     <div class="class-card" style="border-color: #ff9800;" onclick="chooseClass('machinist')">
+                        <canvas class="class-preview" data-class="machinist"></canvas>
                         <div class="diff-tag" style="border-color:#ffca28; color:#ffca28;">Difficulty: Medium</div>
                         <div class="class-title" style="color: #ff9800;">Machinist</div>
                         <p style="color: #ccc;">An engineer who controls the battlefield with deployed turrets, traps, and scavenged scrap.</p>
                         <p style="color: #888; font-size: 14px;">Weapon: Scattergun | Med HP | Area Denial</p>
                     </div>
                     <div class="class-card" style="border-color: #4fc3f7;" onclick="chooseClass('spellweaver')">
+                        <canvas class="class-preview" data-class="spellweaver"></canvas>
                         <div class="diff-tag" style="border-color:#ffca28; color:#ffca28;">Difficulty: Medium</div>
                         <div class="class-title" style="color: #4fc3f7;">Spellweaver</div>
                         <p style="color: #ccc;">A fragile but explosive mage. Casting spells empowers basic attacks for huge AoE burst damage.</p>
                         <p style="color: #888; font-size: 14px;">Weapon: Staff | Low HP | High Burst</p>
                     </div>
-                    <div class="class-card" style="border-color: #9c27b0;" onclick="chooseClass('nightblade')">
-                        <div class="diff-tag" style="border-color:#f44336; color:#f44336;">Difficulty: High</div>
-                        <div class="class-title" style="color: #9c27b0;">Nightblade</div>
-                        <p style="color: #ccc;">A lethal assassin. Passively exposes weak points on enemies for massive true damage triggers.</p>
-                        <p style="color: #888; font-size: 14px;">Weapon: Daggers | Very Low HP | Extreme Single Target</p>
-                    </div>
-                    <div class="class-card" style="border-color: #00bcd4;" onclick="chooseClass('swordsaint')">
-                        <div class="diff-tag" style="border-color:#f44336; color:#f44336;">Difficulty: Expert</div>
-                        <div class="class-title" style="color: #00bcd4;">Swordsaint</div>
-                        <p style="color: #ccc;">High-skill tactician and glass cannon. Swap between melee parry and autonomous Airborne Blade to control space.</p>
-                        <p style="color: #888; font-size: 14px;">Weapon: Phantom Blade | Stance Dancer | Low HP</p>
-                    </div>
                     <div class="class-card" style="border-color: #fbc02d;" onclick="chooseClass('cleric')">
+                        <canvas class="class-preview" data-class="cleric"></canvas>
                         <div class="diff-tag" style="border-color:#ff9800; color:#ff9800;">Difficulty: Medium</div>
                         <div class="class-title" style="color: #fbc02d;">Cleric</div>
                         <p style="color: #ccc;">A duality caster. Basic attacks generate Zeal. Empty Zeal casts are halved. Rank 4 evolves spells into Holy or Shadow.</p>
                         <p style="color: #888; font-size: 14px;">Weapon: Censer | Mid HP | Sustain</p>
                     </div>
+                    <div class="class-card" style="border-color: #9c27b0;" onclick="chooseClass('nightblade')">
+                        <canvas class="class-preview" data-class="nightblade"></canvas>
+                        <div class="diff-tag" style="border-color:#f44336; color:#f44336;">Difficulty: Hard</div>
+                        <div class="class-title" style="color: #9c27b0;">Nightblade</div>
+                        <p style="color: #ccc;">A lethal assassin. Passively exposes weak points on enemies for massive true damage triggers.</p>
+                        <p style="color: #888; font-size: 14px;">Weapon: Daggers | Very Low HP | Extreme Single Target</p>
+                    </div>
                     <div class="class-card" style="border-color: #4caf50;" onclick="chooseClass('druid')">
+                        <canvas class="class-preview" data-class="druid"></canvas>
                         <div class="diff-tag" style="border-color:#f44336; color:#f44336;">Difficulty: Hard</div>
                         <div class="class-title" style="color: #4caf50;">Druid</div>
-                        <p style="color: #ccc;">A shape-shifter. Plant ticking Spores in Caster form, then transform into a beast to detonate them for burst physical damage.</p>
+                        <p style="color: #ccc;">A shape-shifter. Plant ticking Spores in Caster form, then transform into a beast to detonate them for burst physical damage. Every 3rd beast attack is a lunging Bite.</p>
                         <p style="color: #888; font-size: 14px;">Weapon: Totem/Claws | High HP | Transform Bruiser</p>
                     </div>
-                    <div class="class-card" style="border-color: #ffd54f;" onclick="chooseClass('paladin')">
-                        <div class="diff-tag" style="border-color:#8bc34a; color:#8bc34a;">Difficulty: Easy / Medium</div>
-                        <div class="class-title" style="color: #ffd54f;">Paladin</div>
-                        <p style="color: #ccc;">A holy anchor. Hurl your Grand Mace into the ground, then fight around it: your skills change depending on whether the hammer is in hand or deployed.</p>
-                        <p style="color: #888; font-size: 14px;">Weapon: Grand Mace | High HP | Zone Control</p>
+                    <div class="class-card" style="border-color: #00bcd4;" onclick="chooseClass('swordsaint')">
+                        <canvas class="class-preview" data-class="swordsaint"></canvas>
+                        <div class="diff-tag" style="border-color:#f44336; color:#f44336;">Difficulty: Expert</div>
+                        <div class="class-title" style="color: #00bcd4;">Swordsaint</div>
+                        <p style="color: #ccc;">High-skill tactician and glass cannon. Swap between melee parry and autonomous Airborne Blade to control space.</p>
+                        <p style="color: #888; font-size: 14px;">Weapon: Phantom Blade | Stance Dancer | Low HP</p>
                     </div>
                 </div>
             </div>
@@ -282,6 +292,14 @@
     <script src="js/combat.js"></script>
     <script src="js/ui.js"></script>
     <script src="js/paladin.js"></script>
+    <script src="js/sprites.js"></script>
+    <script src="js/fx.js"></script>
+    <script src="js/weapons.js"></script>
+    <script src="js/skillfx.js"></script>
+    <script src="js/skillfx_e.js"></script>
+    <script src="js/skillfx_space.js"></script>
+    <script src="js/skillfx_ult.js"></script>
+    <script src="js/skillfx_rmb.js"></script>
     <script src="js/main.js"></script>
 </body>
 </html>

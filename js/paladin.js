@@ -25,7 +25,7 @@ function hasGildedPlate() { return equipment.armor && equipment.armor.name === '
 
 // Called on game start and at the start of every wave: the hammer returns to hand, any dome disappears.
 function resetPaladinState() {
-    player.hammer = { state: 'equipped', x: player.x, y: player.y, spin: 0, hitList: [], dragged: [], pulseTimer: 0, conduitTimer: 0, hurricaneTimer: 0, cracks: null, dmg: 0 };
+    player.hammer = { state: 'equipped', x: player.x, y: player.y, spin: 0, hitList: [], dragged: [], pulseTimer: 0, conduitTimer: 0, hurricaneTimer: 0, dmg: 0 };
     player.dome = null;
 }
 
@@ -105,7 +105,7 @@ BasicAttackRegistry['mace'] = (dmg) => {
     if (hasWorldBreaker()) spawnFaultLines(angle, radius, halfArc);
 };
 
-// World-Breaker: three jagged cracks running through the shockwave cone
+// World-Breaker: three rune lines running through the shockwave cone
 function spawnFaultLines(angle, radius, halfArc) {
     const segments = [];
     for (const offset of [-halfArc * 0.6, 0, halfArc * 0.6]) {
@@ -149,7 +149,7 @@ SkillRegistry['Paladin'] = {
             // Short lockout only, so the recall is available almost immediately; the full cooldown starts on recall
             cooldowns.s1 = 0.4; cooldownMax.s1 = 0.4;
         } else {
-            h.state = 'returning'; h.hitList = []; h.dragged = []; h.hurricaneTimer = 0; h.cracks = null;
+            h.state = 'returning'; h.hitList = []; h.dragged = []; h.hurricaneTimer = 0;
             h.returnMode = 'homing';
         }
     },
@@ -164,11 +164,11 @@ SkillRegistry['Paladin'] = {
         const h = player.hammer;
         if (h.state === 'deployed') {
             player.grappleTarget = {
-                x: h.x, y: h.y, speed: 1800, color: '#ffd54f',
+                x: h.x, y: h.y, speed: 1800, color: '#ffd54f', kind: 'chain',
                 onArrive: () => {
                     const grounding = sk.selectedUpg === 'B';
-                    effects.push({ type: 'crater', x: h.x, y: h.y, radius: 150, color: grounding ? '#ffca28' : '#fff8e1', life: 0.5, maxLife: 0.5 });
-                    effects.push({ type: 'circle_burst', x: h.x, y: h.y, radius: 150, color: 'rgba(255, 236, 179, 0.6)', life: 0.35, maxLife: 0.35 });
+                    effects.push({ type: 'holy_impact', x: h.x, y: h.y, radius: 110, life: 0.45, maxLife: 0.45 });
+                    if (grounding) effects.push({ type: 'gravity_crush', x: h.x, y: h.y, radius: 150, life: 0.5, maxLife: 0.5 });
                     for (const e of enemies) {
                         if (e.dead || Math.hypot(e.x - h.x, e.y - h.y) > 150 + e.size / 2) continue;
                         applyDamage(e, dmg * 1.2, 'melee');
@@ -186,16 +186,21 @@ SkillRegistry['Paladin'] = {
         const dirX = dx / dist, dirY = dy / dist;
         const [tx, ty] = clampPointToMap(player.x + dirX * range, player.y + dirY * range, player.radius);
         const hitList = [];
-        effects.push({ type: 'dash_trail', x1: player.x, y1: player.y, x2: tx, y2: ty, color: 'rgba(255, 236, 179, 0.7)', life: 0.35, maxLife: 0.35 });
+        const trail = { type: 'dash_trail', x1: player.x, y1: player.y, x2: player.x, y2: player.y, color: '#ffe082', width: 26, life: 0.45, maxLife: 0.45 };
+        effects.push(trail);
         if (juggernaut) player.iFrames = Math.max(player.iFrames, 0.1); // immune from the instant of casting; the dash keeps it refreshed
         player.grappleTarget = {
             x: tx, y: ty, speed: 1300, iFrames: juggernaut, noLine: true,
+            kind: 'charge', angle: Math.atan2(dirY, dirX), juggernaut, trail, // drawn by skillfx_space.js
+            onArrive: () => dustPuff(player.x, player.y, Math.atan2(dirY, dirX), 1.2, 5),
             onStep: () => {
                 for (const e of enemies) {
                     if (e.dead || hitList.includes(e)) continue;
                     if (Math.hypot(e.x - player.x, e.y - player.y) > player.radius + e.size / 2 + 15) continue;
                     hitList.push(e);
                     applyDamage(e, dmg, 'melee');
+                    burst(e.x, e.y, Math.atan2(dirY, dirX), 1.4, 8, { kind: 'spark', color: '#ffe082', size: 2.5, life: 0.25, speed: [200, 420], drag: 6 });
+                    addShake(2);
                     // Knock enemies forward and off to whichever side of the charge they were on
                     const side = (dirX * (e.y - player.y) - dirY * (e.x - player.x)) >= 0 ? 1 : -1;
                     shove(e, Math.atan2(dirY, dirX), 50);
@@ -216,7 +221,7 @@ SkillRegistry['Paladin'] = {
             type: 'consecrated_ground', x: cx, y: cy, radius: WRATH_RADIUS, color: 'rgba(255, 202, 40, 0.45)', life: 6.0, maxLife: 6.0, dmg: dmg, slow: 0.25,
             customUpdate: followPlayer ? (dt, ef) => { ef.x = player.x; ef.y = player.y; } : null
         });
-        effects.push({ type: 'crater', x: cx, y: cy, radius: 140, color: '#ffca28', life: 0.5, maxLife: 0.5 });
+        effects.push({ type: 'holy_impact', x: cx, y: cy, radius: 140, life: 0.5, maxLife: 0.5 });
         if (sk.selectedUpg === 'B' && deployed) {
             h.hurricaneTimer = 6.0;
             effects.push({ type: 'text', text: 'IRON HURRICANE', x: h.x, y: h.y - 60, color: '#ffd54f', life: 1.0, maxLife: 1.0 });
@@ -299,15 +304,8 @@ function hammerSweep(h, drag) {
 function landHammer(h) {
     h.state = 'deployed';
     h.pulseTimer = 0.5; h.conduitTimer = 0.5;
-    h.cracks = [];
-    for (let i = 0; i < 7; i++) {
-        let a = (Math.PI * 2 / 7) * i + Math.random() * 0.4, r = 10;
-        const path = [[Math.cos(a) * r, Math.sin(a) * r]];
-        const len = 35 + Math.random() * 35;
-        while (r < len) { r += 10 + Math.random() * 10; a += (Math.random() - 0.5) * 0.6; path.push([Math.cos(a) * r, Math.sin(a) * r]); }
-        h.cracks.push(path);
-    }
-    effects.push({ type: 'crater', x: h.x, y: h.y, radius: 60, color: '#fff8e1', life: 0.5, maxLife: 0.5 });
+    h.sealAt = fxTime; // the holy seal under the hammer grows in from here
+    effects.push({ type: 'holy_impact', x: h.x, y: h.y, radius: 70, life: 0.45, maxLife: 0.45 });
     if (hasWorldBreaker()) triggerMagneticPulse(h);
 }
 
@@ -321,21 +319,22 @@ function triggerMagneticPulse(h) {
         if (e.dead || e.type.startsWith('boss')) continue;
         const onFracture = touched.some(ef => ef.segments.some(s => distToSegment(e.x, e.y, s[0], s[1], s[2], s[3]) < 30 + e.size / 2));
         if (!onFracture) continue;
-        effects.push({ type: 'lightning', x1: e.x, y1: e.y, x2: h.x, y2: h.y, color: '#ffd54f', life: 0.25, maxLife: 0.25 });
+        effects.push({ type: 'rune_chain', x1: e.x, y1: e.y, x2: h.x, y2: h.y, life: 0.45, maxLife: 0.45 }); // runes link into a chain
         const a = Math.random() * Math.PI * 2;
         e.x = h.x + Math.cos(a) * 40; e.y = h.y + Math.sin(a) * 40;
         clampToBounds(e, e.size / 2);
         pulled++;
     }
     for (const ef of touched) ef.life = 0;
-    effects.push({ type: 'circle_burst', x: h.x, y: h.y, radius: 120, color: 'rgba(255, 213, 79, 0.7)', life: 0.4, maxLife: 0.4 });
+    effects.push({ type: 'holy_nova', x: h.x, y: h.y, radius: 120, life: 0.45, maxLife: 0.45 });
     if (pulled > 0) effects.push({ type: 'text', text: 'MAGNETIC PULSE', x: h.x, y: h.y - 50, color: '#ffd54f', life: 1.0, maxLife: 1.0 });
 }
 
 function catchHammer(h, perfect) {
-    h.state = 'equipped'; h.dragged = []; h.cracks = null; h.hurricaneTimer = 0; h.returnMode = null;
+    h.state = 'equipped'; h.dragged = []; h.hurricaneTimer = 0; h.returnMode = null;
     h.x = player.x; h.y = player.y;
     effects.push({ type: 'circle_burst', x: player.x, y: player.y, radius: 50, color: 'rgba(255, 248, 225, 0.8)', life: 0.25, maxLife: 0.25 });
+    burst(player.x, player.y, 0, Math.PI * 2, perfect ? 14 : 7, { kind: 'spark', color: '#ffe082', size: 2, life: 0.25, speed: [150, 340], drag: 6 });
     if (perfect) {
         cooldowns.s1 = 0;
         effects.push({ type: 'text', text: 'CAUGHT!', x: player.x, y: player.y - 40, color: '#ffd54f', life: 0.7, maxLife: 0.7 });
@@ -343,7 +342,7 @@ function catchHammer(h, perfect) {
     const sk = activeClass.skills[1];
     if (sk.selectedUpg === 'A' && !(h.purityCd > 0)) { // Handheld Purity: seismic shockwave, at most once per normal Q cooldown
         h.purityCd = sk.maxCd * getCDR();
-        effects.push({ type: 'crater', x: player.x, y: player.y, radius: 180, color: '#fff8e1', life: 0.6, maxLife: 0.6 });
+        effects.push({ type: 'holy_impact', x: player.x, y: player.y, radius: 110, life: 0.5, maxLife: 0.5 });
         effects.push({ type: 'circle_burst', x: player.x, y: player.y, radius: 180, color: 'rgba(255, 236, 179, 0.6)', life: 0.4, maxLife: 0.4 });
         for (const e of enemies) {
             if (e.dead || Math.hypot(e.x - player.x, e.y - player.y) > 180 + e.size / 2) continue;
@@ -415,7 +414,7 @@ function updateBastionDome(dt) {
         if (p.domeId !== d.id) { p.domeId = d.id; p.domeInside = pin; continue; }
         if (pin && !p.domeInside) {
             p.life = 0; // expires this frame, so its normal on-expire behavior still runs
-            effects.push({ type: 'circle', x: p.x, y: p.y, radius: 14, color: 'rgba(255, 213, 79, 0.8)', life: 0.2, maxLife: 0.2 });
+            effects.push({ type: 'dome_ripple', x: p.x, y: p.y, life: 0.3, maxLife: 0.3 });
             if (d.upg === 'B') fireRetributionBolt(p.x, p.y, p.owner || p.sourceBoss);
         }
         p.domeInside = pin;
@@ -425,7 +424,7 @@ function updateBastionDome(dt) {
 // Retribution Barrier: homing holy bolt back at whoever fired the blocked projectile
 function fireRetributionBolt(x, y, attacker) {
     projectiles.push({
-        x: x, y: y, vx: 0, vy: 0, radius: 6, color: '#fff59d', life: 2.0, type: 'basic', shape: 'fireball',
+        x: x, y: y, vx: 0, vy: 0, radius: 6, color: '#fff59d', life: 2.0, type: 'basic', shape: 'fireball', isRetribution: true,
         damage: calcDmg(15, activeClass.skills[2].level), pierce: false, hitList: [], isEnemy: false, target: attacker,
         customUpdate: function(dt, p) {
             if (!p.target || p.target.dead) p.target = getNearestEnemyFromPoint(p.x, p.y, 600);
@@ -463,6 +462,14 @@ function drawMace(x, y, angle, scale) {
     ctx.beginPath(); ctx.arc(12, 0, 11, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
     ctx.strokeStyle = '#ffca28'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(12, 0, 6, 0, Math.PI * 2); ctx.stroke();
+    if (isRareWeapon()) { // holy light pulsing through the head
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.shadowBlur = 14; ctx.shadowColor = '#ffd54f'; ctx.globalAlpha = rarePulse();
+        ctx.fillStyle = '#fff59d';
+        ctx.beginPath(); ctx.arc(12, 0, 4, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1; ctx.shadowBlur = 0; ctx.globalCompositeOperation = 'source-over';
+        drawRunes(-26, -6, 0, '#ffe082', 1.3);
+    }
     ctx.restore();
 }
 
@@ -486,46 +493,78 @@ function drawPaladinWeapon(aimAngle) {
         ctx.restore();
         return;
     }
-    // Overhead smash: rests on the shoulder, swings down onto the aim direction
-    let ang = aimAngle - Math.PI / 3;
-    if (cooldowns.basic > 0) {
-        const eased = Math.min(1, swingProgress() * 3);
-        ang = aimAngle - Math.PI / 1.4 + (Math.PI / 1.4) * eased;
+    // Overhead smash: rests on the shoulder; on attack it comes down straight onto the aim (drawn larger while
+    // raised toward the camera), stays planted for a beat, then is hauled back up onto the shoulder
+    const p = attackProgress(0.4), rest = aimAngle - Math.PI / 3;
+    let ang = rest, dist = 48, scale = 1.0;
+    if (weaponAnim.swing > 0 && p < 1) {
+        if (p < 0.1) { const q = easeInOut(p / 0.1); ang = lerp(aimAngle - 0.5, aimAngle, q); scale = lerp(1.3, 1.0, q); dist = lerp(50, 56, q); }
+        else if (p < 0.4) { ang = aimAngle; dist = 56; }
+        else { const q = easeInOut((p - 0.4) / 0.6); ang = lerp(aimAngle, rest, q); dist = lerp(56, 48, q); scale = 1 + 0.15 * Math.sin(q * Math.PI); }
     }
-    drawMace(player.x + Math.cos(ang) * 48, player.y + Math.sin(ang) * 48, ang, 1.0);
+    drawMace(player.x + Math.cos(ang) * dist, player.y + Math.sin(ang) * dist, ang, scale);
+    drawHand(player.x + Math.cos(ang) * dist * 0.5, player.y + Math.sin(ang) * dist * 0.5);
+    drawHand(player.x + Math.cos(ang) * dist * 0.69, player.y + Math.sin(ang) * dist * 0.69);
 }
 
-// World-space visuals: fault lines, shockwaves, consecrated ground, the thrown hammer, its chain, and the dome
+// The planted hammer's holy seal: rune rings turning on the ground that flare with each threat pulse
+function drawHolySeal(h) {
+    const grow = easeOut((fxTime - (h.sealAt || 0)) / 0.4), flare = Math.max(0, h.pulseTimer);
+    const R = 46 * grow, gilded = hasGildedPlate();
+    if (R < 1) return;
+    ctx.save();
+    ctx.translate(h.x, h.y);
+    const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, R * 1.3);
+    glow.addColorStop(0, `rgba(255, 213, 79, ${0.16 + 0.14 * flare + (gilded ? 0.08 : 0)})`); glow.addColorStop(1, 'rgba(255, 213, 79, 0)');
+    ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(0, 0, R * 1.3, 0, Math.PI * 2); ctx.fill();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.shadowBlur = 8; ctx.shadowColor = '#ffd54f';
+    ctx.strokeStyle = `rgba(255, 213, 79, ${0.55 + 0.35 * flare})`; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.stroke();
+    // Inner dashed ring turning one way, the rune band the other
+    ctx.save();
+    ctx.rotate(fxTime * 0.6);
+    ctx.setLineDash([6, 5]); ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(0, 0, R * 0.62, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+    ctx.rotate(-fxTime * 0.35);
+    ctx.strokeStyle = `rgba(255, 248, 225, ${0.5 + 0.4 * flare})`; ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) { // small cross-shaped runes
+        const a = i * Math.PI / 3, x = Math.cos(a) * R * 0.81, y = Math.sin(a) * R * 0.81;
+        ctx.moveTo(x - 3, y); ctx.lineTo(x + 3, y); ctx.moveTo(x, y - 4); ctx.lineTo(x, y + 3);
+    }
+    // Faint six-pointed star joining the runes
+    for (let i = 0; i < 2; i++) for (let j = 0; j <= 3; j++) {
+        const a = (j * 2 + i) * Math.PI / 3, x = Math.cos(a) * R * 0.62, y = Math.sin(a) * R * 0.62;
+        if (j === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.restore();
+}
+
+// World-space visuals: fault lines, shockwaves, the thrown hammer, its chain, and the dome (consecrated ground: skillfx_ult.js)
 function drawPaladinWorld() {
     for (const ef of effects) {
         const a = Math.max(0, ef.life / ef.maxLife);
         if (ef.type === 'fault_line') {
-            ctx.save();
-            ctx.shadowBlur = 10; ctx.shadowColor = '#ffd54f';
-            ctx.strokeStyle = `rgba(255, 255, 255, ${a})`; ctx.lineWidth = 3;
-            ctx.beginPath();
-            for (const s of ef.segments) { ctx.moveTo(s[0], s[1]); ctx.lineTo(s[2], s[3]); }
-            ctx.stroke();
-            ctx.restore();
+            drawRuneFault(ef, a); // skillfx_rmb.js: rows of golden runes
         } else if (ef.type === 'pal_shockwave') {
-            const p = 1 - a;
+            // Ground smash: light and a dust ring burst out from where the mace head lands (no sweeping arc)
+            const p = 1 - a, R = ef.radius * 0.62 * easeOut(p);
+            const ix = ef.x + Math.cos(ef.angle) * 56, iy = ef.y + Math.sin(ef.angle) * 56;
             ctx.save();
-            ctx.lineCap = 'round';
-            ctx.strokeStyle = `rgba(255, 248, 225, ${a})`; ctx.lineWidth = 10 * a + 2;
-            ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.radius * (0.35 + 0.65 * p), ef.angle - ef.halfArc, ef.angle + ef.halfArc); ctx.stroke();
-            ctx.strokeStyle = `rgba(255, 202, 40, ${a})`; ctx.lineWidth = 4 * a + 1;
-            ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.radius * (0.25 + 0.5 * p), ef.angle - ef.halfArc * 0.8, ef.angle + ef.halfArc * 0.8); ctx.stroke();
-            ctx.restore();
-        } else if (ef.type === 'consecrated_ground') {
-            ctx.save();
-            ctx.globalAlpha = Math.min(1, ef.life);
-            ctx.strokeStyle = '#ffca28'; ctx.lineWidth = 3;
-            ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.radius, 0, Math.PI * 2); ctx.stroke();
-            ctx.fillStyle = '#fff59d';
-            for (let i = 0; i < 6; i++) { // flickering holy embers
-                const r = Math.random() * ef.radius, t = Math.random() * Math.PI * 2;
-                ctx.beginPath(); ctx.arc(ef.x + Math.cos(t) * r, ef.y + Math.sin(t) * r, 2 + Math.random() * 3, 0, Math.PI * 2); ctx.fill();
-            }
+            const flash = ctx.createRadialGradient(ix, iy, 0, ix, iy, 34);
+            flash.addColorStop(0, `rgba(255, 255, 255, ${a})`); flash.addColorStop(1, 'rgba(255, 236, 179, 0)');
+            ctx.fillStyle = flash; ctx.beginPath(); ctx.arc(ix, iy, 34, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = `rgba(215, 204, 200, ${0.8 * a})`; ctx.lineWidth = 8 * a + 2;
+            ctx.beginPath(); ctx.arc(ix, iy, R, 0, Math.PI * 2); ctx.stroke();
+            ctx.strokeStyle = `rgba(255, 202, 40, ${a})`; ctx.lineWidth = 3 * a + 0.5;
+            ctx.beginPath(); ctx.arc(ix, iy, R * 0.72, 0, Math.PI * 2); ctx.stroke();
+            ctx.strokeStyle = `rgba(255, 248, 225, ${a})`; ctx.lineWidth = 2; ctx.lineCap = 'round';
+            ctx.beginPath();
+            for (let i = 0; i < 8; i++) { const ra = i * Math.PI / 4 + 0.4; ctx.moveTo(ix + Math.cos(ra) * R * 0.3, iy + Math.sin(ra) * R * 0.3); ctx.lineTo(ix + Math.cos(ra) * R * 0.6, iy + Math.sin(ra) * R * 0.6); }
+            ctx.stroke();
             ctx.restore();
         }
     }
@@ -542,16 +581,7 @@ function drawPaladinWorld() {
             ctx.lineWidth = 2;
             ctx.beginPath(); ctx.moveTo(player.x, player.y); ctx.lineTo(h.x, h.y); ctx.stroke();
             ctx.restore();
-            // Radiating white cracks under the anchor
-            if (h.cracks) {
-                ctx.save();
-                ctx.shadowBlur = 8; ctx.shadowColor = '#fff59d';
-                ctx.strokeStyle = `rgba(255, 255, 255, ${0.5 + 0.4 * Math.max(0, h.pulseTimer)})`; ctx.lineWidth = 2;
-                ctx.beginPath();
-                for (const path of h.cracks) path.forEach(([cx, cy], j) => j === 0 ? ctx.moveTo(h.x + cx, h.y + cy) : ctx.lineTo(h.x + cx, h.y + cy));
-                ctx.stroke();
-                ctx.restore();
-            }
+            drawHolySeal(h);
         }
         if (h.state === 'returning' && h.returnMode === 'straight') {
             // Committed path: stand on this line to catch the hammer
@@ -563,6 +593,15 @@ function drawPaladinWorld() {
         }
         const spinning = h.state !== 'deployed' || h.hurricaneTimer > 0;
         const scale = h.hurricaneTimer > 0 ? 2.4 : (h.state === 'deployed' ? 1.3 : 1.1);
+        if (spinning) { // spin blur disc behind the whirling mace
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            const blur = ctx.createRadialGradient(h.x, h.y, 4 * scale, h.x, h.y, 32 * scale);
+            blur.addColorStop(0, 'rgba(255, 245, 157, 0)'); blur.addColorStop(0.8, 'rgba(255, 245, 157, 0.22)'); blur.addColorStop(1, 'rgba(255, 245, 157, 0)');
+            ctx.fillStyle = blur; ctx.beginPath(); ctx.arc(h.x, h.y, 32 * scale, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+        }
+        if (h.hurricaneTimer > 0) drawHammerStorm(h); // skillfx_ult.js
         drawMace(h.x, h.y, spinning ? h.spin : -Math.PI / 2 - 0.3, scale);
     }
 
@@ -577,6 +616,7 @@ function drawPaladinWorld() {
         ctx.beginPath(); ctx.arc(d.x, d.y, d.radius, 0, Math.PI * 2); ctx.fill();
         ctx.strokeStyle = '#ffd54f'; ctx.lineWidth = 3;
         ctx.stroke();
+        drawDomeLattice(d, ctx.globalAlpha); // skillfx_e.js
         const shimmer = (d.maxLife - d.life) * 1.5;
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)'; ctx.lineWidth = 2;
         for (let i = 0; i < 3; i++) {

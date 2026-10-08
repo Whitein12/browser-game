@@ -22,6 +22,7 @@ function castBasic() {
     }
 
     window.BasicAttackRegistry[activeClass.weapon](dmg, isResonance);
+    onBasicAttack(); // weapons.js: swing animation and firing effects
     if (typeof updateHUD === "function") updateHUD();
 }
 
@@ -36,7 +37,7 @@ function spawnTurret(x, y, upg, dmg) {
                 this.angle = Math.atan2(target.y - this.y, target.x - this.x);
                 if (this.attackTimer <= 0) {
                     if (this.isLaser) {
-                        effects.push({ type: 'line', x1: this.x, y1: this.y, x2: target.x, y2: target.y, color: '#ff9800', life: 0.2, maxLife: 0.2, lineWidth: 4 });
+                        effects.push({ type: 'laser_beam', x1: this.x + Math.cos(this.angle) * 18, y1: this.y + Math.sin(this.angle) * 18, x2: target.x, y2: target.y, life: 0.2, maxLife: 0.2 });
                         applyDamage(target, this.damage * 1.5, 'magic');
                         this.attackTimer = 1.0;
                     } else {
@@ -293,16 +294,18 @@ var SkillRegistry = {
                     player.x = nearest.x; player.y = nearest.y;
                     nearest.x = px; nearest.y = py;
                     
-                    effects.push({ type: 'sparkle_poof', x: px, y: py, color: '#fbc02d' });
-                    effects.push({ type: 'sparkle_poof', x: player.x, y: player.y, color: '#fbc02d' });
+                    spawnDashGhost('#ffd54f', true, 0.4, Math.atan2(player.y - py, player.x - px), px, py, 0);
+                    effects.push({ type: 'transposition', x0: px, y0: py, x1: player.x, y1: player.y, life: 0.45, maxLife: 0.45 });
+                    effects.push({ type: 'phase_light', x: px, y: py, radius: 46, life: 0.45, maxLife: 0.45 });
+                    effects.push({ type: 'phase_light', x: player.x, y: player.y, radius: 46, life: 0.45, maxLife: 0.45 });
                     if (applyAoeStun) {
-                        effects.push({ type: 'circle', x: player.x, y: player.y, radius: 400, color: 'rgba(251, 192, 45, 0.4)', life: 0.4, maxLife: 0.4 });
+                        effects.push({ type: 'holy_nova', x: player.x, y: player.y, radius: 400, life: 0.5, maxLife: 0.5 });
                     }
                     
                     for (let e of enemies) {
                         if (Math.hypot(e.x - player.x, e.y - player.y) < (applyAoeStun ? 400 : 200)) {
                             e.stunTimer = 2.0;
-                            effects.push({ type: 'circle', x: e.x, y: e.y, radius: e.size, color: 'rgba(251, 192, 45, 0.4)', life: 0.5, maxLife: 0.5 });
+                            burst(e.x, e.y, 0, Math.PI * 2, 5, { kind: 'dot', color: '#ffe082', size: 2, life: 0.4, speed: [40, 120] });
                         }
                     }
                     buffs.lastSpellClass = 'holy';
@@ -314,14 +317,9 @@ var SkillRegistry = {
                 let tX = player.x + (dx/dist)*dashDist;
                 let tY = player.y + (dy/dist)*dashDist;
                 
-                effects.push({ type: 'dash_trail', x1: player.x, y1: player.y, x2: tX, y2: tY, color: '#4a148c', life: 0.35, maxLife: 0.35 });
-                
-                // Visual upgrade: Raven feather particles (represented by dark diamond/circles expanding out)
-                for (let i = 0; i < 8; i++) {
-                    let angle = Math.random() * Math.PI * 2;
-                    let speed = 50 + Math.random() * 100;
-                    projectiles.push({ x: player.x, y: player.y, vx: Math.cos(angle)*speed, vy: Math.sin(angle)*speed, radius: 4, color: '#000000', life: 0.4, type: 'basic', shape: 'circle', damage: 0, pierce: true, hitList: [], isEnemy: false });
-                }
+                effects.push({ type: 'raven_flight', x0: player.x, y0: player.y, x1: tX, y1: tY, life: 0.5, maxLife: 0.5 });
+                spawnDashGhost('#7b1fa2', true, 0.3, Math.atan2(tY - player.y, tX - player.x));
+                if (applyAoeStun) effects.push({ type: 'holy_nova', x: tX, y: tY, radius: 150, color: '#ce93d8', life: 0.5, maxLife: 0.5 });
                 
                 for (let e of enemies) {
                     if (distToSegment(e.x, e.y, player.x, player.y, tX, tY) < e.size + (applyAoeStun ? 150 : 60)) {
@@ -329,15 +327,11 @@ var SkillRegistry = {
                         applyDamage(e, (dmg || 20) * 2.0, 'magic');
                         player.hp = Math.min(player.maxHp, player.hp + (player.maxHp * 0.05));
                         effects.push({ type: 'text', text: 'SIPHON', x: e.x, y: e.y - 20, color: '#9c27b0', life: 0.8, maxLife: 0.8 });
+                        burst(e.x, e.y, Math.atan2(tY - e.y, tX - e.x), 0.8, 6, { kind: 'dot', color: '#ce93d8', size: 2, life: 0.45, speed: [150, 300], drag: 2 }); // life drained toward the cleric
                         if (applyAoeStun) e.stunTimer = 1.0;
                     }
                 }
                 player.x = tX; player.y = tY;
-                for (let i = 0; i < 8; i++) {
-                    let angle = Math.random() * Math.PI * 2;
-                    let speed = 50 + Math.random() * 100;
-                    projectiles.push({ x: player.x, y: player.y, vx: Math.cos(angle)*speed, vy: Math.sin(angle)*speed, radius: 4, color: '#4a148c', life: 0.4, type: 'basic', shape: 'circle', damage: 0, pierce: true, hitList: [], isEnemy: false });
-                }
                 buffs.lastSpellClass = 'shadow';
             } else { // Base Phase Shift
                 resolveZeal();
@@ -346,18 +340,20 @@ var SkillRegistry = {
                 let tX = player.x + (dx/dist)*dashDist;
                 let tY = player.y + (dy/dist)*dashDist;
                 
-                effects.push({ type: 'dash_trail', x1: player.x, y1: player.y, x2: tX, y2: tY, color: '#fbc02d', life: 0.2 + (applyAoeStun?0.2:0), maxLife: 0.2 + (applyAoeStun?0.2:0) });
+                spawnDashGhost('#ffd54f', true, 0.4, Math.atan2(tY - player.y, tX - player.x));
+                effects.push({ type: 'phase_light', x: player.x, y: player.y, radius: 40, depart: true, life: 0.35, maxLife: 0.35 });
+                for (let i = 0; i <= 10; i++) { const t = i / 10; spawnParticle({ kind: 'dot', color: '#ffe082', x: lerp(player.x, tX, t) + jitter(10), y: lerp(player.y, tY, t) + jitter(10), vx: jitter(20), vy: -20 - Math.random() * 20, size: 1.8, life: 0.3 + t * 0.3, drag: 1, grow: 0, spin: 0, rot: 0 }); }
                 player.iFrames = applyAoeStun ? 1.0 : 0.5;
                 if (applyAoeStun) {
-                    effects.push({ type: 'circle', x: player.x, y: player.y, radius: 200, color: 'rgba(251, 192, 45, 0.4)', life: 0.4, maxLife: 0.4 });
-                    effects.push({ type: 'circle', x: tX, y: tY, radius: 200, color: 'rgba(251, 192, 45, 0.4)', life: 0.4, maxLife: 0.4 });
+                    effects.push({ type: 'holy_nova', x: player.x, y: player.y, radius: 200, life: 0.5, maxLife: 0.5 });
+                    effects.push({ type: 'holy_nova', x: tX, y: tY, radius: 200, life: 0.5, maxLife: 0.5 });
                     for(let e of enemies) {
                         if(Math.hypot(e.x - tX, e.y - tY) < 200) { e.stunTimer = 1.5; applyDamage(e, dmg, 'magic'); }
                         if(Math.hypot(e.x - player.x, e.y - player.y) < 200) { e.stunTimer = 1.5; applyDamage(e, dmg, 'magic'); }
                     }
                 }
                 player.x = tX; player.y = tY;
-                effects.push({ type: 'sparkle_poof', x: player.x, y: player.y, color: '#fbc02d' });
+                effects.push({ type: 'phase_light', x: player.x, y: player.y, radius: 46, life: 0.45, maxLife: 0.45 });
             }
         },
         4: (sk, dmg) => { // Ascension
@@ -367,7 +363,7 @@ var SkillRegistry = {
             if (isHoly) { // Avatar of Renewal
                 buffs.avatarOfRenewal = 8.0; 
                 buffs.lastSpellClass = 'holy';
-                effects.push({ type: 'circle_burst', x: player.x, y: player.y, radius: 250, color: '#fbc02d', life: 0.5, maxLife: 0.5 });
+                effects.push({ type: 'ascend_burst', variant: 'holy', radius: 250, life: 0.7, maxLife: 0.7 });
                 
                 // Homings light bolts
                 let bolts = 6;
@@ -375,7 +371,7 @@ var SkillRegistry = {
                     let angle = (Math.PI*2 / bolts) * i;
                     projectiles.push({
                         x: player.x, y: player.y, vx: Math.cos(angle)*400, vy: Math.sin(angle)*400,
-                        radius: 8, color: '#fff', life: 3.0, type: 'basic', shape: 'fireball', damage: dmg * 1.5, pierce: false, isEnemy: false,
+                        radius: 8, color: '#fff', life: 3.0, type: 'basic', shape: 'light_spear', damage: dmg * 1.5, pierce: false, isEnemy: false,
                         customUpdate: function(dt, p) {
                             let nearest = getNearestEnemyFromPoint(p.x, p.y, 300);
                             if (nearest) {
@@ -392,10 +388,10 @@ var SkillRegistry = {
             } else if (isShadow) { // Aspect of the Reaper
                 buffs.aspectOfReaper = 8.0;
                 buffs.lastSpellClass = 'shadow';
-                effects.push({ type: 'circle_burst', x: player.x, y: player.y, radius: 250, color: '#9c27b0', life: 0.5, maxLife: 0.5 });
+                effects.push({ type: 'ascend_burst', variant: 'shadow', radius: 250, life: 0.7, maxLife: 0.7 });
             } else { // Base Ascension
                 buffs.ascension = 6.0; 
-                effects.push({ type: 'circle_burst', x: player.x, y: player.y, radius: 150, color: '#fff', life: 0.5, maxLife: 0.5 });
+                effects.push({ type: 'ascend_burst', variant: 'base', radius: 150, life: 0.7, maxLife: 0.7 });
             }
             if (!buffs.zealLocked) player.zeal = player.maxZeal;
         },
@@ -403,7 +399,7 @@ var SkillRegistry = {
             // Twilight Repulse
             if (equipment.weapon && equipment.weapon.name === 'Censer of the Twilight Horizon') {
                 let radius = 180;
-                effects.push({ type: 'repulse_ring', x: player.x, y: player.y, radius: radius, color: '#fbc02d', life: 0.4, maxLife: 0.4 });
+                effects.push({ type: 'eclipse_wave', x: player.x, y: player.y, radius: radius, life: 0.5, maxLife: 0.5 });
                 
                 for(let i=enemies.length-1; i>=0; i--) {
                     const e = enemies[i];
@@ -428,6 +424,7 @@ var SkillRegistry = {
                 const attackAngle = Math.atan2(mouseY - player.y, mouseX - player.x);
                 effects.push({ type: 'precision_slash', x: player.x, y: player.y, radius: 180, angle: attackAngle, color: '#18ffff', life: 0.25, maxLife: 0.25 }); 
                 player.qAnimTimer = 0.25;
+                player.parryTimer = 0.3; // Parry window: hits taken at the start of the sweep are parried (see takeDamage)
                 
                 // Destroy Enemy Projectiles
                 for(let i = projectiles.length - 1; i >= 0; i--) {
@@ -500,7 +497,7 @@ var SkillRegistry = {
                     spinCount++;
                     if (spinCount >= 6) {
                         // Final explosion blast
-                        effects.push({ type: 'circle', x: ab.x, y: ab.y, radius: finalRadius, color: 'rgba(0, 229, 255, 0.4)', life: 0.2, maxLife: 0.2 });
+                        effects.push({ type: 'surge_burst', x: ab.x, y: ab.y, radius: finalRadius, life: 0.35, maxLife: 0.35 });
                         for (let e of enemies) {
                             if (Math.hypot(e.x - ab.x, e.y - ab.y) <= finalRadius + e.size/2) {
                                 applyDamage(e, dmg * 0.8, 'slash');
@@ -514,12 +511,13 @@ var SkillRegistry = {
             if (player.stance === 'handheld') {
                 if (player.flow >= player.maxFlow) player.empoweredAirborne = true;
                 player.stance = 'airborne';
+                effects.push({ type: 'blade_launch', x: player.x, y: player.y, flow: sk.selectedUpg === 'B', life: 0.35, maxLife: 0.35 });
                 if (sk.selectedUpg === 'B') {
                     player.flow = Math.min(player.maxFlow, player.flow + (player.maxFlow * 0.30));
                     player.flowGainTimer = 0;
                 }
             } else {
-                effects.push({ type: 'flash_line', x1: player.airborneBlade.x, y1: player.airborneBlade.y, x2: player.x, y2: player.y, color: '#00e5ff', life: 0.25, maxLife: 0.25, lineWidth: 6 });
+                effects.push({ type: 'blade_recall', x1: player.airborneBlade.x, y1: player.airborneBlade.y, x2: player.x, y2: player.y, life: 0.3, maxLife: 0.3 });
                 effects.push({ type: 'circle_burst', x: player.x, y: player.y, radius: 40, color: 'rgba(0, 229, 255, 0.8)', life: 0.3, maxLife: 0.3 });
                 player.stance = 'handheld';
                 player.flow = 0;
@@ -532,18 +530,16 @@ var SkillRegistry = {
             if (player.stance === 'handheld') {
                 const [dx, dy, dist] = getVector(player.x, player.y, mouseX, mouseY);
                 let moveDist = Math.min(dist, equipment.boots && equipment.boots.name === 'Windwalker Steps' ? 400 : 300);
-                
+                const dashAngle = Math.atan2(dy, dx), dur = 0.1 + moveDist / 4000;
+                const startX = player.x, startY = player.y;
+
                 if (sk.selectedUpg === 'A') {
-                    // Path of Blades - Phantom blade follows the dash and slashes
-                    let startX = player.x; let startY = player.y;
-                    let dashAngle = Math.atan2(dy, dx);
-                    
-                    // Spawn a highly visible, fast-moving projectile that tracks the dash path
+                    // Path of Blades - a phantom blade rides along with the dash, piercing everything on the way
                     projectiles.push({
                         x: startX, y: startY,
-                        vx: Math.cos(dashAngle) * 2000, vy: Math.sin(dashAngle) * 2000,
+                        vx: Math.cos(dashAngle) * moveDist / dur, vy: Math.sin(dashAngle) * moveDist / dur,
                         radius: 85, color: '#00e5ff',
-                        life: moveDist / 2000, // lives exactly long enough to traverse the dash dist
+                        life: dur, // keeps pace with the swordsaint for exactly the length of the dash
                         type: 'pierce',
                         shape: 'phantom_blade_proj',
                         damage: dmg * 2.0,
@@ -552,16 +548,19 @@ var SkillRegistry = {
                         isEnemy: false
                     });
                 }
-                
-                // Add dash trail effect for Shadow Step
-                effects.push({ type: 'dash_trail', x1: player.x, y1: player.y, x2: player.x + (dx/dist)*moveDist, y2: player.y + (dy/dist)*moveDist, color: '#00e5ff', life: 0.2, maxLife: 0.2 });
-                
-                player.x += (dx/dist)*moveDist; player.y += (dy/dist)*moveDist; clampToBounds(player, player.radius);
+
                 player.iFrames = 0.3;
-                
-                // Add arrival effect
-                effects.push({ type: 'circle_burst', x: player.x, y: player.y, radius: 40, color: 'rgba(0, 229, 255, 0.8)', life: 0.3, maxLife: 0.3 });
-                
+                const trail = { type: 'dash_trail', x1: startX, y1: startY, x2: startX, y2: startY, color: '#00e5ff', width: 14, life: dur + 0.2, maxLife: dur + 0.2 };
+                effects.push(trail);
+                startDash({
+                    x: startX + (dx/dist)*moveDist, y: startY + (dy/dist)*moveDist, dur, kind: 'shadow_step', trail,
+                    ghost: { color: '#00e5ff', glow: true, every: 0.012, life: 0.2 },
+                    onArrive: () => {
+                        player.iFrames = Math.max(player.iFrames, 0.15);
+                        effects.push({ type: 'iai_flash', x1: startX, y1: startY, x2: player.x, y2: player.y, life: 0.35, maxLife: 0.35 });
+                    }
+                });
+
             } else {
                 // Swap places with Airborne Blade
                 let tmpX = player.x; let tmpY = player.y;
@@ -569,9 +568,8 @@ var SkillRegistry = {
                 player.airborneBlade.x = tmpX; player.airborneBlade.y = tmpY;
                 
                 // Add a more dramatic spatial swap effect
-                effects.push({ type: 'flash_line', x1: tmpX, y1: tmpY, x2: player.x, y2: player.y, color: '#00bcd4', life: 0.25, maxLife: 0.25, lineWidth: 6 });
-                effects.push({ type: 'circle_burst', x: tmpX, y: tmpY, radius: 50, color: 'rgba(0, 188, 212, 0.7)', life: 0.4, maxLife: 0.4 });
-                effects.push({ type: 'circle_burst', x: player.x, y: player.y, radius: 50, color: 'rgba(0, 229, 255, 0.9)', life: 0.4, maxLife: 0.4 });
+                effects.push({ type: 'spatial_swap', x0: tmpX, y0: tmpY, x1: player.x, y1: player.y, life: 0.45, maxLife: 0.45 });
+                spawnDashGhost('#00e5ff', true, 0.35, Math.atan2(player.y - tmpY, player.x - tmpX), tmpX, tmpY, 0);
                 
                 if (sk.selectedUpg === 'B') cooldowns.s1 = 0; // Reset Q (Blade Surge)
             }
@@ -579,7 +577,8 @@ var SkillRegistry = {
         4: (sk, dmg) => { // Blade Whirlwind / Shatter Storm
             if (player.stance === 'handheld') {
                 // Creates a visually stunning vortex of blades
-                effects.push({ type: 'whirlwind', x: player.x, y: player.y, radius: 250, color: '#00e5ff', life: 0.8, maxLife: 0.8 });
+                effects.push({ type: 'katana_tornado', x: player.x, y: player.y, radius: 250, vortex: sk.selectedUpg === 'A', startAngle: Math.atan2(mouseY - player.y, mouseX - player.x), life: 0.8, maxLife: 0.8 });
+                addShake(2.5);
                 for(let i=enemies.length-1; i>=0; i--) {
                     let e = enemies[i];
                     if (Math.hypot(player.x - e.x, player.y - e.y) < 250 + e.size/2) {
@@ -596,7 +595,7 @@ var SkillRegistry = {
                 let isPierce = sk.selectedUpg === 'B';
                 
                 // Visual explosion of the main blade
-                effects.push({ type: 'circle_burst', x: ab.x, y: ab.y, radius: 100, color: '#00e5ff', life: 0.3, maxLife: 0.3 });
+                effects.push({ type: 'shatter_burst', x: ab.x, y: ab.y, life: 0.4, maxLife: 0.4 });
                 
                 if (!player.miniBlades) player.miniBlades = [];
                 for(let i=0; i<6; i++) {
@@ -617,12 +616,13 @@ var SkillRegistry = {
             const slashAngle = Math.atan2(mouseY - player.y, mouseX - player.x);
             
             // Dash slightly into the strike
+            spawnDashGhost('#84ffff', true, 0.25, slashAngle);
             player.x += Math.cos(slashAngle) * 60; 
             player.y += Math.sin(slashAngle) * 60; 
             clampToBounds(player, player.radius);
             player.iFrames = 0.4; // Safety during the emergency sweep
 
-            effects.push({ type: 'slash', x: player.x, y: player.y, radius: 250, angle: slashAngle, color: '#e0f7fa', life: 0.3, maxLife: 0.3 });
+            effects.push({ type: 'gale_crescent', x: player.x, y: player.y, radius: 250, angle: slashAngle, life: 0.4, maxLife: 0.4 });
             
             let enemiesHit = 0;
             for (let i = enemies.length - 1; i >= 0; i--) {
@@ -638,6 +638,7 @@ var SkillRegistry = {
                         clampToBounds(e, e.size/2);
                         e.stunTimer = 1.0; // Stun to relieve pressure
                         enemiesHit++;
+                        for (let m = 0; m < 4; m++) spawnParticle({ kind: 'dot', color: '#84ffff', x: e.x + jitter(16), y: e.y + jitter(16), vx: (player.x - e.x) / 0.45, vy: (player.y - e.y) / 0.45, size: 2, life: 0.45, drag: 0, grow: 0, spin: 0, rot: 0 }); // Flow streams back
                     }
                 }
             }
@@ -659,34 +660,45 @@ var SkillRegistry = {
         },
         2: (sk, dmg) => {
             player.shield += calcUtility(50, sk.level); player.shieldTimer = calcUtility(5.0, sk.level);
-            effects.push({ type: 'iron_bulwark', x: player.x, y: player.y, radius: 120, color: '#78909c', life: 0.5, maxLife: 0.5 });
+            effects.push({ type: 'iron_bulwark', x: player.x, y: player.y, radius: 120, color: '#78909c', life: 0.5, maxLife: 0.5, upg: sk.selectedUpg });
             if (sk.selectedUpg === 'A') {
                 for(let i=enemies.length-1; i>=0; i--) if (Math.hypot(player.x-enemies[i].x, player.y-enemies[i].y) <= 120 + enemies[i].size/2) applyDamage(enemies[i], dmg, 'melee');
             }
             if (sk.selectedUpg === 'B') { buffs.msBoost = calcUtility(2.0, sk.level); player.frenzyStacks = Math.min(10, player.frenzyStacks + 3); }
         },
-        3: (sk, dmg) => {
+        3: (sk, dmg) => { // Thunder Leap: an arcing jump that comes down with a thunderclap
             const [dx, dy, dist] = getVector(player.x, player.y, mouseX, mouseY);
-            const moveDist = Math.min(dist, 400); player.x += (dx / dist) * moveDist; player.y += (dy / dist) * moveDist; clampToBounds(player, player.radius);
-            if (sk.selectedUpg === 'A') {
-                const tx = player.x; const ty = player.y;
-                effects.push({ type: 'circle', x: tx, y: ty, radius: 100, color: 'rgba(229, 57, 53, 0.3)', life: 1.0, maxLife: 1.0, isWarning: true });
-                after(1.0, () => {
-                    effects.push({ type: 'crater', x: tx, y: ty, radius: 100, color: '#e53935', life: 0.5, maxLife: 0.5 });
-                    for(let i=enemies.length-1; i>=0; i--) if (Math.hypot(tx-enemies[i].x, ty-enemies[i].y) <= 100 + enemies[i].size/2) applyDamage(enemies[i], dmg*1.5, 'melee');
-                });
-            } else if (sk.selectedUpg === 'B') {
-                for(let r=0; r<4; r++) { const angle = (Math.PI*2/4) * r; projectiles.push({ x: player.x, y: player.y, vx: Math.cos(angle)*500, vy: Math.sin(angle)*500, radius: 8, color: '#ffca28', life: 1.0, type: 'basic', damage: dmg, pierce: false, isEnemy: false }); }
-            }
-            effects.push({ type: 'crater', x: player.x, y: player.y, radius: 80, color: '#ef5350', life: 0.5, maxLife: 0.5 });
-            for(let i=enemies.length-1; i>=0; i--) if (Math.hypot(player.x-enemies[i].x, player.y-enemies[i].y) <= 80 + enemies[i].size/2) applyDamage(enemies[i], dmg, 'melee');
+            const moveDist = Math.min(dist, 400);
+            dustPuff(player.x, player.y, Math.atan2(dy, dx) + Math.PI, 2.4, 5);
+            startDash({
+                x: player.x + (dx / dist) * moveDist, y: player.y + (dy / dist) * moveDist,
+                dur: 0.2 + moveDist / 2700, arc: 25 + moveDist * 0.12, kind: 'thunder_leap',
+                ghost: { color: '#ff7043', glow: false, every: 0.035 },
+                onArrive: () => {
+                    if (sk.selectedUpg === 'A') {
+                        const tx = player.x; const ty = player.y;
+                        effects.push({ type: 'aftershock_zone', x: tx, y: ty, radius: 100, life: 1.0, maxLife: 1.0 });
+                        after(1.0, () => {
+                            effects.push({ type: 'thunder_slam', x: tx, y: ty, radius: 100, color: '#e53935', big: true, life: 0.5, maxLife: 0.5 });
+                            for(let i=enemies.length-1; i>=0; i--) if (Math.hypot(tx-enemies[i].x, ty-enemies[i].y) <= 100 + enemies[i].size/2) applyDamage(enemies[i], dmg*1.5, 'melee');
+                        });
+                    } else if (sk.selectedUpg === 'B') {
+                        for(let r=0; r<4; r++) { const angle = (Math.PI*2/4) * r; projectiles.push({ x: player.x, y: player.y, vx: Math.cos(angle)*500, vy: Math.sin(angle)*500, radius: 8, color: '#ffca28', life: 1.0, type: 'basic', shape: 'shrapnel', damage: dmg, pierce: false, isEnemy: false }); }
+                    }
+                    effects.push({ type: 'thunder_slam', x: player.x, y: player.y, radius: 80, color: '#ff7043', life: 0.5, maxLife: 0.5 });
+                    for(let i=enemies.length-1; i>=0; i--) if (Math.hypot(player.x-enemies[i].x, player.y-enemies[i].y) <= 80 + enemies[i].size/2) applyDamage(enemies[i], dmg, 'melee');
+                }
+            });
         },
         4: (sk, dmg) => {
             const attackAngle = Math.atan2(mouseY - player.y, mouseX - player.x);
             let color = sk.selectedUpg === 'A' ? '#2196f3' : '#ff5722';
+            const breath = sk.selectedUpg === 'A' ? 'frost' : sk.selectedUpg === 'B' ? 'shatter' : 'fire';
+            const head = { type: 'dragon_head', angle: attackAngle, breath, tracking: true, life: 1.25, maxLife: 1.25 };
+            effects.push(head); // skillfx_ult.js: the head turns to follow the cursor, and the flames go where it faces
             every(0.05, 21, () => {
-                let spread = attackAngle + (Math.random() - 0.5) * 0.8;
-                projectiles.push({ x: player.x + Math.cos(spread)*20, y: player.y + Math.sin(spread)*20, vx: Math.cos(spread)*700, vy: Math.sin(spread)*700, radius: 15 + Math.random()*15, color: color, life: 0.6, type: 'pierce', shape: 'fireball', damage: dmg * 0.25, pierce: true, hitList: [], isEnemy: false });
+                let spread = head.angle + (Math.random() - 0.5) * 0.8;
+                projectiles.push({ x: player.x + Math.cos(spread)*20, y: player.y + Math.sin(spread)*20, vx: Math.cos(spread)*700, vy: Math.sin(spread)*700, radius: 15 + Math.random()*15, color: color, life: 0.6, type: 'pierce', shape: 'breath', breath, damage: dmg * 0.25, pierce: true, hitList: [], isEnemy: false });
             });
             
             if (sk.selectedUpg === 'A') {
@@ -707,7 +719,8 @@ var SkillRegistry = {
         },
         'rmb': () => {
             const attackAngle = Math.atan2(mouseY - player.y, mouseX - player.x);
-            effects.push({ type: 'slash', x: player.x, y: player.y, radius: 150, angle: attackAngle, color: '#2196f3', life: 0.25, maxLife: 0.25 });
+            effects.push({ type: 'wyrm_rake', x: player.x, y: player.y, angle: attackAngle, life: 0.35, maxLife: 0.35 });
+            effects.push({ type: 'dragon_head', angle: attackAngle, breath: 'fire', snap: true, life: 0.35, maxLife: 0.35 }); // the wyrm snaps forward
             for(let i=enemies.length-1; i>=0; i--) {
                 const e = enemies[i];
                 if (Math.hypot(player.x-e.x, player.y-e.y) <= 150 + e.size/2) {
@@ -748,13 +761,14 @@ var SkillRegistry = {
         3: (sk, dmg) => {
             player.arcaneResonance = true; const [dx, dy, dist] = getVector(player.x, player.y, mouseX, mouseY);
             const moveDist = Math.min(dist, 350); const startX = player.x; const startY = player.y;
-            effects.push({ type: 'sparkle_poof', x: player.x, y: player.y, radius: player.radius, color: player.color, life: 0.3, maxLife: 0.3 });
+            spawnDashGhost('#82b1ff', true, 0.4, Math.atan2(dy, dx));
             player.x += (dx / dist) * moveDist; player.y += (dy / dist) * moveDist; clampToBounds(player, player.radius);
+            effects.push({ type: 'blink', x0: startX, y0: startY, x1: player.x, y1: player.y, life: 0.45, maxLife: 0.45 });
             if (sk.selectedUpg === 'A') {
                 let target = getNearestEnemyFromPoint(player.x, player.y, 400);
                 if (target) {
                     const [tx, ty, td] = getVector(player.x, player.y, target.x, target.y);
-                    projectiles.push({ x: player.x, y: player.y, vx: (tx/td)*700, vy: (ty/td)*700, radius: 8, color: '#e040fb', life: 1.5, type: 'basic', shape: 'fireball', damage: calcDmg(30), pierce: false, isEnemy: false });
+                    projectiles.push({ x: player.x, y: player.y, vx: (tx/td)*700, vy: (ty/td)*700, radius: 8, color: '#e040fb', life: 1.5, type: 'basic', shape: 'arcane_missile', damage: calcDmg(30), pierce: false, isEnemy: false });
                 }
             }
             if (sk.selectedUpg === 'B') {
@@ -767,19 +781,18 @@ var SkillRegistry = {
             const tx = Math.max(currentMap.left, Math.min(currentMap.right, mouseX)); 
             const ty = Math.max(currentMap.top, Math.min(currentMap.bottom, mouseY)); 
             let delay = sk.selectedUpg === 'A' ? 0.75 : 1.0;
-            effects.push({ type: 'circle', x: tx, y: ty, radius: 150, color: '#ff5722', life: delay, maxLife: delay, isWarning: true, outlineOnly: true });
-            effects.push({ type: 'meteor_drop', x: tx, y: ty, radius: 40, color: '#ff5722', life: delay, maxLife: delay });
+            effects.push({ type: 'meteor_fall', x: tx, y: ty, radius: 150, life: delay, maxLife: delay }); // skillfx_ult.js
             
             after(delay, () => {
                 effects.push({ type: 'fiery_explosion', x: tx, y: ty, radius: 150, life: 0.5, maxLife: 0.5 });
-                effects.push({ type: 'crater', x: tx, y: ty, radius: 150, color: '#ff5722', life: 0.6, maxLife: 0.6 });
+                effects.push({ type: 'molten_scorch', x: tx, y: ty, radius: 120, life: 3.0, maxLife: 3.0 });
+                burst(tx, ty, 0, Math.PI * 2, 14, { kind: 'debris', color: '#4e342e', size: 5, life: 0.7, speed: [150, 380], drag: 4 });
                 for(let i=enemies.length-1; i>=0; i--) { if (Math.hypot(tx-enemies[i].x, ty-enemies[i].y) <= 150 + enemies[i].size/2) applyDamage(enemies[i], dmg, 'magic'); }
                 if (sk.selectedUpg === 'B') {
-                    effects.push({ type: 'circle', x: tx, y: ty, radius: 80, color: '#ff9800', life: 1.5, maxLife: 1.5, isWarning: true, outlineOnly: true });
-                    effects.push({ type: 'meteor_drop', x: tx, y: ty, radius: 20, color: '#ff9800', life: 1.5, maxLife: 1.5 });
+                    effects.push({ type: 'echo_charge', x: tx, y: ty, radius: 80, life: 1.5, maxLife: 1.5 });
                     after(1.5, () => {
                         effects.push({ type: 'fiery_explosion', x: tx, y: ty, radius: 80, life: 0.5, maxLife: 0.5 });
-                        effects.push({ type: 'crater', x: tx, y: ty, radius: 80, color: '#ff9800', life: 0.4, maxLife: 0.4 });
+                        effects.push({ type: 'molten_scorch', x: tx, y: ty, radius: 70, life: 2.0, maxLife: 2.0 });
                         for(let i=enemies.length-1; i>=0; i--) { if (Math.hypot(tx-enemies[i].x, ty-enemies[i].y) <= 80 + enemies[i].size/2) applyDamage(enemies[i], dmg*0.5, 'magic'); }
                     });
                 }
@@ -787,16 +800,14 @@ var SkillRegistry = {
         },
         'rmb': () => {
             const angle = Math.atan2(mouseY - player.y, mouseX - player.x); const endX = player.x + Math.cos(angle) * 500; const endY = player.y + Math.sin(angle) * 500;
-            effects.push({ type: 'flash_line', x1: player.x, y1: player.y, x2: endX, y2: endY, color: '#2196f3', life: 0.4, maxLife: 0.4, lineWidth: 15 });
-            effects.push({ type: 'circle_burst', x: player.x, y: player.y, radius: 40, color: '#2196f3', life: 0.3, maxLife: 0.3 });
-            effects.push({ type: 'circle_burst', x: endX, y: endY, radius: 60, color: '#e3f2fd', life: 0.4, maxLife: 0.4 });
+            effects.push({ type: 'arcane_beam', x1: player.x + Math.cos(angle) * 45, y1: player.y + Math.sin(angle) * 45, x2: endX, y2: endY, life: 0.45, maxLife: 0.45 });
             const l2 = 500*500;
             for(let i=enemies.length-1; i>=0; i--) {
                 const e = enemies[i]; let t = ((e.x - player.x) * (endX - player.x) + (e.y - player.y) * (endY - player.y)) / l2; t = Math.max(0, Math.min(1, t));
                 const projX = player.x + t * (endX - player.x); const projY = player.y + t * (endY - player.y);
                 if (Math.hypot(e.x - projX, e.y - projY) < e.size/2 + 20) {
                     applyDamage(e, calcDmg(120), 'magic');
-                    effects.push({ type: 'sparkle_poof', x: e.x, y: e.y, radius: 25, color: '#81d4fa', life: 0.2, maxLife: 0.2 });
+                    burst(e.x, e.y, angle, 1.4, 8, { kind: 'spark', color: '#b388ff', size: 2.2, life: 0.25, speed: [150, 350], drag: 5 });
                 }
             }
         }
@@ -810,36 +821,66 @@ var SkillRegistry = {
             let healAmt = sk.selectedUpg === 'A' ? 30 : 15; player.hp = Math.min(player.maxHp, player.hp + calcUtility(healAmt, sk.level)); buffs.msBoost = sk.selectedUpg === 'B' ? calcUtility(4.0, sk.level) : calcUtility(2.0, sk.level);
             effects.push({ type: 'wind_swirl', x: player.x, y: player.y, radius: 60, color: '#4caf50', life: 0.6, maxLife: 0.6 }); updateHUD();
         },
-        3: (sk, dmg) => {
+        3: (sk, dmg) => { // Vault: a quick hop through the air; Parting Shot fires from the top of the jump
             const [dx, dy, dist] = getVector(player.x, player.y, mouseX, mouseY);
             const moveDist = Math.min(dist, sk.selectedUpg === 'B' ? 500 : 300);
-            effects.push({ type: 'dash_trail', x1: player.x, y1: player.y, x2: player.x + (dx/dist)*moveDist, y2: player.y + (dy/dist)*moveDist, color: '#81c784', life: 0.3, maxLife: 0.3 });
-            player.x += (dx / dist) * moveDist; player.y += (dy / dist) * moveDist; clampToBounds(player, player.radius);
-            if (sk.selectedUpg === 'A') {
-                let target = getNearestEnemyFromPoint(player.x, player.y, 400);
-                if (target) {
-                    const [tx, ty, td] = getVector(player.x, player.y, target.x, target.y);
-                    projectiles.push({ x: player.x, y: player.y, vx: (tx/td)*1200, vy: (ty/td)*1200, radius: 8, color: '#00e676', life: 1.5, type: 'basic', shape: 'arrow', damage: dmg, pierce: false, isEnemy: false });
-                }
-            }
+            const ang = Math.atan2(dy, dx);
+            dustPuff(player.x, player.y, ang + Math.PI, 1.8, 4);
+            burst(player.x, player.y, ang + Math.PI, 1.6, 5, { kind: 'leaf', color: '#81c784', size: 6, life: 0.5, speed: [80, 180], drag: 4 });
+            startDash({
+                x: player.x + (dx / dist) * moveDist, y: player.y + (dy / dist) * moveDist,
+                dur: 0.2 + moveDist / 3000, arc: 20 + moveDist * 0.08, kind: 'vault',
+                ghost: { color: '#a5d6a7', glow: false, every: 0.04 },
+                onApex: () => {
+                    if (sk.selectedUpg !== 'A') return;
+                    let target = getNearestEnemyFromPoint(player.x, player.y, 400);
+                    if (target) {
+                        const [tx, ty, td] = getVector(player.x, player.y, target.x, target.y);
+                        projectiles.push({ x: player.x, y: player.y, vx: (tx/td)*1200, vy: (ty/td)*1200, radius: 8, color: '#00e676', life: 1.5, type: 'basic', shape: 'arrow', damage: dmg, pierce: false, isEnemy: false });
+                        burst(player.x, player.y - player.z, Math.atan2(ty, tx), 0.8, 6, { kind: 'spark', color: '#b9f6ca', size: 2, life: 0.2, speed: [150, 300], drag: 5 });
+                    }
+                },
+                onArrive: () => effects.push({ type: 'vault_land', x: player.x, y: player.y, life: 0.35, maxLife: 0.35 })
+            });
         },
-        4: (sk, dmg) => {
-            const baseAngle = Math.atan2(mouseY - player.y, mouseX - player.x);
-            const count = sk.selectedUpg === 'B' ? 4 : 2; const pierce = sk.selectedUpg === 'A';
-            for(let i = -count; i <= count; i++) {
-                const angle = baseAngle + (i * 0.15);
-                projectiles.push({ x: player.x, y: player.y, vx: Math.cos(angle)*1000, vy: Math.sin(angle)*1000, radius: 6, color: '#e0e0e0', life: 1.5, type: pierce?'pierce':'basic', shape: 'arrow', damage: dmg, pierce: pierce, hitList: [], isEnemy: false });
+        4: (sk, dmg) => { // Volley: arrows loosed into the sky rain down on the target area
+            const heavy = sk.selectedUpg === 'A', rain = sk.selectedUpg === 'B';
+            const [dx, dy, dist] = getVector(player.x, player.y, mouseX, mouseY);
+            const reach = Math.min(dist, 500);
+            const [tx, ty] = clampPointToMap(player.x + (dx/dist)*reach, player.y + (dy/dist)*reach, 20);
+            const radius = rain ? 150 : 110, count = rain ? 18 : 10, hitR = heavy ? 36 : 24;
+            const delay = 0.45, spread = 0.35;
+            const arrows = [];
+            for (let i = 0; i < count; i++) {
+                const a = Math.random() * Math.PI * 2, r = Math.sqrt((i + Math.random()) / count) * radius; // even coverage of the circle
+                const ax = tx + Math.cos(a) * r, ay = ty + Math.sin(a) * r, t = delay + Math.random() * spread;
+                arrows.push({ x: ax, y: ay, t });
+                after(t, () => {
+                    arrowImpactFx(ax, ay, heavy); // skillfx_ult.js
+                    for (let k = enemies.length - 1; k >= 0; k--) {
+                        const e = enemies[k];
+                        if (e.dead || Math.hypot(e.x - ax, e.y - ay) > hitR + e.size / 2) continue;
+                        applyDamage(e, dmg, 'ranged');
+                        if (heavy) { // Heavy Shafts: the impact staggers
+                            if (!(e.slowTimer > 0) || e.slowAmount < 0.5) e.slowAmount = 0.5;
+                            e.slowTimer = Math.max(e.slowTimer || 0, 1.0);
+                        }
+                    }
+                });
             }
+            effects.push({ type: 'arrow_rain', x: tx, y: ty, sx: player.x, sy: player.y, radius, arrows, heavy, life: delay + spread + 1.6, maxLife: delay + spread + 1.6 });
         },
         'rmb': () => {
             const baseAngle = Math.atan2(mouseY - player.y, mouseX - player.x);
-            for(let i = -1; i <= 1; i++) projectiles.push({ x: player.x, y: player.y, vx: Math.cos(baseAngle+(i*0.2))*1500, vy: Math.sin(baseAngle+(i*0.2))*1500, radius: 8, color: '#2196f3', life: 1.5, type: 'pierce', shape: 'arrow', damage: calcDmg(60), pierce: true, hitList: [], isEnemy: false });
+            effects.push({ type: 'thunderclap', x: player.x + Math.cos(baseAngle) * 20, y: player.y + Math.sin(baseAngle) * 20, angle: baseAngle, life: 0.25, maxLife: 0.25 });
+            for(let i = -1; i <= 1; i++) projectiles.push({ x: player.x, y: player.y, vx: Math.cos(baseAngle+(i*0.2))*1500, vy: Math.sin(baseAngle+(i*0.2))*1500, radius: 8, color: '#2196f3', life: 1.5, type: 'pierce', shape: 'storm_arrow', damage: calcDmg(60), pierce: true, hitList: [], isEnemy: false });
         }
     },
     'Nightblade': {
         1: (sk, dmg) => {
             const baseAngle = Math.atan2(mouseY - player.y, mouseX - player.x);
             let count = 5; let pierce = sk.selectedUpg === 'A'; let returnDmg = sk.selectedUpg === 'B';
+            effects.push({ type: 'knife_fan', x: player.x, y: player.y, angle: baseAngle, life: 0.2, maxLife: 0.2 });
             for(let i=0; i<count; i++) {
                 let angle = baseAngle - 0.4 + (i * 0.2);
                 projectiles.push({ x: player.x, y: player.y, vx: Math.cos(angle)*800, vy: Math.sin(angle)*800, radius: 5, color: '#e1bee7', life: 1.0, type: pierce?'pierce':'fan_of_knives', shape: 'knife', damage: dmg, pierce: pierce, hitList: [], isEnemy: false, source: 'fan_of_knives', returning: false, returnDmg: returnDmg });
@@ -862,24 +903,36 @@ var SkillRegistry = {
             effects.push({ type: 'smoke_bomb', x: player.x, y: player.y, radius: radius, color: smokeColor, life: duration, maxLife: duration, poison: poison, dmg: dmg, particles: particles });
             if (sk.selectedUpg === 'B') { buffs.slowed = 0; buffs.rooted = 0; }
         },
-        3: (sk, dmg) => {
+        3: (sk, dmg) => { // Phantom Dash: a blur of shadow that cuts everything it passes through
             const [dx, dy, dist] = getVector(player.x, player.y, mouseX, mouseY);
             let moveDist = sk.selectedUpg === 'A' ? Math.min(dist, 600) : Math.min(dist, 300);
             let pDashAngle = Math.atan2(dy, dx);
-            effects.push({ type: 'dash_trail', x1: player.x, y1: player.y, x2: player.x + (dx/dist)*moveDist, y2: player.y + (dy/dist)*moveDist, color: '#9c27b0', life: 0.2, maxLife: 0.2 });
-            for(let i=enemies.length-1; i>=0; i--) {
-                const e = enemies[i];
-                if (distToSegment(e.x, e.y, player.x, player.y, player.x + (dx/dist)*moveDist, player.y + (dy/dist)*moveDist) < e.size/2 + 20) applyDamage(e, dmg, 'phantom_dash', pDashAngle);
-            }
-            player.x += (dx/dist)*moveDist; player.y += (dy/dist)*moveDist; clampToBounds(player, player.radius);
-            player.iFrames = 0.4; 
+            const hitList = [];
+            const trail = { type: 'dash_trail', x1: player.x, y1: player.y, x2: player.x, y2: player.y, color: '#9c27b0', width: 18, life: 0.35, maxLife: 0.35 };
+            effects.push(trail);
+            burst(player.x, player.y, 0, Math.PI * 2, 5, { kind: 'smoke', color: '#311b92', size: 6, grow: 26, life: 0.5, speed: [30, 90], drag: 3 });
+            player.iFrames = 0.4;
+            startDash({
+                x: player.x + (dx/dist)*moveDist, y: player.y + (dy/dist)*moveDist,
+                dur: 0.08 + moveDist / 6000, ease: 'out', kind: 'phantom_dash', trail,
+                ghost: { color: '#b388ff', glow: true, every: 0.012, life: 0.22 },
+                onStep: (x0, y0, x1, y1) => { // hits whatever the dash passes through this frame
+                    for(let i=enemies.length-1; i>=0; i--) {
+                        const e = enemies[i];
+                        if (e.dead || hitList.includes(e) || distToSegment(e.x, e.y, x0, y0, x1, y1) >= e.size/2 + 20) continue;
+                        hitList.push(e);
+                        applyDamage(e, dmg, 'phantom_dash', pDashAngle);
+                        effects.push({ type: 'shadow_cut', x: e.x, y: e.y, angle: pDashAngle, radius: e.size * 0.6 + 16, life: 0.3, maxLife: 0.3 });
+                    }
+                }
+            });
             if (sk.selectedUpg === 'B') {
-                if (!player.phantomChargeUsed) { player.phantomChargeUsed = true; cooldowns.s3 = 0.5; } 
+                if (!player.phantomChargeUsed) { player.phantomChargeUsed = true; cooldowns.s3 = 0.5; }
                 else { player.phantomChargeUsed = false; }
             }
         },
         4: (sk, dmg) => {
-            effects.push({ type: 'circle', x: player.x, y: player.y, radius: 600, color: 'rgba(74, 20, 140, 0.4)', life: 0.5, maxLife: 0.5 });
+            effects.push({ type: 'death_mark_wave', x: player.x, y: player.y, radius: 600, life: 0.6, maxLife: 0.6 });
             let targets = enemies.filter(e => Math.hypot(player.x - e.x, player.y - e.y) <= 600);
             targets.forEach(e => e.markAngle = Math.random() * Math.PI * 2);
             buffs.deathMarkActive = calcUtility(5.0, sk.level);
@@ -891,7 +944,9 @@ var SkillRegistry = {
                     let startX = target.x + Math.cos(markAng) * 200;
                     let startY = target.y + Math.sin(markAng) * 200;
                     let dashAngle = Math.atan2(target.y - startY, target.x - startX);
-                    effects.push({ type: 'thrust_edge', x: startX, y: startY, x2: target.x, y2: target.y, angle: dashAngle, color: '#e1bee7', life: 0.2, maxLife: 0.2 });
+                    // a shadow clone blinks in on the weak side and stabs straight through
+                    effects.push({ type: 'clone_strike', x0: startX, y0: startY, x1: target.x + Math.cos(dashAngle) * 40, y1: target.y + Math.sin(dashAngle) * 40, angle: dashAngle, life: 0.4, maxLife: 0.4 });
+                    effects.push({ type: 'shadow_cut', x: target.x, y: target.y, angle: dashAngle, radius: target.size * 0.6 + 18, life: 0.3, maxLife: 0.3 });
                     let ultDmg = dmg * 3; 
                     if (sk.selectedUpg === 'A') player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.05);
                     applyDamage(target, ultDmg, 'assassin_skill', dashAngle);
@@ -903,13 +958,15 @@ var SkillRegistry = {
             if (!target) target = getNearestEnemyFromPoint(player.x, player.y, 400);
             if (target) {
                 let execAngle = Math.atan2(target.y - player.y, target.x - player.x);
-                effects.push({ type: 'thrust_edge', x: player.x, y: player.y, x2: target.x, y2: target.y, angle: execAngle, color: '#4a148c', life: 0.2, maxLife: 0.2 });
+                effects.push({ type: 'dagger_flash', x1: player.x, y1: player.y, x2: target.x, y2: target.y, life: 0.15, maxLife: 0.15 });
+                burst(player.x, player.y, 0, Math.PI * 2, 5, { kind: 'smoke', color: '#311b92', size: 5, grow: 22, life: 0.45, speed: [20, 70], drag: 3 });
                 
                 // Teleport behind target based on strike angle
                 player.x = target.x + Math.cos(execAngle) * 30; 
                 player.y = target.y + Math.sin(execAngle) * 30; 
                 clampToBounds(player, player.radius);
                 
+                burst(player.x, player.y, 0, Math.PI * 2, 5, { kind: 'smoke', color: '#311b92', size: 5, grow: 22, life: 0.45, speed: [20, 70], drag: 3 });
                 // Small stab damage for teleporting
                 applyDamage(target, calcDmg(15), 'assassin_skill', execAngle);
 
@@ -923,6 +980,7 @@ var SkillRegistry = {
                     if (Math.abs(diff) <= Math.PI/3) { // 60-degree window to hit the weakpoint
                         applyDamage(target, calcDmg(150), 'execute', execAngle);
                         effects.push({ type: 'text', text: 'WEAKPOINT!', x: target.x, y: target.y - 30, color: '#f44336', life: 0.8, maxLife: 0.8 });
+                        burst(target.x, target.y, execAngle, 2.6, 12, { kind: 'spark', color: '#ea80fc', size: 3, life: 0.35, speed: [150, 380], drag: 5 }); // the mark shatters
                         if (target.hp <= 0 || target.dead) cooldowns.rmb = 0;
                         target.markAngle = undefined; // consume mark
                     }
@@ -937,14 +995,16 @@ var SkillRegistry = {
             let tx = player.x + (dx/dist)*Math.min(dist, 400); let ty = player.y + (dy/dist)*Math.min(dist, 400);
             let isRoot = sk.selectedUpg === 'A'; let isNetwork = sk.selectedUpg === 'B';
             projectiles.push({
-                x: tx, y: ty, vx: 0, vy: 0, radius: 15, color: '#00e5ff', life: 8.0, type: 'tesla_coil_trap', damage: dmg, isEnemy: false, tickTimer: 0, rootedList: [],
+                x: tx, y: ty, vx: 0, vy: 0, radius: 15, color: '#00e5ff', life: 8.0, type: 'tesla_coil_trap', damage: dmg, isEnemy: false, tickTimer: 0, rootedList: [], fieldRadius: isRoot ? 200 : 150,
                 customUpdate: function(dt, p) {
                     this.tickTimer -= dt;
                     if (this.tickTimer <= 0) {
-                        effects.push({ type: 'circle', x: this.x, y: this.y, radius: isRoot ? 200 : 150, color: 'rgba(0, 229, 255, 0.2)', life: 0.2, maxLife: 0.2 });
+                        effects.push({ type: 'tesla_pulse', x: this.x, y: this.y, radius: isRoot ? 200 : 150, life: 0.3, maxLife: 0.3 });
+                        let zaps = 0;
                         for (let i = enemies.length - 1; i >= 0; i--) {
                             let e = enemies[i];
                             if (Math.hypot(e.x - this.x, e.y - this.y) < (isRoot ? 200 : 150) + e.size/2) {
+                                if (zaps++ < 5) effects.push({ type: 'lightning', x1: this.x, y1: this.y, x2: e.x, y2: e.y, color: '#00e5ff', life: 0.15, maxLife: 0.15 });
                                 applyDamage(e, this.damage, 'magic');
                                 e.shockTimer = 0.6;
                                 // High Voltage: root each enemy once per coil, when it first enters the field
@@ -989,18 +1049,21 @@ var SkillRegistry = {
             
             let [dx, dy, ddist] = getVector(player.x, player.y, targetX, targetY);
             if (ddist > 10) {
-                player.grappleTarget = { x: targetX, y: targetY };
+                player.grappleTarget = { x: targetX, y: targetY, kind: 'magnet', onArrive: () => magClank(targetX, targetY) };
+                burst(player.x, player.y, Math.atan2(dy, dx), 0.6, 6, { kind: 'spark', color: '#80d8ff', size: 2, life: 0.2, speed: [200, 400], drag: 5 });
             }
         },
         4: (sk, dmg) => {
             const duration = calcUtility(6.0, sk.level);
-            buffs.overclockTimer = duration;
+            buffs.overclockTimer = duration; buffs.overclockMax = duration;
+            effects.push({ type: 'overclock_burst', life: 0.6, maxLife: 0.6 });
             for(let p of projectiles) { if (p.type === 'turret' || p.type === 'tesla_coil_trap') p.life = p.type === 'turret' ? 10.0 : 8.0; }
             if (sk.selectedUpg === 'B') {
                 const turretSkill = activeClass.skills[1];
                 const turretDmg = calcDmg(turretSkill.baseDmg, Math.max(1, turretSkill.level));
-                spawnTurret(player.x - 30, player.y, turretSkill.selectedUpg, turretDmg);
-                spawnTurret(player.x + 30, player.y, turretSkill.selectedUpg, turretDmg);
+                // the two turrets drop in from the sky, one after the other
+                spawnTurret(player.x - 30, player.y, turretSkill.selectedUpg, turretDmg); projectiles[projectiles.length - 1].dropIn = 0.35;
+                spawnTurret(player.x + 30, player.y, turretSkill.selectedUpg, turretDmg); projectiles[projectiles.length - 1].dropIn = 0.5;
             }
             if (sk.selectedUpg === 'A') {
                 // Nuclear Payload: when Overclock ends, every turret detonates (volatile turrets explode for 3x their damage on expiry)
@@ -1027,7 +1090,7 @@ var SkillRegistry = {
             if (buffs.wildFormTimer > 0) {
                 // Vine Whip
                 const angle = Math.atan2(mouseY - player.y, mouseX - player.x);
-                effects.push({ type: 'slash', x: player.x, y: player.y, radius: 250, angle: angle, color: '#4caf50', life: 0.2, maxLife: 0.2 });
+                effects.push({ type: 'vine_whip', x: player.x, y: player.y, radius: 250, angle: angle, life: 0.3, maxLife: 0.3 });
                 let hitInThorns = false;
                 for(let i=enemies.length-1; i>=0; i--) {
                     const e = enemies[i];
@@ -1058,7 +1121,7 @@ var SkillRegistry = {
             buffs.barkskinDmg = calcDmg(60, sk.level); // Splintering Shell explosion
             // Break slow/root
             buffs.slowed = 0; buffs.rooted = 0;
-            effects.push({ type: 'circle', x: player.x, y: player.y, radius: player.radius + 15, color: 'rgba(121, 85, 72, 0.6)', life: 0.3, maxLife: 0.3 });
+            effects.push({ type: 'bark_form', x: player.x, y: player.y, life: 0.35, maxLife: 0.35 });
         },
         3: (sk, dmg) => { // Spore Burst / Feral Pounce
             if (buffs.wildFormTimer > 0) {
@@ -1075,15 +1138,22 @@ var SkillRegistry = {
 
                 let dashDist = 250;
                 const angle = Math.atan2(mouseY - player.y, mouseX - player.x);
-                player.x += Math.cos(angle) * dashDist; player.y += Math.sin(angle) * dashDist; clampToBounds(player, player.radius);
-                effects.push({ type: 'circle', x: player.x, y: player.y, radius: 100, color: 'rgba(121, 85, 72, 0.4)', life: 0.2, maxLife: 0.2 });
-                for(let i=enemies.length-1; i>=0; i--) {
-                    const e = enemies[i];
-                    if (Math.hypot(e.x - player.x, e.y - player.y) <= 100) { applyDamage(e, dmg * pounceMult, 'physical'); }
-                }
+                dustPuff(player.x, player.y, angle + Math.PI, 1.6, 4, '#6d5d4b');
+                startDash({
+                    x: player.x + Math.cos(angle) * dashDist, y: player.y + Math.sin(angle) * dashDist,
+                    dur: 0.17, arc: 18, ease: 'out', kind: 'pounce',
+                    ghost: { color: '#a1887f', glow: false, every: 0.03, life: 0.2 },
+                    onArrive: () => {
+                        effects.push({ type: 'pounce_rake', x: player.x, y: player.y, angle, radius: 100, life: 0.4, maxLife: 0.4 });
+                        for(let i=enemies.length-1; i>=0; i--) {
+                            const e = enemies[i];
+                            if (Math.hypot(e.x - player.x, e.y - player.y) <= 100) { applyDamage(e, dmg * pounceMult, 'physical'); }
+                        }
+                    }
+                });
             } else {
                 // Spore Burst
-                effects.push({ type: 'circle', x: player.x, y: player.y, radius: 150, color: 'rgba(139, 195, 74, 0.5)', life: 0.3, maxLife: 0.3 });
+                effects.push({ type: 'spore_burst', x: player.x, y: player.y, radius: 150, life: 0.5, maxLife: 0.5 });
                 let hits = 0;
                 for(let i=enemies.length-1; i>=0; i--) {
                     const e = enemies[i];
@@ -1111,16 +1181,15 @@ var SkillRegistry = {
         },
         4: (sk, dmg) => { // Aspect of the Wild
             if (buffs.wildFormTimer > 0) {
+                wildRevertFx(); // skillfx_ult.js: the wolf crumbles into leaves
                 buffs.wildFormTimer = 0; // Revert Toggle
-                effects.push({ type: 'text', text: 'REVERT', x: player.x, y: player.y - 40, color: '#8bc34a', life: 0.8, maxLife: 0.8 });
             } else {
                 // Feral Beast transformation toggle
                 buffs.wildFormTimer = Infinity;
                 // Predatory Momentum: transforming instantly readies a Feral Pounce
                 if (activeClass.skills[3].level > 0 && activeClass.skills[3].selectedUpg === 'B') cooldowns.s3 = 0;
                 
-                effects.push({ type: 'circle', x: player.x, y: player.y, radius: 200, color: 'rgba(76, 175, 80, 0.6)', life: 0.4, maxLife: 0.4 });
-                effects.push({ type: 'text', text: 'ROAR', x: player.x, y: player.y - 40, color: '#388e3c', life: 1.0, maxLife: 1.0 });
+                effects.push({ type: 'wild_shift', x: player.x, y: player.y, radius: 200, life: 0.7, maxLife: 0.7 }); // vine cocoon, then the roar
                 
                 for(let i=enemies.length-1; i>=0; i--) {
                     const e = enemies[i];
@@ -1136,7 +1205,7 @@ var SkillRegistry = {
             // Thistle-Grip Claws (Gnarled Heartwood Totem): thorny claws rake a wide cone, seeding a Spore stack and briefly rooting everything hit
             const angle = Math.atan2(mouseY - player.y, mouseX - player.x);
             const dmg = calcDmg(40);
-            effects.push({ type: 'claw_swipe', x: player.x, y: player.y, radius: 180, angle: angle, color: '#8bc34a', life: 0.25, maxLife: 0.25 });
+            effects.push({ type: 'spirit_paw', x: player.x, y: player.y, angle: angle, life: 0.4, maxLife: 0.4 });
             for(let i=enemies.length-1; i>=0; i--) {
                 const e = enemies[i];
                 if (Math.hypot(player.x-e.x, player.y-e.y) > 180 + e.size/2) continue;
@@ -1148,6 +1217,7 @@ var SkillRegistry = {
                 e.sporeTimer = 5.0;
                 e.sporeDps = dmg * 0.25 * e.sporeStacks;
                 if (!e.type.startsWith('boss')) e.rootedTimer = 0.75;
+                burst(e.x, e.y, 0, Math.PI * 2, 5, { kind: 'smoke', color: '#9ccc65', size: 4, grow: 20, life: 0.5, speed: [20, 70], drag: 3 }); // seeded spores
             }
         }
     }
@@ -1264,20 +1334,38 @@ var BasicAttackRegistry = {
     },
     'totem': (dmg) => {
         if (buffs.wildFormTimer > 0) {
-            // Wild Form: Melee Claw Attack
+            // Wild Form combo: left claw rake, right claw rake, then a lunging Bite
             const attackAngle = Math.atan2(mouseY - player.y, mouseX - player.x);
-            // Alternate left/right claw slashes
-            let isLeft = Math.random() > 0.5;
-            effects.push({ type: 'claw_swipe', x: player.x, y: player.y, radius: 100, angle: attackAngle + (isLeft?-0.2:0.2), color: '#d84315', life: 0.15, maxLife: 0.15 }); 
-            
+            const step = player.wolfComboStep || 0;
+            player.lastWolfStep = step;
+            player.wolfComboStep = (step + 1) % 3;
+            player.wolfComboTimer = 1.0; // the combo resets after 1s without attacking
+            const isBite = step === 2;
+            let reach = 100, halfArc = (Math.PI/1.5)/2;
+
+            if (isBite) {
+                // Lunge toward the aim, stopping short of the first enemy in the way
+                const target = getNearestEnemyFromPoint(player.x, player.y, 60);
+                const lunge = target ? 0 : 40;
+                player.x += Math.cos(attackAngle) * lunge; player.y += Math.sin(attackAngle) * lunge; clampToBounds(player, player.radius);
+                dmg *= 1.75; reach = 110; halfArc = Math.PI / 6;
+            } else {
+                const side = step === 0 ? -1 : 1;
+                effects.push({ type: 'claw_swipe', x: player.x, y: player.y, radius: 100, angle: attackAngle + side * 0.25, color: '#d84315', life: 0.15, maxLife: 0.15 });
+            }
+
             for(let i=enemies.length-1; i>=0; i--) {
                 const e = enemies[i];
-                if (Math.hypot(player.x-e.x, player.y-e.y) <= 100 + e.size/2) {
-                    let diff = Math.atan2(e.y-player.y, e.x-player.x) - attackAngle; 
+                if (Math.hypot(player.x-e.x, player.y-e.y) <= reach + e.size/2) {
+                    let diff = Math.atan2(e.y-player.y, e.x-player.x) - attackAngle;
                     diff = Math.atan2(Math.sin(diff), Math.cos(diff));
-                    
-                    if (Math.abs(diff) <= (Math.PI/1.5)/2) { 
-                        applyDamage(e, dmg, 'melee_basic'); 
+
+                    if (Math.abs(diff) <= halfArc) {
+                        applyDamage(e, dmg, 'melee_basic');
+                        if (isBite) {
+                            if (!e.type.startsWith('boss')) e.stunTimer = Math.max(e.stunTimer || 0, 0.25);
+                            effects.push({ type: 'wolf_bite', x: e.x, y: e.y, angle: attackAngle, radius: Math.max(14, e.size * 0.6), life: 0.35, maxLife: 0.35 });
+                        }
                         
                         // Popping Spores logic
                         if (e.sporeTimer && e.sporeTimer > 0) {
