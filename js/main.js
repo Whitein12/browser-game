@@ -2,8 +2,9 @@
 // main.js - Core Loop, Rendering, & Input
 // ==========================================
 
-window.chooseClass = (cid) => { selectedClassId = cid; el('class-selection').classList.add('hidden'); el('dungeon-selection').classList.remove('hidden'); };
-window.selectDungeon = (did) => { activeDungeonId = did; activeDungeon = enemyDataConfig[did]; startGame(selectedClassId); };
+// Menu flow: dungeon map (menu.js) -> class carousel -> run
+window.selectDungeon = (did) => { activeDungeonId = did; activeDungeon = enemyDataConfig[did]; showClassSelection(); };
+window.chooseClass = (cid) => { selectedClassId = cid; startGame(cid); };
 
 function startGame(className) {
     activeClass = JSON.parse(JSON.stringify(classDataConfig[className])); 
@@ -24,8 +25,10 @@ function startGame(className) {
     player.wolfComboStep = 0; player.wolfComboTimer = 0; player.lastWolfStep = 0;
     resetPaladinState();
     enemies.length = 0; projectiles.length = 0; effects.length = 0; drops.length = 0; gameTimers.length = 0; particles.length = 0;
+    currentMap.type = null; setStageMap(mapTypeForWave(1)); // stage.js: places the hero at the map's start
     
     el('start-screen').classList.add('hidden'); 
+    resetHUD(); shopWave = -1;
     el('hud').classList.remove('hidden');
     el('hud-top').classList.remove('hidden');
     triggerLevelUp("Choose Starting Skill");
@@ -34,10 +37,7 @@ function startGame(className) {
 
 window.startEndlessMode = function() {
     isEndlessMode = true;
-    el('intermission-screen').innerHTML = `<h1 style="color:#ffca28;" id="intermission-title">Wave Cleared</h1>
-    <button class="btn" onclick="openInventory()">Open Inventory</button>
-    <button class="btn btn-gold hidden" id="btn-shop" onclick="openShop()">Visit Shop</button>
-    <button class="btn" onclick="startNextWave()" style="border-color:#4caf50; color:#4caf50;">Start Next Wave</button>`;
+    el('intermission-screen').classList.add('hidden');
     // Clear leftovers from the final boss fight (summoned guards, archers, corpses) so the wave counter starts clean
     enemies.length = 0; projectiles.length = 0; effects.length = 0; drops.length = 0; gameTimers.length = 0;
     activeEnemies = 0; enemiesToSpawn = 0;
@@ -51,14 +51,9 @@ window.startNextWave = function() {
     bossSpawned = false;
     enemiesToSpawn = isBossWave ? 4 : 3 + Math.floor(wave * 2.5); 
     
-    if (activeDungeonId === 'bandit_bastion' && wave === 11 && !isEndlessMode) {
-        currentMap.type = 'bridge'; isBossWave = true; enemiesToSpawn = 0; 
-    } else if (activeDungeonId === 'bandit_bastion' && wave > 11 && !isEndlessMode) {
-        currentMap.type = 'bridge';
-    } else {
-        currentMap.type = 'open';
-    }
-    updateMapBounds();
+    if (activeDungeonId === 'bandit_bastion' && wave === 11 && !isEndlessMode) { isBossWave = true; enemiesToSpawn = 0; }
+    setStageMap(mapTypeForWave(wave)); // stage.js
+    player.exitFade = 0; player.fadeOut = 0;
     player.dash = null; player.z = 0; player.grappleTarget = null; // never carry a dash across a map change
 
     if (activeDungeonId === 'bandit_bastion' && wave === 11 && !isEndlessMode) {
@@ -69,7 +64,8 @@ window.startNextWave = function() {
 
     el('intermission-screen').classList.add('hidden'); el('inventory-screen').classList.add('hidden'); el('shop-screen').classList.add('hidden');
     player.hp = Math.min(player.maxHp, player.hp + (player.maxHp * 0.3)); 
-    gameState = STATE.PLAYING; lastTime = performance.now(); updateHUD();
+    waveStats = { kills: 0, gold0: player.gold, time: 0, dmgTaken: 0, peak: 0 };
+    gameState = STATE.PLAYING; lastTime = performance.now(); updateHUD(); showWaveBanner();
     if (player.skillPoints > 0) triggerLevelUp();
 }
 
@@ -90,7 +86,7 @@ async function initializeData() {
         itemDataConfig = await itemsRes.json();
         
         el('loading-text').classList.add('hidden'); 
-        el('class-selection').classList.remove('hidden');
+        openMainMenu();
     } catch (e) {
         console.error("Failed to load JSON:", e);
         el('loading-text').innerText = "Error: Could not load data. Ensure Python server is running on localhost."; 
@@ -120,8 +116,9 @@ function recalcStats() {
 function spawnEnemy() {
     enemiesToSpawn--; activeEnemies++;
     
-    let ex, ey;
-    if (currentMap.type === 'bridge') {
+    let ex, ey, spawnFrom;
+    if (mapDef()) { const sp = pickSpawnPoint(); ex = sp.x; ey = sp.y; spawnFrom = sp.from; } // stage.js: tree line or cave mouth
+    else if (currentMap.type === 'bridge') {
         ex = Math.random() < 0.5 ? currentMap.left - 50 : currentMap.right + 50;
         ey = currentMap.top + Math.random() * (currentMap.bottom - currentMap.top);
     } else {
@@ -149,6 +146,7 @@ function spawnEnemy() {
         let bx = currentMap.type === 'bridge' ? currentMap.right - 150 : (currentMap.left+currentMap.right)/2;
         let by = currentMap.type === 'bridge' ? (currentMap.top+currentMap.bottom)/2 : currentMap.top + 100;
         enemies.push({ x: bx, y: by, size: b.size, color: b.color, speed: bossSpeed, hp: bossHp, maxHp: bossHp, type: b.type, dmg: b.baseDmg + (wave * b.dmgScale), xp: b.baseXp, attackTimer: b.attackTimer, meleeTimer: 0, frozenTimer: 0, state: 'idle', stateTimer: b.stateTimer || 2.0, facingAngle: 0, puddleTimer: 0, bleedTimer: 0, bleedDmg: 0 });
+        if (mapDef()) startBossIntro(enemies[enemies.length - 1]); // stage.js: out of the cave / out of the lakes
         updateHUD(); return;
     }
 
@@ -159,14 +157,15 @@ function spawnEnemy() {
     for (const minion of minionList) { cumulative += minion.weight; if (roll <= cumulative) { m = minion; break; } }
     
     const speed = m.baseSpeed + Math.random() * m.speedVar + (wave * 2.5); 
-    enemies.push({ x: ex, y: ey, size: m.size, color: m.color, speed: speed, hp: m.baseHp + (wave * m.hpScale), maxHp: m.baseHp + (wave * m.hpScale), type: m.type, dmg: m.baseDmg + (wave * m.dmgScale), xp: m.baseXp + (wave * m.xpScale), attackTimer: m.attackTimer || 0, meleeTimer: 0, ammo: m.ammo || 0, frozenTimer: 0, facingAngle: 0, shieldHp: m.shieldHp, shieldMax: m.shieldMax, puddleTimer: m.puddleTimer || 0, bleedTimer: 0, bleedDmg: 0, orbs: m.orbs || 0 });
+    enemies.push({ x: ex, y: ey, size: m.size, color: m.color, speed: speed, hp: m.baseHp + (wave * m.hpScale), maxHp: m.baseHp + (wave * m.hpScale), type: m.type, dmg: m.baseDmg + (wave * m.dmgScale), xp: m.baseXp + (wave * m.xpScale), attackTimer: m.attackTimer || 0, meleeTimer: 0, ammo: m.ammo || 0, frozenTimer: 0, facingAngle: 0, shieldHp: m.shieldHp, shieldMax: m.shieldMax, puddleTimer: m.puddleTimer || 0, bleedTimer: 0, bleedDmg: 0, orbs: m.orbs || 0, spawnFrom });
+    onEnemySpawned(enemies[enemies.length - 1]); // stage.js
     updateHUD();
 }
 
-window.addEventListener('mousemove', e => { mouseX = e.clientX; mouseY = e.clientY; });
+window.addEventListener('mousemove', e => { mouseScreenX = e.clientX; mouseScreenY = e.clientY; mouseX = e.clientX + camera.x; mouseY = e.clientY + camera.y; }); // world coordinates
 window.addEventListener('mousedown', e => { 
     if (e.button === 0) isMouseDown = true; 
-    if (e.button === 2 && equipment.weapon && equipment.weapon.rarity === 'rare' && activeClass.rareWeapon.rmbSkill && (cooldowns.rmb <= 0 || devNoCooldowns) && gameState === STATE.PLAYING) {
+    if (e.button === 2 && equipment.weapon && equipment.weapon.rarity === 'rare' && activeClass.rareWeapon.rmbSkill && (cooldowns.rmb <= 0 || devNoCooldowns) && gameState === STATE.PLAYING && !(stageEvent && stageEvent.blocking)) {
         cooldowns.rmb = devNoCooldowns ? 0 : 4.0 * getCDR();
         window.SkillRegistry[activeClass.name]['rmb']();
     }
@@ -177,7 +176,7 @@ window.addEventListener('contextmenu', e => e.preventDefault());
 window.addEventListener('keydown', e => {
     let k = e.key.toLowerCase();
     if (k === '`' || k === '~') {
-        if (gameState === STATE.PLAYING) { gameState = STATE.DEV; el('dev-screen').classList.remove('hidden'); }
+        if (gameState === STATE.PLAYING) openDevMenu();
         else if (gameState === STATE.DEV) closeDevMenu();
         return;
     }
@@ -187,7 +186,7 @@ window.addEventListener('keydown', e => {
         else if (gameState === STATE.PAUSED) { gameState = STATE.PLAYING; lastTime = performance.now(); }
         return;
     }
-    if (gameState !== STATE.PLAYING || player.hp <= 0) return;
+    if (gameState !== STATE.PLAYING || player.hp <= 0 || (stageEvent && stageEvent.blocking)) return; // no casting during a cutscene
     if (k === 'w') keys.w = true; if (k === 'a') keys.a = true; if (k === 's') keys.s = true; if (k === 'd') keys.d = true;
     
     const keyMap = { 'q': 1, 'e': 2, 'space': 3, 'r': 4 };
@@ -260,6 +259,13 @@ window.addEventListener('keyup', e => {
 });
 
 function update(dt) {
+    if (stageEvent && stageEvent.blocking) { // stage.js cutscene: only the scene, effects and particles move
+        updateStageEvent(dt); updateFx(dt);
+        for (let i = effects.length - 1; i >= 0; i--) { if ((effects[i].life -= dt) <= 0) effects.splice(i, 1); }
+        updateHUD(); return;
+    }
+    updateStage(dt);
+    waveStats.time += dt;
     updateGameTimers(dt);
     updateFx(dt);
     updatePaladin(dt);
@@ -588,6 +594,7 @@ function update(dt) {
     if (buffs.msBoost > 0) currentSpeed *= 1.5;
     if (buffs.sporeSurgeTimer > 0) currentSpeed *= 1 + buffs.sporeSurgeBonus;
     if (buffs.slowed > 0) currentSpeed *= 0.5;
+    if (player.wading) currentSpeed *= 0.5; // map_cavern.js: knee-deep in a slime lake
     if (buffs.rooted > 0) currentSpeed = 0;
 
     if (player.dash) {
@@ -697,7 +704,6 @@ function update(dt) {
     for (let i=0; i<oozes.length; i++) {
         for (let j=i+1; j<oozes.length; j++) {
             if (Math.hypot(oozes[i].x - oozes[j].x, oozes[i].y - oozes[j].y) < 250) {
-                effects.push({type: 'lightning', x1: oozes[i].x, y1: oozes[i].y, x2: oozes[j].x, y2: oozes[j].y, color: '#03a9f4', life: 0.1, maxLife: 0.1});
                 if (distToSegment(player.x, player.y, oozes[i].x, oozes[i].y, oozes[j].x, oozes[j].y) < player.radius + 5) { takeDamage(15 * dt, true); buffs.slowed = 0.5; }
             }
         }
@@ -734,6 +740,10 @@ function update(dt) {
         }
         
         p.life -= dt;
+        if (p.rampFrom !== undefined && Math.hypot(p.x - p.ox, p.y - p.oy) > p.rampFrom) { // shots that pick up speed once they're far from where they were fired
+            const s = Math.hypot(p.vx, p.vy) || 1, n = Math.min(p.rampTo, s + 600 * dt); p.vx *= n / s; p.vy *= n / s;
+        }
+        if (currentMap.grid && p.life > 0 && shotHitsWall(p)) p.life = 0; // stage.js: rock stops shots
         
         if (p.life <= 0 || p.x < currentMap.left - 50 || p.x > currentMap.right + 50 || p.y < currentMap.top - 50 || p.y > currentMap.bottom + 50) { 
             if (p.type === 'bramble_core') {
@@ -872,6 +882,8 @@ function update(dt) {
     for (let i = enemies.length - 1; i >= 0; i--) {
         const e = enemies[i];
         if (e.dead) continue;
+        if (e.pod) continue; // map_hive.js brood pods just sit there until popped or hatched
+        if (e.spawnT > 0) { e.spawnT -= dt; continue; } // stage.js spawn: still forming
         if (e.frozenTimer > 0) { e.frozenTimer -= dt; e.renderColor = '#90caf9'; } 
         else if (e.rootedTimer > 0) { e.rootedTimer -= dt; e.renderColor = '#b0bec5'; }
         else if (e.stunTimer > 0) { e.stunTimer -= dt; e.renderColor = '#ffeb3b'; }
@@ -924,6 +936,7 @@ function update(dt) {
         if (hasCasterAura) curSpd *= 2.0;
 
         let [edx, edy, edist] = getVector(e.x, e.y, player.x, player.y);
+        if (currentMap.grid) { const s = navSteer(e, edx, edy, edist); if (s) [edx, edy] = s; } // stage.js: walk around cave walls
 
         // Mantle of the Living Grove: enemies that rush into an active Barkskin get rooted (once per 3s each)
         if (e.mantleRootCd > 0) e.mantleRootCd -= dt;
@@ -973,8 +986,15 @@ function draw() {
     ctx.fillStyle = '#111'; ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.save();
     if (gameState === STATE.PLAYING) ctx.translate(shakeX, shakeY); // fx.js camera shake
+    ctx.translate(-Math.round(camera.x), -Math.round(camera.y)); // stage.js camera; 0,0 on screen-sized maps
     
-    if (currentMap.type === 'bridge') {
+    if (currentMap.type === 'clearing') {
+        drawClearingGround(); // map_clearing.js
+    } else if (currentMap.type === 'cavern') {
+        drawCavernGround(); // map_cavern.js: terrain, lakes, darkness and lights
+    } else if (currentMap.type === 'hive') {
+        drawHiveGround(); // map_hive.js: throne hall, pool, opened pods, the sleeping Queen
+    } else if (currentMap.type === 'bridge') {
         ctx.fillStyle = '#2c2c2c'; ctx.fillRect(currentMap.left, currentMap.top, currentMap.right - currentMap.left, currentMap.bottom - currentMap.top);
         ctx.fillStyle = '#3e2723'; 
         ctx.fillRect(currentMap.left, currentMap.top - 10, canvas.width, 10);
@@ -987,6 +1007,7 @@ function draw() {
     }
 
     for (const ef of effects) {
+        if (drawEnemyGround(ef)) continue; // enemysprites.js: splats, trails, shockwaves
         if (drawSkillGround(ef)) continue; // skillfx.js
         if (ef.type === 'puddle' || ef.type === 'fire_puddle' || ef.type === 'thorn_patch' || ef.type === 'spore_cloud' || ef.type === 'consecrated_ground') {
             ctx.fillStyle = ef.color; ctx.globalAlpha = ef.life / ef.maxLife * 0.5; ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.radius, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1.0;
@@ -1493,8 +1514,10 @@ function draw() {
     for (const e of enemies) {
         if (e.dead || e.state === 'split') continue;
         ctx.fillStyle = e.hitFlash > 0 ? '#ffffff' : (e.renderColor || e.color);
+        const sprite = drawEnemySprite(e); // enemysprites.js
         
-        if (e.type === 'shield' || e.type === 'boss_valerius') {
+        if (sprite) {}
+        else if (e.type === 'shield' || e.type === 'boss_valerius') {
             ctx.beginPath(); ctx.arc(e.x, e.y, e.size/2, 0, Math.PI*2); ctx.fill();
             if (e.shieldHp > 0) {
                 ctx.save(); ctx.translate(e.x, e.y); ctx.rotate(e.facingAngle);
@@ -1517,11 +1540,12 @@ function draw() {
         drawRmbEnemy(e); // skillfx_rmb.js: Net Shot wrap
         if (e.markAngle !== undefined) drawDeathMarkSigil(e); // skillfx_ult.js
 
-        if (!e.type.startsWith('boss')) { ctx.fillStyle = '#000'; ctx.fillRect(e.x - e.size/2, e.y - e.size/2 - 12, e.size, 4); ctx.fillStyle = '#4caf50'; ctx.fillRect(e.x - e.size/2, e.y - e.size/2 - 12, e.size * (e.hp/e.maxHp), 4); }
+        if (!sprite && !e.type.startsWith('boss')) { ctx.fillStyle = '#000'; ctx.fillRect(e.x - e.size/2, e.y - e.size/2 - 12, e.size, 4); ctx.fillStyle = '#4caf50'; ctx.fillRect(e.x - e.size/2, e.y - e.size/2 - 12, e.size * (e.hp/e.maxHp), 4); }
     }
 
     for (const p of projectiles) {
         if (!p.isEnemy && drawPlayerProjectile(p)) continue; // weapons.js
+        if (p.isEnemy && drawEnemyProjectile(p)) continue; // enemysprites.js
         if (p.type === 'turret') {
             ctx.fillStyle = '#424242'; ctx.fillRect(p.x - 12, p.y - 12, 24, 24);
             ctx.strokeStyle = '#ff9800'; ctx.lineWidth = 2; ctx.strokeRect(p.x - 12, p.y - 12, 24, 24);
@@ -1671,7 +1695,8 @@ function draw() {
         }
     }
 
-    if (player.hp > 0 && gameState !== STATE.MENU && gameState !== STATE.DEAD) {
+    if (player.hp > 0 && gameState !== STATE.MENU && gameState !== STATE.DEAD && !(player.fadeOut >= 1)) {
+        if (player.fadeOut > 0) ctx.filter = `opacity(${1 - player.fadeOut})`; // walking into the dark at a stage exit
         if (player.grappleTarget) drawGrappleCable(player.grappleTarget); // skillfx_space.js
 
         // Face the way you're dashing; otherwise face the cursor
@@ -1698,21 +1723,22 @@ function draw() {
 
         // Machinist Decoy Projection hologram
         if (player.phantomDecoy && player.phantomDecoy.life > 0) drawDecoyHologram(player.phantomDecoy, aimAngle); // skillfx_space.js
+        ctx.filter = 'none';
     } 
 
+    if (currentMap.type === 'clearing') drawClearingCanopy(); // map_clearing.js: trees overhang the fight
+    if (currentMap.type === 'cavern') drawCavernAbove(); // map_cavern.js: falling stalactites, drips
+    if (currentMap.type === 'hive') drawHiveAbove(); // map_hive.js: drifting spores
+    drawEnemyOverlay(); // enemysprites.js: lightning coming down from above
     drawFx(); // fx.js particles
     drawUltOverlay(); // skillfx_ult.js: things in the air above everything
     ctx.restore(); // end camera shake
 
-    const boss = enemies.find(e => !e.dead && e.type.startsWith('boss'));
-    if (boss && boss.state !== 'death_throes') {
-        const bw = 400; const bh = 20; const bx = canvas.width/2 - bw/2; const by = 30;
-        ctx.fillStyle = '#111'; ctx.fillRect(bx, by, bw, bh); ctx.fillStyle = '#ffeb3b'; ctx.fillRect(bx, by, bw * (boss.hp/boss.maxHp), bh);
-        ctx.strokeStyle = '#555'; ctx.lineWidth = 2; ctx.strokeRect(bx, by, bw, bh); ctx.fillStyle = '#fff'; ctx.font = '16px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillText(`Wave ${wave} Boss`, canvas.width/2, by - 5);
-    }
+    drawStageScreen(); // stage.js: vignette, pointer to the cave
+    drawHudOrbs(); // hud.js; the boss bar is part of the HTML HUD now
 
     if (gameState === STATE.PAUSED) {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.fillStyle = '#fff'; ctx.font = '48px monospace'; ctx.textAlign = 'center'; ctx.fillText('PAUSED', canvas.width/2, canvas.height/2);
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.55)'; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.fillStyle = '#f1d48a'; ctx.font = 'bold 54px Georgia, serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('PAUSED', canvas.width/2, canvas.height/2); ctx.fillStyle = '#a39279'; ctx.font = 'italic 16px Georgia, serif'; ctx.fillText('Press P to resume', canvas.width/2, canvas.height/2 + 46);
     }
 }
 
@@ -1724,5 +1750,6 @@ function loop() {
         else { update(dt); }
     }
     
+    updateCamera(dt); // stage.js
     draw(); requestAnimationFrame(loop);
 }

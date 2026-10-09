@@ -13,9 +13,11 @@
 // Options: dur, arc, ease ('linear' | 'out'), iFrames (default true), kind, trail (an effect whose end follows the player),
 // ghost { color, glow, every, life }, onStep(x0, y0, x1, y1), onApex(), onArrive().
 function startDash(o) {
-    const [tx, ty] = clampPointToMap(o.x, o.y, player.radius);
+    let [tx, ty] = clampPointToMap(o.x, o.y, player.radius);
     player.grappleTarget = null;
     const d = Object.assign({ arc: 0, ease: 'linear', iFrames: true, ghostT: 0 }, o);
+    const clip = clipToWalls(player.x, player.y, tx, ty, player.radius, d.arc > 0); // stage.js: cave walls stop a dash
+    if (clip) { [tx, ty] = clip; d.intoWall = true; }
     Object.assign(d, { x0: player.x, y0: player.y, x1: tx, y1: ty, t: 0, angle: Math.atan2(ty - player.y, tx - player.x) });
     player.dash = d;
     return d;

@@ -15,7 +15,7 @@
       { "id": "crystal_slime", "size": 36, "color": "#e1bee7", "baseSpeed": 70, "speedVar": 10, "baseHp": 120, "hpScale": 30, "baseDmg": 25, "dmgScale": 3.0, "baseXp": 25, "xpScale": 5, "type": "crystal_slime", "stateTimer": 3.0, "weight": 0.35 },
       { "id": "slime_warden", "size": 40, "color": "#6a1b9a", "baseSpeed": 100, "speedVar": 15, "baseHp": 200, "hpScale": 50, "baseDmg": 30, "dmgScale": 3.5, "baseXp": 50, "xpScale": 6, "type": "slime_warden", "orbs": 3, "weight": 0.15 }
     ],
-    "stage3_boss": { "id": "slime_queen", "size": 90, "color": "#f06292", "baseSpeed": 50, "speedVar": 0, "baseHp": 6000, "hpScale": 500, "baseDmg": 35, "dmgScale": 4, "baseXp": 1000, "xpScale": 0, "type": "boss_slime_queen", "stateTimer": 4.0 }
+    "stage3_boss": { "id": "slime_queen", "size": 120, "color": "#f06292", "baseSpeed": 50, "speedVar": 0, "baseHp": 6000, "hpScale": 500, "baseDmg": 35, "dmgScale": 4, "baseXp": 1000, "xpScale": 0, "type": "boss_slime_queen", "stateTimer": 4.0 }
   },
   "bandit_bastion": {
     "stage1_minions": [

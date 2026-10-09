@@ -3,7 +3,12 @@
 // ==========================================
 
 function updateMapBounds() {
-    if (currentMap.type === 'bridge') {
+    const stageMap = typeof STAGE_MAPS !== 'undefined' && STAGE_MAPS[currentMap.type]; // stage.js: maps bigger than the screen
+    currentMap.obstacles = stageMap ? stageMap.obstacles : null;
+    currentMap.grid = stageMap && stageMap.grid || null; // cave terrain (walls, lakes, ravines)
+    if (stageMap) {
+        Object.assign(currentMap, stageMap.bounds);
+    } else if (currentMap.type === 'bridge') {
         const bridgeHeight = 450;
         currentMap.left = 0;
         currentMap.right = canvas.width;
@@ -28,6 +33,7 @@ resize();
 function clampToBounds(obj, radius) {
     obj.x = Math.max(currentMap.left + radius, Math.min(currentMap.right - radius, obj.x));
     obj.y = Math.max(currentMap.top + radius, Math.min(currentMap.bottom - radius, obj.y));
+    if (currentMap.obstacles || currentMap.grid) pushOutOfObstacles(obj, radius); // stage.js: boulders, stumps, cave walls
 }
 
 function getVector(x1, y1, x2, y2) {

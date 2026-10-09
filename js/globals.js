@@ -9,6 +9,7 @@ const STATE = { MENU: 0, PLAYING: 1, PAUSED: 2, LEVELUP: 3, EVOLVE: 4, INTERMISS
 let gameState = STATE.MENU;
 
 let lastTime = performance.now();
+let waveStats = { kills: 0, gold0: 0, time: 0, dmgTaken: 0, peak: 0 }; let shopWave = -1; // per-wave numbers for the wave-cleared screen; the wave the shop stock was rolled for
 let score = 0; let wave = 1; let enemiesToSpawn = 0; let enemySpawnTimer = 0; let activeEnemies = 0; let isBossWave = false; let bossSpawned = false;
 let hitStopTimer = 0; let isEndlessMode = false; let devNoCooldowns = false;
 

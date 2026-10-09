@@ -107,6 +107,11 @@ function drawFx() {
             ctx.globalCompositeOperation = 'source-over';
             ctx.globalAlpha = Math.min(1, a * 2);
             sprLeaf(ctx, p.x, p.y, p.rot, p.size, p.color);
+        } else if (p.kind === 'goo') { // slime droplets: glossy, not glowing
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.globalAlpha = Math.min(1, a * 2.5); ctx.fillStyle = p.color;
+            ctx.beginPath(); ctx.arc(p.x, p.y, p.size * (0.6 + a * 0.4), 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)'; ctx.beginPath(); ctx.arc(p.x - p.size * 0.3, p.y - p.size * 0.3, p.size * 0.25, 0, Math.PI * 2); ctx.fill();
         } else if (p.kind === 'debris') {
             ctx.globalCompositeOperation = 'source-over';
             ctx.globalAlpha = Math.min(1, a * 2); ctx.fillStyle = p.color;

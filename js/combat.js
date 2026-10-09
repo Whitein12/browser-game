@@ -54,8 +54,9 @@ function applyDamage(enemy, amount, source = 'player', projAngle = null) {
     if (enemy.type === 'boss_slime_queen' && enemy.hp - amount <= 0 && enemy.state !== 'death_throes') {
         enemy.hp = 1; enemy.state = 'death_throes'; enemy.stateTimer = 5.0; enemy.invulnerable = true;
         enemy.originalSize = enemy.size; enemy.bulletAngle = 0;
-        enemy.x = canvas.width / 2; enemy.y = canvas.height / 2; 
-        effects.push({ type: 'text', text: 'CORE COLLAPSE!', x: enemy.x, y: enemy.y - 60, color: '#ff5252', life: 2.0, maxLife: 2.0 });
+        enemy.airborne = false; enemy.leapK = undefined; enemy.throesT = 0;
+        if (currentMap.type === 'hive') startQueenThroes(enemy); // map_hive.js: she leaps back onto her throne for her last stand
+        else { enemy.x = canvas.width / 2; enemy.y = canvas.height / 2; effects.push({ type: 'text', text: 'CORE COLLAPSE!', x: enemy.x, y: enemy.y - 60, color: '#ff5252', life: 2.0, maxLife: 2.0 }); }
         return; 
     }
 
@@ -230,7 +231,7 @@ function takeDamage(amount, isContinuous = false, sourceObj = null) {
         }
     }
 
-    player.hp -= amount;
+    player.hp -= amount; waveStats.dmgTaken += amount;
     if (!isContinuous) player.hurtFlash = 0.2; // sprite hit flash
     if (!isContinuous && amount >= player.maxHp * 0.08) addShake(3);
 
@@ -251,8 +252,10 @@ function gainXP(amount) {
 }
 
 function checkEnemyDeath(e) {
+    if (e.pod && e.hp <= 0 && !e.dead) { podPopped(e); return; } // map_hive.js: a brood pod popped; it never counts toward the wave
     if (e.hp <= 0 && !e.dead) {
         e.dead = true;
+        enemyDeathFx(e); // enemysprites.js
 
         if (e.markAngle !== undefined && activeClass.name === 'Nightblade' && activeClass.skills[4].selectedUpg === 'B') {
             effects.push({ type: 'circle', x: e.x, y: e.y, radius: 150, color: 'rgba(156, 39, 176, 0.3)', life: 0.3, maxLife: 0.3 });
@@ -264,15 +267,8 @@ function checkEnemyDeath(e) {
         }
 
         if ((e.type === 'boss_slime_queen' || e.type === 'boss_valerius') && !isEndlessMode) {
-            gameState = STATE.VICTORY;
-            el('intermission-title').innerText = "DUNGEON CLEARED!";
-            el('intermission-title').style.color = "#00e676";
-            el('btn-shop').classList.add('hidden');
-            el('intermission-screen').innerHTML = `<h1 style="color:#00e676; font-size:48px; margin-bottom:10px; text-shadow: 2px 2px 0 #000;">DUNGEON CLEARED!</h1>
-            <p style="color:#fff; font-size:18px; margin-bottom:30px;">You have conquered this domain.</p>
-            <button class="btn btn-gold" onclick="startEndlessMode()">Enter Limitless Mode</button>
-            <button class="btn" style="border-color:#ff5252; color:#ff5252;" onclick="location.reload()">End Game</button>`;
-            el('intermission-screen').classList.remove('hidden');
+            if (currentMap.type === 'hive') { queenDefeated(e); return; } // map_hive.js: her crown must be claimed first
+            showVictory(); // ui.js
             return; 
         }
 
@@ -302,13 +298,11 @@ function checkEnemyDeath(e) {
         }
         
         gainXP(e.xp); // the corpse is removed from `enemies` by removeDeadEnemies()
-        activeEnemies--; score++; updateHUD();
+        activeEnemies--; score++; waveStats.kills++; updateHUD();
 
         if (enemiesToSpawn <= 0 && activeEnemies <= 0) {
             collectAllDrops();
-            if (gameState === STATE.PLAYING) { 
-                gameState = STATE.INTERMISSION; el('intermission-title').innerText = isBossWave ? "Boss Defeated!" : "Wave Cleared"; el('btn-shop').classList.toggle('hidden', !isBossWave); el('intermission-screen').classList.remove('hidden');
-            }
+            if (gameState === STATE.PLAYING) onWaveCleared(); // stage.js: may open the cave instead
         }
     }
 }

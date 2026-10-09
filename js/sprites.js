@@ -510,38 +510,3 @@ function drawPlayerGhost(x, y, facing, alpha) {
     const pose = { t: performance.now() / 1000, walk: 0, move: 0, trail: { x: 0, y: 0 }, live: false, wolf: false, color: player.color };
     stampSprite(x, y, facing, selectedClassId, pose, 0, alpha);
 }
-
-// ==========================================
-// Class selection previews
-// ==========================================
-
-// Each class card has a <canvas class="class-preview" data-class="..."> that shows the hero slowly turning; hovering makes them run.
-function startClassPreviews() {
-    const dpr = window.devicePixelRatio || 1;
-    const previews = [...document.querySelectorAll('canvas.class-preview')].map((cv, i) => {
-        cv.width = cv.height = Math.round(96 * dpr);
-        return { cv, c: cv.getContext('2d'), id: cv.dataset.class, card: cv.closest('.class-card'), walk: 0, spin: i * 0.7 };
-    });
-    let last = performance.now();
-    function frame(now) {
-        if (gameState !== STATE.MENU) return; // a run has started; stop animating the menu
-        const dt = Math.min(0.1, (now - last) / 1000); last = now;
-        if (!el('class-selection').classList.contains('hidden')) {
-            for (const pv of previews) {
-                const hover = pv.card.matches(':hover');
-                if (hover) pv.walk += dt * 14;
-                pv.spin += dt * (hover ? 0.3 : 0.6);
-                const wolf = hover && pv.id === 'druid';
-                const S = pv.cv.width, k = 1.45 * dpr * (wolf ? 0.75 : 1);
-                const c = pv.c;
-                c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, S, S);
-                c.translate(S / 2, S / 2); c.scale(k, k); c.rotate(pv.spin);
-                drawCharacter(c, pv.id, { t: now / 1000, walk: pv.walk, move: hover ? 1 : 0, trail: { x: hover ? -8 : 0, y: 0 }, live: false, wolf });
-                sprFinish(c, S / 2, S / 2, S * 0.35, 0);
-            }
-        }
-        requestAnimationFrame(frame);
-    }
-    requestAnimationFrame(frame);
-}
-startClassPreviews();
