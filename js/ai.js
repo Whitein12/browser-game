@@ -25,6 +25,8 @@ var RangedAI = (e, dt, curSpd, edx, edy, edist, i) => {
     }
 };
 
+const UNDERTOW_WARN = 0.65; // the Amalgam's Undertow: warning ring before it erupts under you (1 s was too easy to walk out of, 0.5 too tight)
+
 var EnemyAI = {
     'slime_melee': MeleeAI, 'thief': MeleeAI, 'shield': MeleeAI, 'voltaic_ooze': MeleeAI, 'toxic_sludge': MeleeAI, 'queen_guard': MeleeAI,
     'slime_ranged': RangedAI, 'archer': RangedAI,
@@ -116,6 +118,10 @@ var EnemyAI = {
             e.orbitAngle = (e.orbitAngle || 0) + dt * 3; // enemysprites.js draws the orbs circling at this angle
         }
         if (e.stunTimer > 0) { e.stunTimer -= dt; return; }
+        if (e.orbs < e.maxOrbs && (e.orbRegrow = (e.orbRegrow || 0) + dt) >= WARDEN_ORB_REGROW) { // lost orbs grow back one at a time
+            e.orbs++; e.orbRegrow = 0;
+            burst(e.x, e.y, 0, Math.PI * 2, 8, { kind: 'spark', color: '#ffca28', size: 2.5, life: 0.35, speed: [60, 160], drag: 4 });
+        }
         MeleeAI(e, dt, curSpd, edx, edy, edist, i);
     },
     'boss_slime': (e, dt, curSpd, edx, edy, edist, i) => {
@@ -228,10 +234,12 @@ var EnemyAI = {
             if (edist > 60) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
             if (edist < player.radius + e.size / 2 + 5 && e.meleeTimer <= 0) { takeDamage(e.dmg); e.meleeTimer = 1.0; }
             if (e.stateTimer <= 0 && e.frozenTimer <= 0) { 
-                e.attackIndex = (e.attackIndex || 0) + 1; const nextAtk = e.attackIndex % 3;
-                if (nextAtk === 1) { e.state = 'stampede'; e.stateTimer = 3.0; e.puddleTimer = 0; effects.push({ type: 'text', text: 'STAMPEDE!', x: e.x, y: e.y - 40, color: '#ff5252', life: 1.0, maxLife: 1.0 }); }
-                else if (nextAtk === 2) { e.state = 'nova'; e.stateTimer = 1.0; effects.push({ type: 'text', text: 'TOXIC NOVA!', x: e.x, y: e.y - 40, color: '#009688', life: 1.0, maxLife: 1.0 });}
-                else { e.state = 'summon'; e.stateTimer = 1.0; effects.push({ type: 'text', text: 'ASSIMILATE!', x: e.x, y: e.y - 40, color: '#4db6ac', life: 1.0, maxLife: 1.0 });}
+                // Stampede, Nova, Assimilate, Stampede, Nova, Undertow: Assimilate only every other round (~25 s)
+                e.attackIndex = (e.attackIndex || 0) + 1; const nextAtk = e.attackIndex % 6;
+                if (nextAtk === 1 || nextAtk === 4) { e.state = 'stampede'; e.stateTimer = 3.0; e.puddleTimer = 0; effects.push({ type: 'text', text: 'STAMPEDE!', x: e.x, y: e.y - 40, color: '#ff5252', life: 1.0, maxLife: 1.0 }); }
+                else if (nextAtk === 2 || nextAtk === 5) { e.state = 'nova'; e.stateTimer = 1.0; effects.push({ type: 'text', text: 'TOXIC NOVA!', x: e.x, y: e.y - 40, color: '#009688', life: 1.0, maxLife: 1.0 });}
+                else if (nextAtk === 3) { e.state = 'summon'; e.stateTimer = 1.0; effects.push({ type: 'text', text: 'ASSIMILATE!', x: e.x, y: e.y - 40, color: '#4db6ac', life: 1.0, maxLife: 1.0 });}
+                else { e.state = 'undertow_sink'; e.stateTimer = 0.6; effects.push({ type: 'text', text: 'UNDERTOW!', x: e.x, y: e.y - 40, color: '#26a69a', life: 1.0, maxLife: 1.0 }); }
             }
         } else if (e.state === 'stampede') {
             let chaseSpd = curSpd * 2.2;
@@ -248,8 +256,8 @@ var EnemyAI = {
         } else if (e.state === 'summon') {
             if (e.stateTimer <= 0) {
                 // Fling the pieces far out onto open ground; they land dazed and crawl back slowly, so there's time to kill them
-                for(let k=0; k<4; k++) {
-                    const base = (Math.PI*2/4) * k + Math.random(); let mx = e.x, my = e.y, found = false;
+                for(let k=0; k<3; k++) {
+                    const base = (Math.PI*2/3) * k + Math.random(); let mx = e.x, my = e.y, found = false;
                     for (const d of [460, 380, 300, 220, 150]) { // turn a little either way before settling for a shorter throw
                         for (const da of [0, 0.4, -0.4, 0.8, -0.8, 1.2, -1.2]) {
                             const a = base + da, tx = Math.max(currentMap.left + 24, Math.min(currentMap.right - 24, e.x + Math.cos(a) * d)), ty = Math.max(currentMap.top + 24, Math.min(currentMap.bottom - 24, e.y + Math.sin(a) * d));
@@ -257,12 +265,36 @@ var EnemyAI = {
                         }
                         if (found) break;
                     }
-                    enemies.push({ x: mx, y: my, size: 24, color: '#4db6ac', speed: e.speed * 0.75, hp: 60, maxHp: 60, type: 'amalgam_minion', dmg: e.dmg, xp: 0, frozenTimer: 0, facingAngle: 0, meleeTimer: 0, spawnT: 0.95, spawnMax: 0.95, flyUntil: fxTime + 0.6, dazed: 1.1 });
+                    enemies.push({ x: mx, y: my, size: 24, color: '#4db6ac', speed: e.speed * 0.75, hp: 60, maxHp: 60, type: 'amalgam_minion', dmg: e.dmg, xp: 0, frozenTimer: 0, facingAngle: 0, meleeTimer: 0, spawnT: 0.95, spawnMax: 0.95, flyUntil: fxTime + 0.6, dazed: 2.0 });
                     effects.push({ type: 'goo_arc', x0: e.x, y0: e.y, x: mx, y: my, color: '#4db6ac', size: 11, life: 0.6, maxLife: 0.6 }); // enemysprites.js
                     activeEnemies++;
                 }
                 e.state = 'idle'; e.stateTimer = 4.0;
             }
+        } else if (e.state === 'undertow_sink') { // Undertow: it melts into the floor (still hittable while it sinks)
+            if (e.stateTimer <= 0) {
+                e.submerged = true; e.invulnerable = true; e.state = 'undertow'; e.stateTimer = 1.8;
+                effects.push({ type: 'puddle', x: e.x, y: e.y, radius: 70, color: '#009688', life: 2.0, maxLife: 2.0 });
+            }
+        } else if (e.state === 'undertow') { // a ripple racing under the floor toward you; it can't be hit down there
+            if (edist > 0) { e.x += (edx/edist)*curSpd*2.6*dt; e.y += (edy/edist)*curSpd*2.6*dt; }
+            if (edist < 60 || e.stateTimer <= 0) { // it settles under where you stand: 0.5 s to get out of the ring
+                e.state = 'undertow_aim'; e.stateTimer = UNDERTOW_WARN; e.utX = player.x; e.utY = player.y;
+                effects.push({ type: 'slam_warn', x: e.utX, y: e.utY, radius: 130, color: '#1de9b6', life: UNDERTOW_WARN, maxLife: UNDERTOW_WARN });
+            }
+        } else if (e.state === 'undertow_aim') {
+            const k = Math.min(1, dt * 8); e.x += (e.utX - e.x) * k; e.y += (e.utY - e.y) * k;
+            if (e.stateTimer <= 0) { // it erupts: a heavy hit in the ring and a slow ring of goo
+                e.x = e.utX; e.y = e.utY; e.submerged = false; e.invulnerable = false;
+                e.state = 'undertow_erupt'; e.stateTimer = 0.4; e.eruptAt = fxTime;
+                effects.push({ type: 'slime_shock', x: e.x, y: e.y, radius: 170, color: '#1de9b6', life: 0.5, maxLife: 0.5 }); addShake(5);
+                effects.push({ type: 'puddle', x: e.x, y: e.y, radius: 140, color: '#009688', life: 2.5, maxLife: 2.5 });
+                burst(e.x, e.y, 0, Math.PI * 2, 22, { kind: 'goo', color: '#26a69a', size: 5, speed: [160, 420], life: 0.6, drag: 3 });
+                if (Math.hypot(e.x - player.x, e.y - player.y) <= 130 + player.radius) takeDamage(e.dmg * 2);
+                for (let r = 0; r < 10; r++) { const a = (Math.PI * 2 / 10) * r + 0.3; projectiles.push({ x: e.x, y: e.y, vx: Math.cos(a) * 260, vy: Math.sin(a) * 260, radius: 9, color: '#009688', life: 2.5, isEnemy: true, owner: e, damage: e.dmg, type: 'boss_slimeball' }); }
+            }
+        } else if (e.state === 'undertow_erupt') {
+            if (e.stateTimer <= 0) { e.state = 'idle'; e.stateTimer = 2.0; }
         } else if (e.state === 'devastate') {
             if (e.stateTimer <= 0) {
                 effects.push({ type: 'slime_shock', x: e.x, y: e.y, radius: 300, color: '#1de9b6', life: 0.6, maxLife: 0.6 }); addShake(7);
@@ -458,8 +490,9 @@ var EnemyAI = {
         const boss = enemies.find(en => !en.dead && en.type === 'boss_amalgam');
         if (boss) {
             const [bx, by, bdist] = getVector(e.x, e.y, boss.x, boss.y);
-            if (bdist > boss.size/2) { e.x += (bx/bdist)*curSpd*dt; e.y += (by/bdist)*curSpd*dt; } 
-            else { boss.state = 'devastate'; boss.stateTimer = 1.0; effects.push({ type: 'slam_warn', x: boss.x, y: boss.y, radius: 300, color: '#1de9b6', follow: boss, life: 1.0, maxLife: 1.0 }); burst(e.x, e.y, 0, Math.PI * 2, 10, { kind: 'goo', color: e.color, size: 4, speed: [60, 160], life: 0.5, drag: 3 }); boss.hp = Math.min(boss.maxHp, boss.hp + boss.maxHp * 0.1); effects.push({ type: 'text', text: 'ABSORBED!', x: boss.x, y: boss.y - 40, color: '#ff5252', life: 1.0, maxLife: 1.0 }); e.dead = true; activeEnemies--; } // absorbed: removed without XP or loot
+            if (bdist > boss.size/2) { e.x += (bx/bdist)*curSpd*dt; e.y += (by/bdist)*curSpd*dt; }
+            else if (String(boss.state).startsWith('undertow')) {} // it can't take them in while it's under the floor
+            else { boss.state = 'devastate'; boss.stateTimer = 1.0; effects.push({ type: 'slam_warn', x: boss.x, y: boss.y, radius: 300, color: '#1de9b6', follow: boss, life: 1.0, maxLife: 1.0 }); burst(e.x, e.y, 0, Math.PI * 2, 10, { kind: 'goo', color: e.color, size: 4, speed: [60, 160], life: 0.5, drag: 3 }); boss.hp = Math.min(boss.maxHp, boss.hp + boss.maxHp * 0.05); effects.push({ type: 'text', text: 'ABSORBED!', x: boss.x, y: boss.y - 40, color: '#ff5252', life: 1.0, maxLife: 1.0 }); e.dead = true; activeEnemies--; } // absorbed: removed without XP or loot
         } else {
             if (edist > 0) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
             if (edist < player.radius + e.size / 2 + 5 && e.meleeTimer <= 0) { takeDamage(e.dmg); e.meleeTimer = 1.0; }

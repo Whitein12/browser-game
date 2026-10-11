@@ -4,7 +4,7 @@
 // The Grand Mace lives in player.hammer and is always in one of four states:
 //   'equipped'  - in hand: basic attacks are 120° shockwave smashes
 //   'outbound'  - flying to where Q threw it, hitting enemies on the way
-//   'deployed'  - stuck in the ground: pulses threat, enables Bastion Dome and Iron Pull
+//   'deployed'  - stuck in the ground: pulses threat, enables Iron Pull and anchors Divine Tether's chain
 //   'returning' - flying back after a Q recast, dragging enemies along
 // Whenever it is not 'equipped', the Paladin fights with a light shield (-15% basic DMG, +15% armor).
 
@@ -12,10 +12,21 @@ const HAMMER_THROW_RANGE = 500;
 const HAMMER_HIT_RADIUS = 30;
 const HAMMER_COMMIT_DIST = 260; // returning hammer stops homing and flies straight from this far out (~0.19s to react)
 const HAMMER_CATCH_REACH = 15;  // how far beyond the Paladin's body the hammer still counts as caught
+const HAMMER_CATCH_CD = 1.2;    // Q cooldown left after a clean catch (a miss keeps the full cooldown)
 const HAMMER_PULSE_RADIUS = 200;
-const DOME_RADIUS = 200;
 const WRATH_RADIUS = 220;
-let paladinDomeCounter = 0;
+// Divine Tether (E): a chain of light from the Paladin to the planted hammer (5 s), or to a shackled enemy (4 s).
+// Every 0.25 s whatever touches the chain takes 0.5x the skill's damage and is slowed 40%, and each enemy on it heals
+// the Paladin 0.5% max HP (at most 1.5% per pulse): the melee tank's sustain.
+const TETHER_HAMMER_TIME = 5.0, TETHER_SHACKLE_TIME = 4.0, TETHER_TICK = 0.25, TETHER_TICK_MULT = 0.5, TETHER_WIDTH = 18; // x0.5 (was x0.4)
+const TETHER_HEAL = 0.005, TETHER_HEAL_CAP = 0.015;
+const SHACKLE_RANGE = 500, SHACKLE_LEASH = 150, SHACKLE_VULN = 1.2, TETHER_SNAP = 700;
+// Judgment Smash (the Space finisher, combos.js): an overhead smash around the impact that stuns
+const JUDGMENT_MULT = 3, JUDGMENT_RADIUS = 160, JUDGMENT_STUN = 1.5;
+// Round-two combos (combos.js lists them; the Paladin's own code lives here): Flail Sweep, Ring the Hammer, Zealous Charge
+const FLAIL_SPINS = 2, FLAIL_TIME = 0.8, FLAIL_REEL = 0.12, FLAIL_MIN = 120, FLAIL_MAX = 300, FLAIL_MULT = 1.75, FLAIL_CHAIN_MULT = 0.5, FLAIL_WIDTH = 50, FLAIL_KNOCK = 110, FLAIL_STUN = 0.6;
+const RING_MULT = 3, RING_CD = 3, RING_STUN = 0.5;
+const ZEAL_TRAIL_TIME = 3, ZEAL_TRAIL_WIDTH = 45, ZEAL_TRAIL_MULT = 0.5;
 
 function isPaladin() { return activeClass && activeClass.name === 'Paladin'; }
 function hammerAway() { return isPaladin() && player.hammer && player.hammer.state !== 'equipped'; }
@@ -23,10 +34,10 @@ function hammerDeployed() { return isPaladin() && player.hammer && player.hammer
 function hasWorldBreaker() { return equipment.weapon && equipment.weapon.name === 'The World-Breaker Grand Mace'; }
 function hasGildedPlate() { return equipment.armor && equipment.armor.name === 'Plate of the Gilded Bastion'; }
 
-// Called on game start and at the start of every wave: the hammer returns to hand, any dome disappears.
+// Called on game start and at the start of every wave: the hammer returns to hand, any tether breaks.
 function resetPaladinState() {
     player.hammer = { state: 'equipped', x: player.x, y: player.y, spin: 0, hitList: [], dragged: [], pulseTimer: 0, conduitTimer: 0, hurricaneTimer: 0, dmg: 0 };
-    player.dome = null;
+    player.tether = null;
 }
 
 // ---------- Damage-taken hooks (called from takeDamage in combat.js) ----------
@@ -42,8 +53,6 @@ function gildedPlateReduction() {
 
 function paladinDamageTakenMult() {
     let mult = 1.0;
-    const d = player.dome;
-    if (d && Math.hypot(player.x - d.x, player.y - d.y) <= d.radius) mult *= 0.8; // Bastion Dome: -20% damage taken
     mult *= 1 - gildedPlateReduction();
     return mult;
 }
@@ -90,18 +99,22 @@ BasicAttackRegistry['mace'] = (dmg) => {
             applyDamage(e, dmg, 'melee_basic');
             shove(e, angle, 20);
         }
+        ringHammer(angle, radius, halfArc); // Ring the Hammer: the bash struck your own planted hammer
         return;
     }
 
     // Grand Mace smash: 120° shockwave cleave that briefly staggers
+    if (hasItem('Gauntlets of Devotion')) dmg *= 1.3; // items.js: the gauntlets put weight behind the hammer in hand
     const radius = 140, halfArc = Math.PI / 3;
     effects.push({ type: 'pal_shockwave', x: player.x, y: player.y, radius: radius, angle: angle, halfArc: halfArc, life: 0.3, maxLife: 0.3 });
+    let hits = 0;
     for (const e of enemies) {
         if (!inCone(e, player.x, player.y, angle, radius, halfArc)) continue;
-        applyDamage(e, dmg, 'melee_basic');
+        applyDamage(e, dmg, 'melee_basic'); hits++;
         if (!e.type.startsWith('boss')) e.stunTimer = Math.max(e.stunTimer || 0, 0.15);
         shove(e, Math.atan2(e.y - player.y, e.x - player.x), 12);
     }
+    if (hasItem('Gauntlets of Devotion')) basicHitHeal(hits); // items.js
     if (hasWorldBreaker()) spawnFaultLines(angle, radius, halfArc);
 };
 
@@ -130,8 +143,8 @@ SkillRegistry['Paladin'] = {
     canCast: (i) => {
         const h = player.hammer;
         if (i === 1 && h.state === 'returning') return false;
-        if (i === 2 && h.state !== 'deployed') {
-            effects.push({ type: 'text', text: 'Hammer not deployed!', x: player.x, y: player.y - 40, color: '#ff5252', life: 0.6, maxLife: 0.6 });
+        if (i === 2 && h.state !== 'deployed' && !shackleTarget()) { // the shackle needs someone to bind (the hammer chain never does)
+            effects.push({ type: 'text', text: 'No one to bind', x: player.x, y: player.y - 40, color: '#ff5252', life: 0.6, maxLife: 0.6 });
             return false;
         }
         return true;
@@ -148,24 +161,36 @@ SkillRegistry['Paladin'] = {
             h.state = 'outbound'; h.hitList = [];
             // Short lockout only, so the recall is available almost immediately; the full cooldown starts on recall
             cooldowns.s1 = 0.4; cooldownMax.s1 = 0.4;
+        } else if (player.tether && player.tether.mode === 'hammer' && h.state === 'deployed') {
+            startFlail(h); // Flail Sweep: chained to it, the hammer whips round you on the chain instead
         } else {
             h.state = 'returning'; h.hitList = []; h.dragged = []; h.hurricaneTimer = 0;
             h.returnMode = 'homing';
         }
     },
 
-    2: (sk, dmg) => { // Bastion Dome (requires deployed hammer, see canCast)
+    2: (sk, dmg) => { // Divine Tether: chain yourself to the planted hammer, or shackle an enemy to you
         const h = player.hammer;
-        player.dome = { id: ++paladinDomeCounter, x: h.x, y: h.y, radius: DOME_RADIUS, life: 5.0, maxLife: 5.0, upg: sk.selectedUpg };
-        effects.push({ type: 'circle_burst', x: h.x, y: h.y, radius: DOME_RADIUS, color: 'rgba(255, 213, 79, 0.5)', life: 0.4, maxLife: 0.4 });
+        if (h.state === 'deployed') {
+            player.tether = { mode: 'hammer', life: TETHER_HAMMER_TIME, maxLife: TETHER_HAMMER_TIME, tick: 0, ax: h.x, ay: h.y };
+            effects.push({ type: 'holy_impact', x: h.x, y: h.y, radius: 70, life: 0.4, maxLife: 0.4 });
+        } else {
+            const e = shackleTarget(); // canCast made sure there is one
+            player.tether = { mode: 'shackle', target: e, life: TETHER_SHACKLE_TIME, maxLife: TETHER_SHACKLE_TIME, tick: 0, ax: e.x, ay: e.y };
+            effects.push({ type: 'holy_impact', x: e.x, y: e.y, radius: 60, life: 0.4, maxLife: 0.4 });
+            effects.push({ type: 'text', text: 'BOUND', x: e.x, y: e.y - 40, color: '#ffd54f', life: 0.8, maxLife: 0.8 });
+        }
+        player.tether.castAt = fxTime; // the chain shoots out from the Paladin (drawn in drawPaladinWorld)
     },
 
     3: (sk, dmg) => { // Righteous Charge (equipped) / Iron Pull (deployed)
         const h = player.hammer;
+        const zeal = zealousStart(), zx = player.x, zy = player.y; // Zealous Charge: charging out of your Consecrated Wrath
         if (h.state === 'deployed') {
             player.grappleTarget = {
                 x: h.x, y: h.y, speed: 1800, color: '#ffd54f', kind: 'chain',
                 onArrive: () => {
+                    if (zeal) zealousTrail(zeal, zx, zy);
                     const grounding = sk.selectedUpg === 'B';
                     effects.push({ type: 'holy_impact', x: h.x, y: h.y, radius: 110, life: 0.45, maxLife: 0.45 });
                     if (grounding) effects.push({ type: 'gravity_crush', x: h.x, y: h.y, radius: 150, life: 0.5, maxLife: 0.5 });
@@ -173,6 +198,7 @@ SkillRegistry['Paladin'] = {
                         if (e.dead || Math.hypot(e.x - h.x, e.y - h.y) > 150 + e.size / 2) continue;
                         applyDamage(e, dmg * 1.2, 'melee');
                         if (grounding) { e.slowTimer = 3.0; e.slowAmount = 0.5; }
+                        if (hasItem('Crusader Sabatons') && !e.type.startsWith('boss') && !e.dead) e.stunTimer = Math.max(e.stunTimer || 0, 0.5); // items.js
                     }
                     if (grounding) effects.push({ type: 'text', text: 'GROUNDED', x: h.x, y: h.y - 50, color: '#ffca28', life: 0.8, maxLife: 0.8 });
                 }
@@ -181,6 +207,7 @@ SkillRegistry['Paladin'] = {
         }
 
         const juggernaut = sk.selectedUpg === 'A';
+        const sealed = player.sealCharge; player.sealCharge = false; // Seal of Judgment: the charge a catch readied hits +50%
         const range = 260 * (juggernaut ? 1.5 : 1.0);
         const [dx, dy, dist] = getVector(player.x, player.y, mouseX, mouseY);
         const dirX = dx / dist, dirY = dy / dist;
@@ -192,20 +219,20 @@ SkillRegistry['Paladin'] = {
         player.grappleTarget = {
             x: tx, y: ty, speed: 1300, iFrames: juggernaut, noLine: true,
             kind: 'charge', angle: Math.atan2(dirY, dirX), juggernaut, trail, // drawn by skillfx_space.js
-            onArrive: () => dustPuff(player.x, player.y, Math.atan2(dirY, dirX), 1.2, 5),
+            onArrive: () => { dustPuff(player.x, player.y, Math.atan2(dirY, dirX), 1.2, 5); if (zeal) zealousTrail(zeal, zx, zy); },
             onStep: () => {
                 for (const e of enemies) {
                     if (e.dead || hitList.includes(e)) continue;
                     if (Math.hypot(e.x - player.x, e.y - player.y) > player.radius + e.size / 2 + 15) continue;
                     hitList.push(e);
-                    applyDamage(e, dmg, 'melee');
+                    applyDamage(e, dmg * (sealed ? 1.5 : 1), 'melee');
                     burst(e.x, e.y, Math.atan2(dirY, dirX), 1.4, 8, { kind: 'spark', color: '#ffe082', size: 2.5, life: 0.25, speed: [200, 420], drag: 6 });
                     addShake(2);
                     // Knock enemies forward and off to whichever side of the charge they were on
                     const side = (dirX * (e.y - player.y) - dirY * (e.x - player.x)) >= 0 ? 1 : -1;
                     shove(e, Math.atan2(dirY, dirX), 50);
                     shove(e, Math.atan2(dirX * side, -dirY * side), 70);
-                    if (!e.type.startsWith('boss')) e.stunTimer = Math.max(e.stunTimer || 0, 0.3);
+                    if (!e.type.startsWith('boss')) e.stunTimer = Math.max(e.stunTimer || 0, 0.3 + (hasItem('Crusader Sabatons') ? 0.5 : 0)); // items.js
                 }
             }
         };
@@ -218,7 +245,7 @@ SkillRegistry['Paladin'] = {
         const atHammer = deployed && !followPlayer;
         const cx = atHammer ? h.x : player.x, cy = atHammer ? h.y : player.y;
         effects.push({
-            type: 'consecrated_ground', x: cx, y: cy, radius: WRATH_RADIUS, color: 'rgba(255, 202, 40, 0.45)', life: 6.0, maxLife: 6.0, dmg: dmg, slow: 0.25,
+            type: 'consecrated_ground', wrath: true, x: cx, y: cy, radius: WRATH_RADIUS, color: 'rgba(255, 202, 40, 0.45)', life: 6.0, maxLife: 6.0, dmg: dmg, slow: 0.25,
             customUpdate: followPlayer ? (dt, ef) => { ef.x = player.x; ef.y = player.y; } : null
         });
         effects.push({ type: 'holy_impact', x: cx, y: cy, radius: 140, life: 0.5, maxLife: 0.5 });
@@ -232,7 +259,6 @@ SkillRegistry['Paladin'] = {
 // ---------- Per-frame update (called from update in main.js) ----------
 
 function updatePaladin(dt) {
-    buffs.shieldDecayPaused = false;
     if (!isPaladin() || !player.hammer) return;
     const h = player.hammer;
     if (h.purityCd > 0) h.purityCd -= dt;
@@ -245,6 +271,8 @@ function updatePaladin(dt) {
         else { h.x += (dx / dist) * step; h.y += (dy / dist) * step; }
         hammerSweep(h, false);
         if (dist <= step) landHammer(h);
+    } else if (h.state === 'returning' && h.returnMode === 'flail') {
+        updateFlail(h, dt);
     } else if (h.state === 'returning') {
         // Return flight in three phases:
         //   'homing'   - steers toward the Paladin, so moving around while it comes back is free
@@ -284,7 +312,7 @@ function updatePaladin(dt) {
         updateDeployedHammer(h, dt);
     }
 
-    updateBastionDome(dt);
+    updateTether(dt);
 }
 
 // Damage everything the flying hammer touches (once per flight); on the way back, drag non-bosses along
@@ -336,7 +364,8 @@ function catchHammer(h, perfect) {
     effects.push({ type: 'circle_burst', x: player.x, y: player.y, radius: 50, color: 'rgba(255, 248, 225, 0.8)', life: 0.25, maxLife: 0.25 });
     burst(player.x, player.y, 0, Math.PI * 2, perfect ? 14 : 7, { kind: 'spark', color: '#ffe082', size: 2, life: 0.25, speed: [150, 340], drag: 6 });
     if (perfect) {
-        cooldowns.s1 = 0;
+        if (!devNoCooldowns) cooldowns.s1 = cooldownMax.s1 = HAMMER_CATCH_CD;
+        if (hasItem('Seal of Judgment')) { cooldowns.s3 = 0; player.sealCharge = true; } // items.js: a clean catch readies the charge, and it hits +50%
         effects.push({ type: 'text', text: 'CAUGHT!', x: player.x, y: player.y - 40, color: '#ffd54f', life: 0.7, maxLife: 0.7 });
     }
     const sk = activeClass.skills[1];
@@ -395,33 +424,193 @@ function updateDeployedHammer(h, dt) {
     }
 }
 
-function updateBastionDome(dt) {
-    const d = player.dome;
-    if (!d) return;
-    d.life -= dt;
-    if (d.life <= 0) { player.dome = null; return; }
+// Divine Tether with the hammer in hand: the enemy nearest the cursor (within 120 px of it), else the one nearest you
+function shackleTarget() {
+    const ok = e => !e.dead && !e.pod && !e.submerged && !(e.spawnT > 0) && !(e.flyUntil > fxTime) && Math.hypot(e.x - player.x, e.y - player.y) <= SHACKLE_RANGE + e.size / 2;
+    let best = null, bd = 120;
+    for (const e of enemies) { if (!ok(e)) continue; const d = Math.hypot(e.x - mouseX, e.y - mouseY) - e.size / 2; if (d < bd) { bd = d; best = e; } }
+    if (best) return best;
+    bd = Infinity;
+    for (const e of enemies) { if (!ok(e)) continue; const d = Math.hypot(e.x - player.x, e.y - player.y); if (d < bd) { bd = d; best = e; } }
+    return best;
+}
 
-    const inside = Math.hypot(player.x - d.x, player.y - d.y) <= d.radius;
-    if (inside && d.upg === 'A') { // Holy Sanctuary
-        player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.03 * dt);
-        buffs.shieldDecayPaused = true;
+// The chain runs from the Paladin to its anchor (the planted hammer, or the shackled enemy). It burns and slows
+// whatever touches it; a shackled non-boss can't get more than SHACKLE_LEASH away and is dragged back in.
+function updateTether(dt) {
+    const t = player.tether;
+    if (!t) return;
+    const h = player.hammer, sk = activeClass.skills[2];
+    if (t.mode === 'hammer') {
+        if (h.state !== 'deployed' && h.returnMode !== 'flail') { player.tether = null; return; } // recalled or picked up: the chain goes with it (a Flail Sweep swings it)
+        t.ax = h.x; t.ay = h.y;
+    } else {
+        const e = t.target;
+        if (!e || e.dead || e.submerged) { player.tether = null; return; }
+        const [dx, dy, d] = getVector(e.x, e.y, player.x, player.y);
+        if (d > SHACKLE_LEASH && !e.type.startsWith('boss')) { // reeled back in
+            const pull = Math.min(d - SHACKLE_LEASH, 500 * dt);
+            e.x += (dx / d) * pull; e.y += (dy / d) * pull; clampToBounds(e, e.size / 2);
+        }
+        t.ax = e.x; t.ay = e.y;
+    }
+    if ((t.life -= dt) <= 0 || Math.hypot(t.ax - player.x, t.ay - player.y) > TETHER_SNAP) { player.tether = null; return; }
+
+    if ((t.tick -= dt) <= 0) {
+        t.tick += TETHER_TICK;
+        const dmg = calcDmg(sk.baseDmg, sk.level) * TETHER_TICK_MULT;
+        let touched = 0;
+        for (const e of enemies) {
+            if (e.dead || e.pod || e.submerged || distToSegment(e.x, e.y, player.x, player.y, t.ax, t.ay) > TETHER_WIDTH + e.size / 2) continue;
+            applyDamage(e, dmg, 'magic'); touched++;
+            if (!(e.slowTimer > 0) || (e.slowAmount || 0) < 0.4) e.slowAmount = 0.4;
+            e.slowTimer = Math.max(e.slowTimer || 0, 0.5);
+        }
+        t.healing = touched > 0; // skillfx_e.js: the healing light
+        if (touched) { // the chain feeds holy light back to you; Overflowing Grace turns what overflows full HP into a shield
+            const heal = player.maxHp * Math.min(TETHER_HEAL_CAP, TETHER_HEAL * touched), room = player.maxHp - player.hp;
+            player.hp = Math.min(player.maxHp, player.hp + heal);
+            if (sk.selectedUpg === 'A' && heal > room) addShield(heal - room, 3.0); // combat.js: capped at half max HP
+        }
     }
 
-    // Block enemy projectiles that cross the dome wall from outside (ones fired from inside pass through)
-    for (const p of projectiles) {
-        if (!p.isEnemy || p.life <= 0) continue;
-        const pin = Math.hypot(p.x - d.x, p.y - d.y) <= d.radius + (p.radius || 0);
-        if (p.domeId !== d.id) { p.domeId = d.id; p.domeInside = pin; continue; }
-        if (pin && !p.domeInside) {
+    if (sk.selectedUpg === 'B') { // Chain of Retribution: enemy shots that cross the chain break on it and fly back as holy bolts
+        for (const p of projectiles) {
+            if (!p.isEnemy || p.life <= 0 || distToSegment(p.x, p.y, player.x, player.y, t.ax, t.ay) > TETHER_WIDTH + (p.radius || 0)) continue;
             p.life = 0; // expires this frame, so its normal on-expire behavior still runs
             effects.push({ type: 'dome_ripple', x: p.x, y: p.y, life: 0.3, maxLife: 0.3 });
-            if (d.upg === 'B') fireRetributionBolt(p.x, p.y, p.owner || p.sourceBoss);
+            fireRetributionBolt(p.x, p.y, p.owner || p.sourceBoss);
         }
-        p.domeInside = pin;
     }
 }
 
-// Retribution Barrier: homing holy bolt back at whoever fired the blocked projectile
+// Flail Sweep (Q recall while chained to the planted hammer by Divine Tether): the hammer tears out and whips round you on the
+// chain twice in 0.8 s, at the chain's length (120-300 px). Each pass the head hits x1.75 the hammer (x3.5 over both) and
+// throws non-bosses 110 px outward with a 0.6 s stun; the chain hits everything inside the circle for x0.5 a pass. Then it's
+// reeled into your hand as a clean catch (Q at 1.2 s). It ends the tether early, so it has to be worth more than the chain's
+// last seconds. (First version: one pass, x1.5, only a thin ring at the chain's end. Playtest: "too weak, doesn't really
+// do anything".) (combos.js)
+function startFlail(h) {
+    const r = Math.max(FLAIL_MIN, Math.min(FLAIL_MAX, Math.hypot(h.x - player.x, h.y - player.y)));
+    h.state = 'returning'; h.returnMode = 'flail'; h.hitList = []; h.dragged = []; h.hurricaneTimer = 0;
+    h.flail = { a: Math.atan2(h.y - player.y, h.x - player.x), r, t: 0, swept: 0, pass: 0, hit: new Set() };
+    effects.push({ type: 'holy_impact', x: h.x, y: h.y, radius: 90, life: 0.45, maxLife: 0.45 });
+    burst(h.x, h.y, 0, Math.PI * 2, 12, { kind: 'debris', color: '#6d4c41', size: 4, life: 0.5, speed: [120, 300], drag: 5 }); // torn out of the ground
+    comboText(); addShake(2.5);
+}
+function updateFlail(h, dt) {
+    const f = h.flail, prev = f.a;
+    f.t += dt; h.spin += dt * 30;
+    if (f.t <= FLAIL_TIME) {
+        const step = Math.PI * 2 * FLAIL_SPINS * dt / FLAIL_TIME;
+        f.a += step; f.swept += step;
+        if (f.swept >= Math.PI * 2 * (f.pass + 1)) { f.pass++; f.hit.clear(); addShake(2); } // a new pass: everything can be hit again
+        for (const e of enemies) { // what the hammer and chain swept over since the last frame
+            if (e.dead || e.pod || e.submerged || f.hit.has(e)) continue;
+            const d = Math.hypot(e.x - player.x, e.y - player.y), rel = ((Math.atan2(e.y - player.y, e.x - player.x) - prev) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
+            if (rel > step + 0.15 || d - e.size / 2 > f.r + FLAIL_WIDTH) continue;
+            f.hit.add(e);
+            const head = Math.abs(d - f.r) <= FLAIL_WIDTH + e.size / 2;
+            applyDamage(e, h.dmg * (head ? FLAIL_MULT : FLAIL_CHAIN_MULT), 'melee');
+            if (!head || e.dead) continue;
+            burst(e.x, e.y, f.a + Math.PI / 2, 1.2, 10, { kind: 'spark', color: '#ffe082', size: 2.8, life: 0.3, speed: [220, 480], drag: 6 });
+            effects.push({ type: 'holy_impact', x: e.x, y: e.y, radius: 40, life: 0.3, maxLife: 0.3 });
+            if (!e.type.startsWith('boss')) { shove(e, Math.atan2(e.y - player.y, e.x - player.x), FLAIL_KNOCK); e.stunTimer = Math.max(e.stunTimer || 0, FLAIL_STUN); }
+        }
+    } else f.r = Math.max(0, f.r - (f.r + 60) * dt / FLAIL_REEL); // reeled in
+    h.x = player.x + Math.cos(f.a) * f.r; h.y = player.y + Math.sin(f.a) * f.r;
+    if (f.t >= FLAIL_TIME + FLAIL_REEL) { h.flail = null; catchHammer(h, true); }
+}
+// The swept arc behind the whirling hammer (drawPaladinWorld)
+function drawFlailArc(h) {
+    const f = h.flail;
+    if (!f || f.t > FLAIL_TIME) return;
+    const len = 1.6; // radians of trail behind the head
+    ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.lineCap = 'round';
+    for (let s = 0; s < 10; s++) { // a band that thins and fades toward its tail
+        const k = 1 - s / 10, a1 = f.a - s * len / 10, a0 = a1 - len / 10 - 0.02;
+        ctx.strokeStyle = `rgba(255, 213, 79, ${0.45 * k})`; ctx.lineWidth = 6 + 30 * k;
+        ctx.beginPath(); ctx.arc(player.x, player.y, f.r, a0, a1); ctx.stroke();
+        ctx.strokeStyle = `rgba(255, 248, 225, ${0.7 * k})`; ctx.lineWidth = 2 + 8 * k;
+        ctx.beginPath(); ctx.arc(player.x, player.y, f.r, a0, a1); ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(255, 236, 179, 0.12)'; ctx.lineWidth = f.r - 10; // the disc the chain sweeps, faintly lit (a ring at r/2, r wide)
+    ctx.beginPath(); ctx.arc(player.x, player.y, f.r / 2, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+}
+
+// Ring the Hammer (a shield bash that strikes your own planted hammer): it rings like a bell and fires its pulse at once,
+// x3 a pulse with a 0.5 s stun on non-bosses, at most every 3 s. The planted hammer becomes an instrument; you fight beside it. (combos.js)
+function ringHammer(angle, radius, halfArc) {
+    const h = player.hammer;
+    if (!hammerDeployed() || (h.ringCd || 0) > fxTime || !inCone({ x: h.x, y: h.y, size: 40 }, player.x, player.y, angle, radius, halfArc)) return;
+    h.ringCd = fxTime + RING_CD; h.pulseTimer = 1.0;
+    for (let i = 0; i < 3; i++) effects.push({ type: 'circle_burst', x: h.x, y: h.y, radius: HAMMER_PULSE_RADIUS * (0.55 + 0.25 * i), color: `rgba(255, 236, 179, ${0.85 - 0.2 * i})`, life: 0.35 + 0.12 * i, maxLife: 0.35 + 0.12 * i }); // the bell's peal
+    effects.push({ type: 'holy_impact', x: h.x, y: h.y, radius: 90, life: 0.45, maxLife: 0.45 });
+    burst(h.x, h.y, 0, Math.PI * 2, 14, { kind: 'spark', color: '#fff8e1', size: 2.5, life: 0.4, speed: [200, 450], drag: 5 });
+    for (const e of enemies) {
+        if (e.dead || e.pod || Math.hypot(e.x - h.x, e.y - h.y) > HAMMER_PULSE_RADIUS + e.size / 2) continue;
+        applyDamage(e, h.dmg * 0.25 * RING_MULT, 'magic');
+        if (!e.type.startsWith('boss') && !e.dead) e.stunTimer = Math.max(e.stunTimer || 0, RING_STUN);
+    }
+    comboText(); addShake(2.5);
+}
+
+// Zealous Charge (R → Space): Righteous Charge or Iron Pull starting inside your Consecrated Wrath drags holy fire along its
+// path, a 3 s burning strip (45 px each side, x0.5 of the Wrath's damage per second) that spreads the zone to where you went. (combos.js)
+function zealousStart() {
+    return effects.find(ef => ef.type === 'consecrated_ground' && ef.wrath && ef.life > 0 && Math.hypot(player.x - ef.x, player.y - ef.y) <= ef.radius) || null;
+}
+function zealousTrail(zone, x0, y0) {
+    const x1 = player.x, y1 = player.y;
+    if (Math.hypot(x1 - x0, y1 - y0) < 30) return;
+    const L = Math.hypot(x1 - x0, y1 - y0), tongues = [], sigils = [];
+    for (let i = 0, n = Math.round(L / 9); i < n; i++) tongues.push({ t: Math.random(), off: (Math.random() * 2 - 1) * ZEAL_TRAIL_WIDTH * 0.8, s: 0.6 + Math.random() * 0.6, ph: Math.random() * 6 });
+    tongues.sort((a, b) => a.off - b.off); // far side first, so the flames overlap the right way
+    for (let d = 40; d < L - 20; d += 70) sigils.push(d / L);
+    effects.push({ type: 'zealous_trail', x1: x0, y1: y0, x2: x1, y2: y1, L, tongues, sigils, dmg: zone.dmg * ZEAL_TRAIL_MULT, life: ZEAL_TRAIL_TIME, maxLife: ZEAL_TRAIL_TIME,
+        customUpdate: (dt, ef) => {
+            if (ef.life > 0.4) emit(ef.L / 7, dt, () => { // white-gold motes rising off it, like the Wrath they came from
+                const t = Math.random(), off = (Math.random() * 2 - 1) * ZEAL_TRAIL_WIDTH, nx = -(ef.y2 - ef.y1) / ef.L, ny = (ef.x2 - ef.x1) / ef.L;
+                spawnParticle({ kind: 'dot', color: Math.random() < 0.5 ? '#fff8e1' : '#ffca28', x: lerp(ef.x1, ef.x2, t) + nx * off, y: lerp(ef.y1, ef.y2, t) + ny * off, vx: jitter(14), vy: -50 - Math.random() * 40, size: 1.7, life: 0.7, drag: 0.5, grow: 0, spin: 0, rot: 0 });
+            });
+            for (const e of enemies) {
+                if (e.dead || e.pod || e.submerged || distToSegment(e.x, e.y, ef.x1, ef.y1, ef.x2, ef.y2) > ZEAL_TRAIL_WIDTH + e.size / 2) continue;
+                applyDamage(e, ef.dmg * dt, 'dot');
+            }
+        } });
+    comboText();
+}
+
+// Judgment Smash (combos.js, the Space finisher): an overhead smash that stuns everything around the impact.
+// After Iron Pull the Paladin stands on the planted hammer and rips it out of the ground into the smash (back in hand).
+// Returns false while the hammer is still flying, so that basic stays a normal shield bash.
+function judgmentSmash(dmg) {
+    const h = player.hammer;
+    if (h.state === 'deployed' && Math.hypot(h.x - player.x, h.y - player.y) <= 90) {
+        h.state = 'equipped'; h.x = player.x; h.y = player.y; h.dragged = []; h.hurricaneTimer = 0; h.returnMode = null;
+        if (!devNoCooldowns) cooldowns.s1 = cooldownMax.s1 = HAMMER_CATCH_CD; // as after a clean catch
+        burst(player.x, player.y, -Math.PI / 2, 2.4, 12, { kind: 'debris', color: '#8d6e63', size: 4, life: 0.4, speed: [120, 280], drag: 5 });
+    }
+    if (h.state !== 'equipped') return false;
+    const angle = Math.atan2(mouseY - player.y, mouseX - player.x);
+    const ix = player.x + Math.cos(angle) * 60, iy = player.y + Math.sin(angle) * 60;
+    dmg *= JUDGMENT_MULT * (hasItem('Gauntlets of Devotion') ? 1.3 : 1);
+    effects.push({ type: 'holy_impact', x: ix, y: iy, radius: JUDGMENT_RADIUS, life: 0.55, maxLife: 0.55 });
+    effects.push({ type: 'judgment_smash', x: ix, y: iy, radius: JUDGMENT_RADIUS, life: 0.6, maxLife: 0.6 }); // skillfx.js
+    addShake(5);
+    let hits = 0;
+    for (const e of enemies) {
+        if (e.dead || Math.hypot(e.x - ix, e.y - iy) > JUDGMENT_RADIUS + e.size / 2) continue;
+        applyDamage(e, dmg, 'melee_basic'); hits++;
+        e.stunTimer = Math.max(e.stunTimer || 0, JUDGMENT_STUN); // bosses shake it off 3x as fast (~0.5 s)
+    }
+    if (hasItem('Gauntlets of Devotion')) basicHitHeal(hits); // items.js
+    if (hasWorldBreaker()) spawnFaultLines(angle, JUDGMENT_RADIUS + 40, Math.PI / 2);
+    return true;
+}
+
+// Chain of Retribution: homing holy bolt back at whoever fired the blocked projectile
 function fireRetributionBolt(x, y, attacker) {
     projectiles.push({
         x: x, y: y, vx: 0, vy: 0, radius: 6, color: '#fff59d', life: 2.0, type: 'basic', shape: 'fireball', isRetribution: true,
@@ -543,11 +732,41 @@ function drawHolySeal(h) {
     ctx.restore();
 }
 
-// World-space visuals: fault lines, shockwaves, the thrown hammer, its chain, and the dome (consecrated ground: skillfx_ult.js)
+// World-space visuals: fault lines, shockwaves, the thrown hammer, its chain, and Divine Tether (consecrated ground: skillfx_ult.js)
 function drawPaladinWorld() {
     for (const ef of effects) {
         const a = Math.max(0, ef.life / ef.maxLife);
-        if (ef.type === 'fault_line') {
+        if (ef.type === 'zealous_trail') { // Zealous Charge: Consecrated Wrath's holy fire, laid along the charge
+            const el = ef.maxLife - ef.life, a = Math.min(1, ef.life / 0.6), lit = Math.min(1, el / 0.25); // it catches from the start of the charge to the end
+            const ux = (ef.x2 - ef.x1) / ef.L, uy = (ef.y2 - ef.y1) / ef.L, nx = -uy, ny = ux, W = ZEAL_TRAIL_WIDTH;
+            ctx.save();
+            for (let d = 0; d <= ef.L * lit; d += 30) { // soft glowing ground, no hard edge
+                const x = ef.x1 + ux * d, y = ef.y1 + uy * d, g = ctx.createRadialGradient(x, y, 0, x, y, W * 1.25);
+                g.addColorStop(0, `rgba(255, 236, 179, ${0.13 * a})`); g.addColorStop(0.6, `rgba(255, 179, 0, ${0.1 * a})`); g.addColorStop(1, 'rgba(255, 143, 0, 0)');
+                ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, W * 1.25, 0, Math.PI * 2); ctx.fill();
+            }
+            ctx.globalCompositeOperation = 'lighter';
+            for (const t of ef.sigils) { // holy sigils burned into it, pulsing
+                if (t > lit) continue;
+                const x = lerp(ef.x1, ef.x2, t), y = lerp(ef.y1, ef.y2, t), pa = a * (0.45 + 0.25 * Math.sin(fxTime * 5 + t * 9));
+                ctx.strokeStyle = `rgba(255, 224, 130, ${pa})`; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.arc(x, y, 13, 0, Math.PI * 2); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(x - ux * 8, y - uy * 8); ctx.lineTo(x + ux * 8, y + uy * 8); ctx.moveTo(x - nx * 8, y - ny * 8); ctx.lineTo(x + nx * 8, y + ny * 8); ctx.stroke();
+            }
+            for (const t of ef.tongues) { // flickering flame tongues, licking upward (as in the Wrath zone)
+                if (t.t > lit) continue;
+                const grow = Math.min(1, (lit - t.t) * 5), x = lerp(ef.x1, ef.x2, t.t) + nx * t.off, y = lerp(ef.y1, ef.y2, t.t) + ny * t.off;
+                const h = (22 + 10 * Math.sin(fxTime * 11 + t.ph)) * t.s * grow, w = 7 * t.s, sway = Math.sin(fxTime * 7 + t.ph) * 4;
+                const bg = ctx.createRadialGradient(x, y, 0, x, y, w * 2.2);
+                bg.addColorStop(0, `rgba(255, 213, 79, ${0.3 * a})`); bg.addColorStop(1, 'rgba(255, 213, 79, 0)');
+                ctx.fillStyle = bg; ctx.beginPath(); ctx.arc(x, y, w * 2.2, 0, Math.PI * 2); ctx.fill();
+                const fg = ctx.createLinearGradient(x, y, x, y - h);
+                fg.addColorStop(0, `rgba(255, 193, 7, ${0.55 * a})`); fg.addColorStop(0.5, `rgba(255, 248, 225, ${0.6 * a})`); fg.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                ctx.fillStyle = fg;
+                ctx.beginPath(); ctx.moveTo(x - w, y); ctx.quadraticCurveTo(x - w, y - h * 0.5, x + sway, y - h); ctx.quadraticCurveTo(x + w, y - h * 0.5, x + w, y); ctx.closePath(); ctx.fill();
+            }
+            ctx.restore();
+        } else if (ef.type === 'fault_line') {
             drawRuneFault(ef, a); // skillfx_rmb.js: rows of golden runes
         } else if (ef.type === 'pal_shockwave') {
             // Ground smash: light and a dust ring burst out from where the mace head lands (no sweeping arc)
@@ -592,7 +811,7 @@ function drawPaladinWorld() {
             ctx.restore();
         }
         const spinning = h.state !== 'deployed' || h.hurricaneTimer > 0;
-        const scale = h.hurricaneTimer > 0 ? 2.4 : (h.state === 'deployed' ? 1.3 : 1.1);
+        const scale = h.hurricaneTimer > 0 ? 2.4 : h.returnMode === 'flail' ? 1.7 : (h.state === 'deployed' ? 1.3 : 1.1);
         if (spinning) { // spin blur disc behind the whirling mace
             ctx.save();
             ctx.globalCompositeOperation = 'lighter';
@@ -602,27 +821,34 @@ function drawPaladinWorld() {
             ctx.restore();
         }
         if (h.hurricaneTimer > 0) drawHammerStorm(h); // skillfx_ult.js
+        if (h.returnMode === 'flail') drawFlailArc(h);
         drawMace(h.x, h.y, spinning ? h.spin : -Math.PI / 2 - 0.3, scale);
     }
 
-    const d = player.dome;
-    if (d) {
-        ctx.save();
-        ctx.globalAlpha = Math.min(1, d.life / 0.5, (d.maxLife - d.life) / 0.2 + 0.2);
-        const grad = ctx.createRadialGradient(d.x, d.y, d.radius * 0.3, d.x, d.y, d.radius);
-        grad.addColorStop(0, 'rgba(255, 213, 79, 0.03)');
-        grad.addColorStop(1, 'rgba(255, 213, 79, 0.25)');
-        ctx.fillStyle = grad;
-        ctx.beginPath(); ctx.arc(d.x, d.y, d.radius, 0, Math.PI * 2); ctx.fill();
-        ctx.strokeStyle = '#ffd54f'; ctx.lineWidth = 3;
+    if (player.tether) drawTether(player.tether);
+}
+
+// Divine Tether: a chain of golden links in a glow, shooting out from the Paladin on cast and fading as it runs out.
+// Each tick a pulse of light runs down it.
+function drawTether(t) {
+    const out = clamp01((fxTime - t.castAt) / 0.12), x0 = player.x, y0 = player.y;
+    const x1 = lerp(x0, t.ax, out), y1 = lerp(y0, t.ay, out), L = Math.hypot(x1 - x0, y1 - y0);
+    if (L < 2) return;
+    const a = Math.atan2(y1 - y0, x1 - x0), fade = Math.min(1, t.life / 0.5), pulse = 1 - clamp01(t.tick / TETHER_TICK);
+    ctx.save();
+    ctx.globalAlpha = fade; ctx.lineCap = 'round';
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = `rgba(255, 213, 79, ${0.25 + 0.15 * pulse})`; ctx.lineWidth = TETHER_WIDTH * 0.9;
+    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+    const px = lerp(x0, x1, pulse), py = lerp(y0, y1, pulse); // the pulse running down the chain
+    ctx.fillStyle = 'rgba(255, 248, 225, 0.7)'; ctx.beginPath(); ctx.arc(px, py, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.translate(x0, y0); ctx.rotate(a);
+    ctx.strokeStyle = '#ffca28'; ctx.lineWidth = 2.5;
+    for (let s = 10, i = 0; s < L - 4; s += 13, i++) { // links alternate flat and edge-on
+        ctx.beginPath();
+        if (i % 2) ctx.ellipse(s, 0, 7, 4, 0, 0, Math.PI * 2); else { ctx.moveTo(s - 7, 0); ctx.lineTo(s + 7, 0); }
         ctx.stroke();
-        drawDomeLattice(d, ctx.globalAlpha); // skillfx_e.js
-        const shimmer = (d.maxLife - d.life) * 1.5;
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)'; ctx.lineWidth = 2;
-        for (let i = 0; i < 3; i++) {
-            const a0 = shimmer + (Math.PI * 2 / 3) * i;
-            ctx.beginPath(); ctx.arc(d.x, d.y, d.radius - 4, a0, a0 + 0.5); ctx.stroke();
-        }
-        ctx.restore();
     }
+    ctx.restore();
 }

@@ -42,11 +42,25 @@ function attackProgress(base) {
     return clamp01((fxTime - weaponAnim.attackAt) / dur);
 }
 
+// Dragonknight slam charge ring (main.js draws it after the shield bubble, so a shield never hides it).
+// It sits just outside the bubble and turns white when the slam is ready to be released.
+function drawSlamCharge() {
+    const h = player.heavy;
+    if (!h || h.raw < SLAM_TAP) return;
+    const k = heavyCharge(), R = player.radius + 22;
+    ctx.save(); ctx.lineCap = 'round';
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.45)'; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(player.x, player.y, R, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = k >= 1 ? '#ffffff' : buffs.dragonfire > 0 ? '#ff7043' : '#ffb74d'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(player.x, player.y, R, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.max(0.02, k)); ctx.stroke();
+    ctx.restore();
+}
+
 // Called from castBasic once the attack has fired
-function onBasicAttack() {
+// heavy: the Dragonknight's slam charge (the overhead chop animation), null for a normal attack; combo: it was a Space finisher
+function onBasicAttack(heavy = null, combo = false) {
     const aim = Math.atan2(mouseY - player.y, mouseX - player.x);
-    weaponAnim.attackAt = fxTime; weaponAnim.swing++; weaponAnim.shellOut = false;
-    const fire = WEAPON_FIRE_FX[isWildForm() ? 'claws' : activeClass.weapon];
+    weaponAnim.attackAt = fxTime; weaponAnim.swing++; weaponAnim.shellOut = false; weaponAnim.heavy = heavy; weaponAnim.combo = combo;
+    const fire = WEAPON_FIRE_FX[activeClass.weapon];
     if (fire) fire(aim);
 }
 
@@ -98,28 +112,50 @@ function drawSwingTrail(angleAt, sq, span, rIn, rOut, color, alpha = 0.5) {
 
 const WEAPON_DRAW = {
     // Dragonknight: greatsword swung in alternating arcs; the blade heats up with Frenzy
+    // Held LMB (skills.js updateHeavySwing): the blade goes up over the shoulder. Top-down, raising it shortens it to
+    // nothing as it passes overhead and it reappears behind; the overhead chop runs that backwards and lands in front.
     sword(A) {
-        const p = attackProgress(0.3), rare = isRareWeapon();
+        const p = attackProgress(0.3), rare = isRareWeapon(), fire = buffs.dragonfire > 0;
         const frenzy = Math.min(1, player.frenzyStacks / 10);
         const s = weaponAnim.swing % 2 ? 1 : -1;
+        const h = player.heavy && player.heavy.raw >= SLAM_TAP ? player.heavy : null, heavyK = h ? heavyCharge() : 0;
+        const whirl = weaponAnim.combo && !h, wp = whirl ? clamp01((fxTime - weaponAnim.attackAt) / 0.32) : 1; // combos.js Wyrm Whirl: one full turn
+        const chop = weaponAnim.heavy !== null && weaponAnim.heavy !== undefined && !h && !whirl, cp = chop ? clamp01((fxTime - weaponAnim.attackAt) / 0.24) : 1;
         const swingAng = (q) => A + s * 1.2 - s * 2.5 * easeOut(q);
-        const ang = p < 0.45 ? swingAng(p / 0.45) : lerp(A - s * 1.3, A - s * 0.8, easeInOut((p - 0.45) / 0.55));
-
-        drawSwingTrail(swingAng, p / 0.45, 0.6, 26, 68, frenzy > 0.4 || rare ? '#ff7043' : '#ffffff', 0.45);
+        let ang = p < 0.45 ? swingAng(p / 0.45) : lerp(A - s * 1.3, A - s * 0.8, easeInOut((p - 0.45) / 0.55)), len = 1;
+        const BEHIND = A + Math.PI + 0.35, RAISED = 0.72; // over the right shoulder, tilted up (so foreshortened)
+        if (h) {
+            const r = clamp01((h.raw - SLAM_TAP) / 0.16); // the lift
+            if (r < 0.5) { ang = A - 0.8; len = 1 - 2 * r; } else { ang = BEHIND; len = (r - 0.5) * 2 * RAISED; }
+            ang += Math.sin(fxTime * 45) * 0.04 * heavyK; // the arms strain as it fills
+        } else if (whirl) { // the blade held out straight, spun once round the knight, then back to rest
+            if (wp < 1) { ang = A + s * 0.5 - s * Math.PI * 2 * easeOut(wp); len = 1.1; }
+            else ang = lerp(A + s * 0.5, A - s * 0.8, easeInOut((fxTime - weaponAnim.attackAt - 0.32) / 0.3));
+        } else if (chop && cp < 1) {
+            if (cp < 0.35) { ang = BEHIND; len = RAISED * (1 - cp / 0.35); } // up and over the head...
+            else { const q = (cp - 0.35) / 0.65; ang = A; len = q < 0.4 ? 1.15 * easeOut(q / 0.4) : lerp(1.15, 1, (q - 0.4) / 0.6); } // ...and down in front
+        } else if (chop) ang = lerp(A, A - s * 0.8, easeInOut((fxTime - weaponAnim.attackAt - 0.24) / 0.3)); // back to rest from where it landed
+        if (!h && !chop && !whirl) drawSwingTrail(swingAng, p / 0.45, 0.6, 26, 68, frenzy > 0.4 || rare || fire ? '#ff7043' : '#ffffff', 0.45);
 
         ctx.save();
-        ctx.translate(player.x, player.y); ctx.rotate(ang);
+        ctx.translate(player.x, player.y); ctx.rotate(ang); ctx.scale(Math.max(0.02, len), 1);
         // Blade
         const blade = () => { ctx.beginPath(); ctx.moveTo(22, -4.5); ctx.lineTo(56, -4); ctx.lineTo(67, 0); ctx.lineTo(56, 4); ctx.lineTo(22, 4.5); ctx.closePath(); };
-        if (frenzy > 0.05 || rare) { ctx.shadowBlur = 6 + 12 * frenzy; ctx.shadowColor = rare ? '#ff9100' : '#ff3d00'; }
+        const glowK = Math.max(frenzy, heavyK);
+        if (glowK > 0.05 || rare || fire) { ctx.shadowBlur = 6 + 12 * glowK + (fire ? 8 : 0); ctx.shadowColor = rare || fire ? '#ff9100' : '#ff3d00'; }
         const steel = ctx.createLinearGradient(0, -4.5, 0, 4.5);
         steel.addColorStop(0, '#ffffff'); steel.addColorStop(0.45, '#cfd8dc'); steel.addColorStop(1, '#78909c');
         blade(); sprFill(ctx, steel);
         ctx.shadowBlur = 0;
-        if (frenzy > 0) {
-            const heat = ctx.createLinearGradient(22, 0, 67, 0);
-            heat.addColorStop(0, 'rgba(255, 87, 34, 0)'); heat.addColorStop(1, `rgba(255, 87, 34, ${0.7 * frenzy})`);
+        if (glowK > 0 || fire) { // heat from Frenzy and the charge; Dragonfire Blade sets the whole edge alight
+            const heat = ctx.createLinearGradient(22, 0, 67, 0), a = fire ? 0.85 : 0.7 * glowK;
+            heat.addColorStop(0, fire ? 'rgba(255, 202, 40, 0.5)' : 'rgba(255, 87, 34, 0)'); heat.addColorStop(1, `rgba(255, 87, 34, ${a})`);
             blade(); ctx.fillStyle = heat; ctx.fill();
+        }
+        if (heavyK >= 1) { blade(); ctx.fillStyle = `rgba(255, 255, 255, ${0.35 + 0.25 * Math.sin(fxTime * 30)})`; ctx.fill(); } // ready to fall
+        if (fire && Math.random() < 0.6) { // embers and flame licking off the blade
+            const pt = localToWorld(24 + Math.random() * 42, (Math.random() - 0.5) * 6);
+            spawnParticle({ kind: 'dot', color: Math.random() < 0.5 ? '#ffca28' : '#ff5722', x: pt.x, y: pt.y, vx: (Math.random() - 0.5) * 30, vy: -40 - Math.random() * 40, size: 2 + Math.random() * 1.5, life: 0.35, drag: 1, grow: -1, spin: 0, rot: 0 });
         }
         ctx.strokeStyle = '#90a4ae'; ctx.lineWidth = 1.2; // fuller
         ctx.beginPath(); ctx.moveTo(25, 0); ctx.lineTo(52, 0); ctx.stroke();
@@ -352,7 +388,10 @@ const WEAPON_DRAW = {
             ang = ab.angle; bx = ab.x; by = ab.y;
         }
 
-        const charged = player.flow >= player.maxFlow || player.empoweredAirborne;
+        // How much the blade glows (0..1). In hand: only at a full Flow bar. Airborne: the whole flight, since only a full bar
+        // deploys it (it then drains from the first frame, so a "100 Flow" test never glowed there, and a fade from 100 to 50
+        // was gone in ~3 s; playtests: "at full Flow + Airborne it doesn't glow", "it still doesn't glow").
+        const charged = player.stance === 'airborne' || player.flow >= player.maxFlow ? 1 : 0;
         const isShattered = player.stance === 'airborne' && player.miniBlades && player.miniBlades.length > 0;
 
         // Afterimages: the blade's last few positions linger as fading ghosts while it moves
@@ -362,11 +401,11 @@ const WEAPON_DRAW = {
         if (ghosts.some(g => Math.hypot(g.x - bx, g.y - by) > 80)) ghosts = weaponAnim.katanaGhosts = [ghosts[ghosts.length - 1]];
         if (ghosts.length > 6) ghosts.shift();
         const oldest = ghosts[0];
-        if (!isShattered && (Math.hypot(oldest.x - bx, oldest.y - by) > 4 || Math.abs(oldest.ang - ang) > 0.06)) {
+        if (charged > 0 && !isShattered && (Math.hypot(oldest.x - bx, oldest.y - by) > 4 || Math.abs(oldest.ang - ang) > 0.06)) { // glowing afterimages only while it glows
             ghosts.slice(0, -1).forEach((g, i) => {
                 ctx.save();
                 ctx.translate(g.x, g.y); ctx.rotate(g.ang);
-                drawKatanaGhost(player.empoweredAirborne ? '#84ffff' : '#00e5ff', 0.07 + 0.05 * i);
+                drawKatanaGhost(player.empoweredAirborne ? '#84ffff' : '#00e5ff', (0.07 + 0.05 * i) * charged);
                 ctx.restore();
             });
         }
@@ -436,7 +475,7 @@ const WEAPON_DRAW = {
         weaponAnim.censer = { x: cx, y: cy, color: shadow ? '#7b1fa2' : '#fff8e1' };
     },
 
-    // Druid (caster form): antler wand wrapped in vines; it flicks forward and its leaves flutter on each cast
+    // Druid: antler wand wrapped in vines; it flicks forward and its leaves flutter on each cast
     totem(A) {
         const p = attackProgress(0.3), rare = isRareWeapon();
         const flick = p < 1 ? Math.sin(easeOut(p) * Math.PI) : 0;
@@ -495,18 +534,29 @@ function drawKatana({ charged = false, empowered = false, rare = false, hilt = t
     const glow = empowered ? '#84ffff' : '#00e5ff';
     ctx.save();
     if (blade) {
-        // Translucent ghost-steel, glowing harder at full Flow
-        ctx.shadowBlur = charged ? 18 : (rare ? 12 : 8); ctx.shadowColor = glow;
-        const steel = ctx.createLinearGradient(0, -4.5, 0, 2.4);
-        steel.addColorStop(0, charged ? 'rgba(0, 229, 255, 0.75)' : 'rgba(77, 208, 225, 0.55)');
-        steel.addColorStop(0.55, charged ? 'rgba(224, 247, 250, 0.9)' : 'rgba(178, 235, 242, 0.7)');
-        steel.addColorStop(1, '#ffffff');
-        katanaBladePath(); ctx.fillStyle = steel; ctx.fill();
-        ctx.shadowBlur = 0;
-        ctx.strokeStyle = charged ? '#e0ffff' : 'rgba(0, 229, 255, 0.9)'; ctx.lineWidth = 0.8; ctx.stroke();
-        // Shinogi ridge and the wavy hamon temper line
-        ctx.strokeStyle = 'rgba(0, 188, 212, 0.8)'; ctx.lineWidth = 0.6;
-        ctx.beginPath(); ctx.moveTo(26, -1.5); ctx.quadraticCurveTo(62, -3.4, 88, -1.8); ctx.stroke();
+        // Plain steel; at full Flow it turns to glowing ghost-steel (charged: 0..1, how far, laid over the steel)
+        const k = charged === true ? 1 : charged || 0;
+        const steelPass = (lit) => {
+            ctx.shadowBlur = lit ? 18 : 0; ctx.shadowColor = glow;
+            const steel = ctx.createLinearGradient(0, -4.5, 0, 2.4);
+            steel.addColorStop(0, lit ? 'rgba(0, 229, 255, 0.75)' : '#b0bec5');
+            steel.addColorStop(0.55, lit ? 'rgba(224, 247, 250, 0.9)' : '#eceff1');
+            steel.addColorStop(1, '#ffffff');
+            katanaBladePath(); ctx.fillStyle = steel; ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.strokeStyle = lit ? '#e0ffff' : '#78909c'; ctx.lineWidth = 0.8; ctx.stroke();
+            ctx.strokeStyle = lit ? 'rgba(0, 188, 212, 0.8)' : 'rgba(96, 125, 139, 0.8)'; ctx.lineWidth = 0.6; // shinogi ridge
+            ctx.beginPath(); ctx.moveTo(26, -1.5); ctx.quadraticCurveTo(62, -3.4, 88, -1.8); ctx.stroke();
+        };
+        if (k > 0) { // the glow itself: a soft cyan aura round the blade (a shadow on a 5 px blade barely shows)
+            ctx.save(); ctx.globalAlpha *= k; ctx.globalCompositeOperation = 'lighter'; ctx.lineJoin = 'round';
+            const pulse = 0.85 + 0.15 * Math.sin(fxTime * 6);
+            for (const [w, a] of [[16, 0.1], [9, 0.2], [4, 0.35]]) { ctx.strokeStyle = withAlpha(glow, a * pulse); ctx.lineWidth = w; katanaBladePath(); ctx.stroke(); }
+            ctx.restore();
+        }
+        if (k < 1) steelPass(false);
+        if (k > 0) { ctx.save(); ctx.globalAlpha *= k; steelPass(true); ctx.restore(); }
+        // The wavy hamon temper line
         ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 0.9;
         ctx.beginPath();
         for (let x = 26; x <= 88; x += 2) { const t = (x - 24) / 66; ctx.lineTo(x, -1.6 * Math.sin(t * Math.PI) + 0.6 + Math.sin(x * 0.55) * 0.55); }
@@ -530,11 +580,10 @@ function drawKatana({ charged = false, empowered = false, rare = false, hilt = t
 }
 
 // Trail color for the Swordsaint's combo: brighter as Flow builds
-function flowTrailColor() { return player.flow >= player.maxFlow ? '#84ffff' : (isRareWeapon() ? '#80deea' : '#e0f7fa'); }
+function flowTrailColor() { return player.flow >= player.maxFlow ? '#84ffff' : '#eceff1'; } // steel below a full bar (the rare weapon's trail was cyan at any Flow)
 
 function drawPlayerWeapon(aimAngle) {
     weaponAnim.tip = weaponAnim.censer = weaponAnim.wandTip = weaponAnim.bladeBase = null;
-    if (isWildForm()) return; // claws are part of the wolf sprite
     const draw = activeClass && WEAPON_DRAW[activeClass.weapon];
     if (draw) draw(aimAngle);
     if (player.parryTimer > 0) drawParryGuard(aimAngle); // skillfx.js
@@ -572,12 +621,6 @@ const WEAPON_FIRE_FX = {
         const [x, y] = polar(A, 40, 6);
         burst(x, y, A, 1.6, 7, { kind: 'dot', color: '#b2ff59', size: 1.8, life: 0.45, speed: [40, 170] });
         burst(x, y, A, 2.0, 2, { kind: 'leaf', color: '#8bc34a', size: 6, life: 0.7, speed: [50, 120], drag: 2.5 });
-    },
-    claws(A) { // Druid Wild Form rakes (the Bite's fang marks land on the enemies themselves)
-        if (player.lastWolfStep === 2) return;
-        const s = player.lastWolfStep === 0 ? -1 : 1;
-        const [x, y] = polar(A, 30, s * 10);
-        burst(x, y, A - s * 0.9, 0.8, 5, { kind: 'spark', color: '#ffccbc', size: 1.8, life: 0.18, speed: [200, 380], drag: 7 });
     },
     mace(A) {
         if (hammerAway()) return;
@@ -696,9 +739,9 @@ function drawPlayerProjectile(p) {
     if (p.type === 'druid_spore') { // pulsing seed pod
         const r = p.radius * 1.25 * (1 + Math.sin(fxTime * 12 + p.x * 0.05) * 0.12);
         ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(fxTime * 3);
-        ctx.shadowBlur = 10; ctx.shadowColor = '#76ff03';
+        ctx.shadowBlur = p.call ? 16 : 10; ctx.shadowColor = p.call ? '#ffb300' : '#76ff03'; // p.call: Pounce Strike's calling bolt glows amber
         const g = ctx.createRadialGradient(-r * 0.3, -r * 0.3, 0.5, 0, 0, r);
-        g.addColorStop(0, '#ccff90'); g.addColorStop(0.6, '#4caf50'); g.addColorStop(1, '#1b5e20');
+        g.addColorStop(0, p.call ? '#fff8e1' : '#ccff90'); g.addColorStop(0.6, p.call ? '#ffb300' : '#4caf50'); g.addColorStop(1, '#1b5e20');
         ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
         ctx.shadowBlur = 0;
         ctx.fillStyle = '#1b5e20';

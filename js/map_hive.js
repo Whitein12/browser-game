@@ -217,6 +217,13 @@ function openPod(p, popped) {
 function podPopped(e) {
     e.dead = true; openPod(e.pod, true);
     gainXP(4 + wave);
+    // the slime waiting inside dies with it: one fewer to fight this wave (a boss wave keeps its last spawn, which brings the boss: main.js spawnEnemy)
+    if (enemiesToSpawn > (isBossWave ? 1 : 0) && gameState === STATE.PLAYING) {
+        enemiesToSpawn--; waveStats.kills++;
+        effects.push({ type: 'text', text: 'BROOD -1', x: e.x, y: e.y - 30, color: '#f48fb1', life: 0.9, maxLife: 0.9 });
+        updateHUD();
+        if (enemiesToSpawn <= 0 && activeEnemies <= 0) { collectAllDrops(); onWaveCleared(); } // combat.js / stage.js
+    }
 }
 
 // A slime hatches from an intact pod away from the hero; with none left it crawls out of a burrow

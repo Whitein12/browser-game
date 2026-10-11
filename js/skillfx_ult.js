@@ -279,15 +279,16 @@ function drawUltAuraFront(facing) {
 
 // While the whirlwind spins, the swordsaint (and their katana) spin with it
 function ultFacing() {
-    for (const ef of effects) if (ef.type === 'katana_tornado') return ef.startAngle + ultElapsed(ef) * 16;
+    for (const ef of effects) if (ef.type === 'katana_tornado' && !ef.hurricane) return ef.startAngle + ultElapsed(ef) * 16; // (the Gathering Gale's hurricane flies off on its own)
     return null;
 }
 
-function drawKatanaTornado(ef) {
-    const el = ultElapsed(ef), q = clamp01(el / ef.maxLife), k = 1 - q, R = ef.radius;
-    const r = R * (0.2 + 0.8 * easeOut(q));
+function drawKatanaTornado(ef) { // ef.hurricane (combos.js Gathering Gale): it travels on its own, full size, fading only at the end
+    const el = ultElapsed(ef), q = clamp01(el / ef.maxLife), R = ef.radius, hur = ef.hurricane;
+    const k = hur ? Math.min(1, ef.life / 0.2, el / 0.06) : 1 - q;
+    const r = hur ? R * (0.9 + 0.1 * Math.sin(el * 14)) : R * (0.2 + 0.8 * easeOut(q));
     ctx.save();
-    ctx.translate(player.x, player.y);
+    ctx.translate(hur ? ef.x : player.x, hur ? ef.y : player.y);
     ctx.globalCompositeOperation = 'lighter';
     for (let j = 0; j < 3; j++) { // wind arcs
         const a0 = el * 12 + j * Math.PI * 2 / 3;
@@ -311,6 +312,21 @@ function drawKatanaTornado(ef) {
             drawKatanaGhost(g ? '#00e5ff' : '#e0f7fa', (g ? 0.25 : 0.9) * k);
             ctx.restore();
         }
+    }
+    ctx.restore();
+}
+
+// Gathering Gale (combos.js): ghost katanas wheeling round a point in front of the hero, tightening as the moment passes
+function drawGaleGather(ef) {
+    const el = ef.maxLife - ef.life, ang = Math.atan2(mouseY - player.y, mouseX - player.x), px = player.x + Math.cos(ang) * 70, py = player.y + Math.sin(ang) * 70;
+    const tight = clamp01(el / ef.maxLife), r = 46 - 24 * tight, a = Math.min(1, el / 0.1);
+    ctx.save(); ctx.translate(px, py); ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = `rgba(132, 255, 255, ${0.45 * a})`; ctx.lineWidth = 2;
+    for (let j = 0; j < 2; j++) { const a0 = el * 14 + j * Math.PI; ctx.beginPath(); ctx.arc(0, 0, r + 10, a0, a0 + 2); ctx.stroke(); }
+    for (let i = 0; i < 6; i++) {
+        ctx.save(); ctx.rotate(i * Math.PI / 3 + el * 12); ctx.translate(r, 0); ctx.rotate(Math.PI / 2); ctx.scale(0.55, 0.8); ctx.translate(-60, 0);
+        drawKatanaGhost(i % 2 ? '#00e5ff' : '#e0f7fa', 0.75 * a);
+        ctx.restore();
     }
     ctx.restore();
 }
@@ -352,41 +368,6 @@ function drawCloneStrike(ef) {
     drawStreak(ef.x0, ef.y0, x, y, 12 * (1 - el / ef.maxLife), '#9c27b0', 1 - el / ef.maxLife);
     const a = el < 0.1 ? 0.9 : 0.9 * Math.max(0, 1 - (el - 0.1) / 0.2);
     if (a > 0) stampTinted(x, y, ef.angle, ef.pose, '#7c4dff', a, true);
-}
-
-// ==========================================
-// Druid: Aspect of the Wild
-// ==========================================
-
-// Leaving Wild Form: the wolf crumbles into leaves (call before the form ends, so the ghost is still a wolf)
-function wildRevertFx() {
-    spawnDashGhost('#8bc34a', false, 0.6, Math.atan2(mouseY - player.y, mouseX - player.x));
-    burst(player.x, player.y, -Math.PI / 2, Math.PI * 2, 16, { kind: 'leaf', color: '#7cb342', size: 7, life: 0.9, speed: [30, 120], drag: 2 });
-    burst(player.x, player.y, 0, Math.PI * 2, 6, { kind: 'leaf', color: '#a1887f', size: 6, life: 0.8, speed: [40, 110], drag: 2 });
-}
-
-// Phase one: vines wrap the druid into a cocoon (drawn over the hero)
-function drawVineCocoon(ef) {
-    const el = ultElapsed(ef);
-    if (el > 0.24) return;
-    const q = el / 0.24, R = 40 - 16 * easeOut(q);
-    ctx.save();
-    ctx.translate(player.x, player.y);
-    ctx.lineCap = 'round';
-    for (let i = 0; i < 6; i++) {
-        const a0 = i * Math.PI / 3 + q * 2;
-        ctx.strokeStyle = i % 2 ? '#558b2f' : '#6d4c41'; ctx.lineWidth = 5;
-        ctx.beginPath();
-        for (let t = 0; t <= q; t += 0.05) { const aa = a0 + t * 3.5, rr = R * (1.3 - t * 0.3); ctx.lineTo(Math.cos(aa) * rr, Math.sin(aa) * rr); }
-        ctx.stroke();
-        const aa = a0 + q * 3.5, rr = R * (1.3 - q * 0.3);
-        sprLeaf(ctx, Math.cos(aa) * rr, Math.sin(aa) * rr, aa + 1.5, 9, '#8bc34a');
-    }
-    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, R);
-    g.addColorStop(0, `rgba(204, 255, 144, ${0.6 * q})`); g.addColorStop(1, 'rgba(85, 139, 47, 0)');
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.fill();
-    ctx.restore();
 }
 
 // ==========================================
@@ -559,30 +540,6 @@ function drawUltGround(ef) {
             ctx.restore();
             return true;
         }
-        case 'spore_cloud': { // Druid Savage Blooms: a glowing meadow of spore flowers
-            if (!ef.isFriendly) return false;
-            const R = ef.radius, a = Math.min(1, ef.life / 0.8, ultElapsed(ef) / 0.4);
-            if (!ef.flowers) ef.flowers = Array.from({ length: 14 }, (_, i) => { const an = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * R * 0.85; return { x: Math.cos(an) * r, y: Math.sin(an) * r, s: 0.7 + Math.random() * 0.6, rot: Math.random() * 6, ph: Math.random() * 6 }; });
-            ctx.save();
-            ctx.translate(ef.x, ef.y);
-            const g = ctx.createRadialGradient(0, 0, 0, 0, 0, R);
-            g.addColorStop(0, `rgba(205, 220, 57, ${0.18 * a})`); g.addColorStop(1, 'rgba(139, 195, 74, 0)');
-            ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.fill();
-            ctx.globalAlpha = a;
-            for (const f of ef.flowers) {
-                const grow = Math.min(1, ultElapsed(ef) * 3);
-                ctx.save(); ctx.translate(f.x, f.y); ctx.rotate(f.rot); ctx.scale(f.s * grow, f.s * grow);
-                for (let i = 0; i < 5; i++) { ctx.rotate(Math.PI * 2 / 5); sprEllipse(ctx, 6, 0, 5.5, 3.2, '#558b2f'); }
-                ctx.globalCompositeOperation = 'lighter';
-                const glow = 0.6 + 0.4 * Math.sin(fxTime * 3 + f.ph);
-                const cg = ctx.createRadialGradient(0, 0, 0, 0, 0, 9);
-                cg.addColorStop(0, `rgba(238, 255, 65, ${glow})`); cg.addColorStop(1, 'rgba(205, 220, 57, 0)');
-                ctx.fillStyle = cg; ctx.beginPath(); ctx.arc(0, 0, 9, 0, Math.PI * 2); ctx.fill();
-                ctx.restore();
-            }
-            ctx.restore();
-            return true;
-        }
     }
     return false;
 }
@@ -598,6 +555,61 @@ function drawUltEffect(ef, p, k) {
         case 'dragon_head': case 'clone_strike': case 'katana_tornado':
             return true;
 
+        case 'gale_gust': { // Ranger Gale Volley (combos.js): wind ribbons whirl round the Volley until its last arrow is driven in
+            const el = ef.maxLife - ef.life, a = Math.min(1, el / 0.12, ef.life / 0.3); // fades in fast, out at the end
+            ctx.save(); ctx.lineCap = 'round';
+            for (let i = 0; i < 3; i++) { // each ribbon is a run of short arcs that thin and fade toward its tail
+                const r = ef.radius * (0.55 + 0.22 * i) + Math.sin(fxTime * 6 + i) * 6, head = fxTime * (7 - i) + i * 2.1;
+                for (let s = 0; s < 8; s++) {
+                    const f = 1 - s / 8, a0 = head - (s + 1) * 0.28, a1 = head - s * 0.28 + 0.02;
+                    ctx.strokeStyle = `rgba(129, 199, 132, ${0.5 * a * f})`; ctx.lineWidth = 4 + 9 * f; // a soft green body under the white
+                    ctx.beginPath(); ctx.arc(ef.x, ef.y, r, a0, a1); ctx.stroke();
+                    ctx.strokeStyle = `rgba(255, 255, 255, ${0.95 * a * f})`; ctx.lineWidth = 1.5 + 5 * f;
+                    ctx.beginPath(); ctx.arc(ef.x, ef.y, r, a0, a1); ctx.stroke();
+                }
+            }
+            ctx.fillStyle = `rgba(200, 230, 201, ${0.12 * a})`; // a pale wash over the circle
+            ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.radius, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+            return true;
+        }
+        case 'wyrmfall_pillar': { // Dragonknight Wyrmfall (combos.js): the breath comes straight down onto the knight
+            const col = ef.frost ? '79, 195, 247' : '255, 112, 67', hot = ef.frost ? '225, 245, 254' : '255, 236, 179';
+            if (!ef.burstDone) {
+                ef.burstDone = true;
+                burst(ef.x, ef.y, 0, Math.PI * 2, 24, { kind: 'dot', color: ef.frost ? '#81d4fa' : '#ffab40', size: 3, life: 0.5, speed: [200, 480], drag: 4 });
+                burst(ef.x, ef.y, 0, Math.PI * 2, 10, { kind: 'smoke', color: ef.frost ? '#b3e5fc' : '#424242', size: 8, grow: 30, life: 0.7, speed: [60, 160], drag: 3 });
+            }
+            const R = 40 + 50 * p; // a bright core that spreads as it hits the ground
+            ctx.save(); ctx.globalCompositeOperation = 'lighter';
+            const g = ctx.createRadialGradient(ef.x, ef.y, 0, ef.x, ef.y, R);
+            g.addColorStop(0, `rgba(255, 255, 255, ${k})`); g.addColorStop(0.35, `rgba(${hot}, ${0.9 * k})`); g.addColorStop(1, `rgba(${col}, 0)`);
+            ctx.fillStyle = g; ctx.beginPath(); ctx.arc(ef.x, ef.y, R, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+            return true;
+        }
+        case 'wyrmfall_ring': { // one of Wyrmfall's rings of fire rolling out over the ground
+            const R = ef.radius * easeOut(p), band = 26, deep = ef.frost ? '2, 136, 209' : '216, 67, 21', col = ef.frost ? '79, 195, 247' : '255, 112, 67', rim = ef.frost ? '225, 245, 254' : '255, 213, 79';
+            const a = Math.min(1, k * 1.6); // stays strong for most of its roll, then fades
+            ctx.save();
+            ctx.fillStyle = `rgba(${deep}, ${0.55 * a})`; // the band of flame itself (painted, so it reads on bright grass)
+            ctx.beginPath(); ctx.arc(ef.x, ef.y, R, 0, Math.PI * 2); ctx.arc(ef.x, ef.y, Math.max(0, R - band), 0, Math.PI * 2, true); ctx.fill();
+            ctx.globalCompositeOperation = 'lighter';
+            const g = ctx.createRadialGradient(ef.x, ef.y, Math.max(0, R - band), ef.x, ef.y, R + 4);
+            g.addColorStop(0, `rgba(${col}, 0)`); g.addColorStop(0.6, `rgba(${col}, ${0.6 * a})`); g.addColorStop(1, `rgba(${rim}, ${0.8 * a})`);
+            ctx.fillStyle = g; ctx.beginPath(); ctx.arc(ef.x, ef.y, R + 4, 0, Math.PI * 2); ctx.arc(ef.x, ef.y, Math.max(0, R - band), 0, Math.PI * 2, true); ctx.fill();
+            const n = Math.max(10, Math.round(R / 7)); // flame tongues licking outward along the front
+            for (let i = 0; i < n; i++) {
+                const ang = i * Math.PI * 2 / n + (i % 2) * 0.05, L = (16 + 9 * Math.sin(fxTime * 22 + i * 2.3)) * (0.6 + 0.4 * a), w = 0.55 * Math.PI * 2 / n;
+                ctx.fillStyle = i % 2 ? `rgba(${rim}, ${0.9 * a})` : `rgba(${col}, ${0.9 * a})`;
+                ctx.beginPath(); ctx.moveTo(ef.x + Math.cos(ang - w) * (R - 6), ef.y + Math.sin(ang - w) * (R - 6));
+                ctx.quadraticCurveTo(ef.x + Math.cos(ang - w * 0.3) * (R + L * 0.6), ef.y + Math.sin(ang - w * 0.3) * (R + L * 0.6), ef.x + Math.cos(ang) * (R + L), ef.y + Math.sin(ang) * (R + L));
+                ctx.quadraticCurveTo(ef.x + Math.cos(ang + w * 0.3) * (R + L * 0.6), ef.y + Math.sin(ang + w * 0.3) * (R + L * 0.6), ef.x + Math.cos(ang + w) * (R - 6), ef.y + Math.sin(ang + w) * (R - 6));
+                ctx.fill();
+            }
+            ctx.restore();
+            return true;
+        }
         case 'arrow_rain': { // Ranger Volley: launch streaks, the target reticle, then arrows stuck in the ground
             const el = ultElapsed(ef);
             ctx.save();
@@ -611,14 +623,15 @@ function drawUltEffect(ef, p, k) {
                 ctx.globalCompositeOperation = 'source-over';
             }
             const lastLand = Math.max(...ef.arrows.map(a => a.t));
-            if (el < lastLand + 0.2) { // reticle over the target area
+            if (el < lastLand + 0.2 && !ef.trail) { // reticle over the target area (the Vault finisher's trail has none)
                 const ra = Math.min(1, el / 0.15, (lastLand + 0.2 - el) / 0.2);
                 ctx.translate(ef.x, ef.y);
-                ctx.strokeStyle = `rgba(197, 225, 165, ${0.75 * ra})`; ctx.lineWidth = 2;
+                const tint = ef.storm ? '128, 216, 255' : ef.gale ? '224, 242, 241' : '197, 225, 165'; // combos.js: Thunderstorm / Gale Volley
+                ctx.strokeStyle = `rgba(${tint}, ${0.75 * ra})`; ctx.lineWidth = ef.storm || ef.gale ? 3 : 2;
                 ctx.setLineDash([10, 7]); ctx.lineDashOffset = fxTime * 30;
                 ctx.beginPath(); ctx.arc(0, 0, ef.radius, 0, Math.PI * 2); ctx.stroke();
                 ctx.setLineDash([]);
-                ctx.fillStyle = `rgba(139, 195, 74, ${0.1 * ra})`; ctx.fill();
+                ctx.fillStyle = ef.storm ? `rgba(41, 182, 246, ${0.16 * ra})` : `rgba(139, 195, 74, ${0.1 * ra})`; ctx.fill();
                 ctx.lineWidth = 1.5;
                 for (let i = 0; i < 4; i++) {
                     const an = i * Math.PI / 2, r0 = ef.radius * 0.15, r1 = ef.radius * 0.35;
@@ -629,7 +642,7 @@ function drawUltEffect(ef, p, k) {
             for (const a of ef.arrows) { // landed arrows stay stuck in the ground for a moment
                 if (el < a.t) continue;
                 const fade = Math.min(1, ef.life / 0.6);
-                drawArrowShape(a.x, a.y, -Math.PI / 2 + 0.35, ef.heavy ? 13 : 10, ef.heavy, fade);
+                drawArrowShape(a.x, a.y, Math.atan2(170, -26), ef.heavy ? 13 : 10, ef.heavy, fade); // head in the ground, leaning the way it fell (it used to point up out of it)
             }
             ctx.restore();
             return true;
@@ -711,30 +724,6 @@ function drawUltEffect(ef, p, k) {
             return true;
         }
 
-        case 'wild_shift': { // Druid Aspect of the Wild: the cocoon bursts and the wolf's roar rolls out
-            const el = ultElapsed(ef);
-            if (el < 0.24) return true; // the cocoon is drawn over the hero (drawUltOverlay)
-            if (!ef.burstDone) {
-                ef.burstDone = true;
-                burst(player.x, player.y, 0, Math.PI * 2, 18, { kind: 'leaf', color: '#7cb342', size: 8, life: 0.8, speed: [150, 360], drag: 3 });
-                burst(player.x, player.y, 0, Math.PI * 2, 8, { kind: 'leaf', color: '#6d4c41', size: 6, life: 0.7, speed: [120, 300], drag: 3 });
-                burst(player.x, player.y, 0, Math.PI * 2, 10, { kind: 'debris', color: '#5d4037', size: 3, life: 0.5, speed: [100, 260], drag: 5 });
-                addShake(3.5);
-            }
-            const q = (el - 0.24) / (ef.maxLife - 0.24);
-            ctx.save();
-            ctx.globalCompositeOperation = 'lighter';
-            ctx.translate(ef.x, ef.y);
-            for (let i = 0; i < 3; i++) { // three broken sound rings
-                const qi = clamp01(q * 1.3 - i * 0.15);
-                if (qi <= 0 || qi >= 1) continue;
-                const R = 30 + (ef.radius - 30) * easeOut(qi);
-                ctx.strokeStyle = `rgba(204, 255, 144, ${0.8 * (1 - qi)})`; ctx.lineWidth = 4 * (1 - qi) + 1;
-                for (let s = 0; s < 6; s++) { const a0 = s * Math.PI / 3 + i * 0.5; ctx.beginPath(); ctx.arc(0, 0, R, a0, a0 + 0.75); ctx.stroke(); }
-            }
-            ctx.restore();
-            return true;
-        }
     }
     return false;
 }
@@ -749,7 +738,7 @@ function drawUltOverlay() {
         else if (ef.type === 'meteor_fall') drawMeteorRock(ef);
         else if (ef.type === 'clone_strike') drawCloneStrike(ef);
         else if (ef.type === 'katana_tornado') drawKatanaTornado(ef);
-        else if (ef.type === 'wild_shift') drawVineCocoon(ef);
+        else if (ef.type === 'gale_gather') drawGaleGather(ef);
         else if (ef.type === 'arrow_rain') { // arrows dropping out of the sky, each over its growing shadow
             const el = ultElapsed(ef);
             for (const a of ef.arrows) {
@@ -805,9 +794,6 @@ function updateUltEmitters(dt) {
                 break;
             case 'consecrated_ground':
                 emit(ef.radius / 8, dt, () => { const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * ef.radius; spawnParticle({ kind: 'dot', color: Math.random() < 0.5 ? '#fff8e1' : '#ffca28', x: ef.x + Math.cos(a) * r, y: ef.y + Math.sin(a) * r, vx: jitter(14), vy: -50 - Math.random() * 40, size: 1.7, life: 0.7, drag: 0.5, grow: 0, spin: 0, rot: 0 }); });
-                break;
-            case 'spore_cloud':
-                if (ef.isFriendly && ef.flowers) emit(12, dt, () => { const f = ef.flowers[Math.floor(Math.random() * ef.flowers.length)]; spawnParticle({ kind: 'dot', color: '#eeff41', x: ef.x + f.x, y: ef.y + f.y, vx: jitter(20), vy: -30, size: 1.6, life: 0.9, drag: 0.5, grow: 0, spin: 0, rot: 0 }); });
                 break;
         }
     }

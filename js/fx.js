@@ -48,8 +48,8 @@ function spawnHitFx(enemy, source, projAngle) {
     const ix = enemy.x - Math.cos(ang) * r * 0.7, iy = enemy.y - Math.sin(ang) * r * 0.7;
     let color = HIT_COLORS[selectedClassId] || '#ffffff';
     if (selectedClassId === 'cleric' && buffs.lastSpellClass === 'shadow') color = '#ce93d8';
-    if (isWildForm()) color = '#ff7043';
-    const melee = source === 'melee_basic' || source === 'melee' || source === 'slash';
+    if (source === 'wolf') color = '#ffccbc'; // druid.js: the wolf's bites
+    const melee = source === 'melee_basic' || source === 'melee' || source === 'slash' || source === 'wolf';
 
     burst(ix, iy, ang, 1.6, melee ? 8 : 5, { kind: 'spark', color, size: 2.5, life: 0.22, speed: [180, 440], drag: 6 });
     burst(ix, iy, ang, 2.4, 3, { kind: 'dot', color: '#ffffff', size: 2.2, life: 0.18, speed: [40, 140] });
@@ -57,7 +57,6 @@ function spawnHitFx(enemy, source, projAngle) {
 
     // Heavy hits shake the camera a little
     if (source === 'melee_basic' && selectedClassId === 'paladin' && !hammerAway()) addShake(3);
-    else if (source === 'melee_basic' && isWildForm() && player.lastWolfStep === 2) addShake(2.5);
     else if (source === 'slash' && selectedClassId === 'swordsaint' && player.stance === 'handheld' && player.lastAttackStep === 2) addShake(3);
     else if (selectedClassId === 'machinist' && source === 'ranged' && Math.hypot(enemy.x - player.x, enemy.y - player.y) < 140) addShake(2);
 }

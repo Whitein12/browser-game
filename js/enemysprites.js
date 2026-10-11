@@ -132,6 +132,7 @@ function drawCrown(c, x, y, r, tilt) {
 }
 
 function drawEnemySprite(e) {
+    if (e.dummy) return drawTrainingDummy(e); // training.js
     if (!SLIME_TYPES[e.type]) return false;
     if (e.flyUntil > fxTime) return true; // still in the air as a goo_arc (flung minions, the Queen's eggs)
     if (e.type === 'slime_melee') {
@@ -332,6 +333,9 @@ function drawAmalgam(e) {
     if (e.firedAt && t - e.firedAt < 0.3) inflate = -0.12 * (1 - (t - e.firedAt) / 0.3); // recoil after the burst
     if (e.state === 'devastate') { const k = clamp01(1 - e.stateTimer); inflate = 0.12 * k + Math.sin(t * 30) * 0.03 * k; glow = k; }
     if (e.state === 'stampede') squeeze = [1.24, 0.84];
+    if (e.submerged) { drawUndertow(e); return; } // ai.js Undertow: only a ripple shows where it travels
+    if (e.state === 'undertow_sink') { const k = clamp01(1 - e.stateTimer / 0.6); scale *= 1 - 0.7 * k; squeeze = [1 + 0.6 * k, 1 - 0.5 * k]; } // it melts flat into the floor
+    if (e.state === 'undertow_erupt') { const k = clamp01((t - e.eruptAt) / 0.4); scale *= Math.max(0.3, 1 + 2.7 * Math.pow(k - 1, 3) + 1.7 * Math.pow(k - 1, 2)); squeeze = [1 - 0.25 * (1 - k), 1 + 0.35 * (1 - k)]; }
     if (intro !== undefined) {
         animMotion(e);
         if (intro < 0.5) { // the pool it forms from, spreading where the streams meet
@@ -392,6 +396,21 @@ function drawAmalgam(e) {
             c.restore();
         },
     });
+}
+
+// The Amalgam under the floor: a dark patch with rings spreading from it, bubbles, and a goo trail behind
+function drawUndertow(e) {
+    const c = ctx, t = fxTime, R = e.size * 0.75;
+    if (fxTime - (e.trailAt || 0) > 0.12) { e.trailAt = fxTime; effects.push({ type: 'slime_trail', x: e.x, y: e.y, r: R * 0.45, color: '#00695c', life: 1.6, maxLife: 1.6 }); }
+    c.save();
+    c.fillStyle = 'rgba(0, 60, 50, 0.5)'; c.beginPath(); c.ellipse(e.x, e.y, R, R * 0.8, 0, 0, Math.PI * 2); c.fill();
+    c.strokeStyle = '#1de9b6'; c.lineWidth = 2;
+    for (let k = 0; k < 3; k++) {
+        const p = (t * 1.6 + k / 3) % 1, s = 0.4 + p * 0.9;
+        c.globalAlpha = 0.65 * (1 - p); c.beginPath(); c.ellipse(e.x, e.y, R * s, R * 0.8 * s, 0, 0, Math.PI * 2); c.stroke();
+    }
+    c.restore();
+    if (Math.random() < 0.3) spawnParticle({ kind: 'dot', color: '#80cbc4', x: e.x + jitter(R * 0.6), y: e.y + jitter(R * 0.5), vx: 0, vy: -25, size: 3, life: 0.4, drag: 1, grow: 0, spin: 0, rot: 0 });
 }
 
 // Cave-stage ground decals: stalactite shadows and rubble, toxic puddles, goo flung through the air

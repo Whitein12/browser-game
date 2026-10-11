@@ -14,6 +14,9 @@ const MAP_SITES = [
     { id: 'frostpeak', name: 'Frostpeak Hollow', x: 505, y: 172, icon: 'spire', locked: true },
     { id: 'ember_forge', name: 'Ember Forge', x: 822, y: 262, icon: 'volcano', locked: true },
     { id: 'sunken_crypt', name: 'Sunken Crypt', x: 420, y: 498, icon: 'crypt', locked: true },
+    // Not a dungeon: a small card in the sea (training.js). box: drawn and hit-tested as a card, not a site
+    { id: 'training', name: 'Training Room', levels: 'Practice yard', color: '#8d6e63', x: 112, y: 120, box: true,
+      desc: 'A sand yard with straw dummies. No waves, no loot: set your skills, evolutions and gear, place dummies and practise your combos.' },
 ];
 const MAP_ROUTES = [['slime_caves', 'bandit_bastion', 1], ['slime_caves', 'frostpeak', -1], ['bandit_bastion', 'ember_forge', -1], ['bandit_bastion', 'sunken_crypt', 1]];
 
@@ -361,6 +364,25 @@ function drawSeal(c, x, y, r, col, s) {
     }
     c.restore();
 }
+// The Training Room's card: a small framed parchment label in the sea, a straw dummy beside the name
+function drawTrainingBox(c, s, t, hov) {
+    const w = 150, h = 44;
+    c.save(); c.translate(s.x, s.y - (hov ? 2 : 0));
+    c.shadowColor = 'rgba(40, 20, 5, 0.45)'; c.shadowBlur = hov ? 10 : 5; c.shadowOffsetY = 2;
+    c.fillStyle = hov ? PARCH_LIGHT : PARCH; c.fillRect(-w / 2, -h / 2, w, h);
+    c.shadowColor = 'transparent';
+    c.strokeStyle = INK; c.lineWidth = 1.6; c.strokeRect(-w / 2, -h / 2, w, h);
+    c.strokeStyle = 'rgba(59, 40, 20, 0.45)'; c.lineWidth = 0.8; c.strokeRect(-w / 2 + 4, -h / 2 + 4, w - 8, h - 8);
+    const dx = -w / 2 + 22; // the dummy: a post, a crossbar, a straw body with a painted target
+    c.strokeStyle = INK; c.lineWidth = 1.4;
+    c.beginPath(); c.moveTo(dx, 14); c.lineTo(dx, -12); c.moveTo(dx - 10, -4 + Math.sin(t * 2) * 0.6); c.lineTo(dx + 10, -4 - Math.sin(t * 2) * 0.6); c.stroke();
+    c.fillStyle = '#d9b46a'; c.beginPath(); c.arc(dx, 0, 7, 0, Math.PI * 2); c.fill(); c.stroke();
+    c.fillStyle = '#a3301c'; c.beginPath(); c.arc(dx, 0, 3, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#bfa07a'; c.beginPath(); c.arc(dx, -11, 4, 0, Math.PI * 2); c.fill(); c.stroke();
+    c.restore();
+    mapLabel(c, s.name, s.x + 18, s.y - 6 - (hov ? 2 : 0), 15, { bold: true });
+    mapLabel(c, s.levels, s.x + 18, s.y + 11 - (hov ? 2 : 0), 11, { italic: true, color: '#6b3a1a' });
+}
 function drawFog(c, s, t) { // drifting clouds hide uncharted places
     for (let i = 0; i < 6; i++) {
         const a = i * 1.7 + t * 0.12 * (i % 2 ? 1 : -1), r = 22 + (i % 3) * 7;
@@ -390,6 +412,7 @@ function drawMapFrame(t) {
     }
 
     for (const s of MAP_SITES) {
+        if (s.box) { drawTrainingBox(c, s, t, mapHover === s); continue; }
         const hov = mapHover === s, pulse = 0.5 + 0.5 * Math.sin(t * 2.4);
         c.save();
         if (!s.locked) {
@@ -424,13 +447,13 @@ function sizeMap() {
     if (cv.width !== pw || cv.height !== ph) { cv.width = pw; cv.height = ph; mapCache = null; }
     mapPixel = pw / MAP_W;
 }
-function siteAt(mx, my) { return MAP_SITES.find(s => Math.hypot(mx - s.x, my - (s.y + 10)) < 48) || null; }
+function siteAt(mx, my) { return MAP_SITES.find(s => s.box ? Math.abs(mx - s.x) < 78 && Math.abs(my - s.y) < 24 : Math.hypot(mx - s.x, my - (s.y + 10)) < 48) || null; }
 function showMapInfo(s) {
     const box = el('map-info');
     if (!s) { box.classList.add('hidden'); return; }
     box.innerHTML = s.locked
         ? `<div class="mi-name">${s.name}</div><div class="mi-lv">Uncharted territory</div><p>The fog hasn't lifted from this region yet. Coming in a future update.</p>`
-        : `<div class="mi-name" style="color:${s.color}">${s.name}</div><div class="mi-lv">${s.levels}</div><p>${s.desc}</p><div class="mi-boss">Bosses: ${s.bosses}</div><div class="mi-go">Click to travel &rsaquo;</div>`;
+        : `<div class="mi-name" style="color:${s.color}">${s.name}</div><div class="mi-lv">${s.levels}</div><p>${s.desc}</p>${s.bosses ? `<div class="mi-boss">Bosses: ${s.bosses}</div>` : ''}<div class="mi-go">Click to ${s.box ? 'enter' : 'travel'} &rsaquo;</div>`;
     box.classList.remove('hidden');
     const right = s.x < MAP_W * 0.55, bw = box.offsetWidth, bh = box.offsetHeight;
     let left = (right ? s.x + 62 : s.x - 62) * mapScale - (right ? 0 : bw), top = (s.y - 30) * mapScale - bh / 2;

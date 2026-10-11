@@ -4,12 +4,12 @@
 
 // Menu flow: dungeon map (menu.js) -> class carousel -> run
 window.selectDungeon = (did) => { activeDungeonId = did; activeDungeon = enemyDataConfig[did]; showClassSelection(); };
-window.chooseClass = (cid) => { selectedClassId = cid; startGame(cid); };
+window.chooseClass = (cid) => { selectedClassId = cid; if (cid === 'druid') showCompanionChoice(); else startGame(cid); }; // druid.js: wolf or black jaguar first
 
 function startGame(className) {
     activeClass = JSON.parse(JSON.stringify(classDataConfig[className])); 
     player.color = activeClass.color; player.x = canvas.width / 2; player.y = canvas.height / 2;
-    player.level = 1; player.xp = 0; player.maxXp = 50; player.gold = 0; player.bonusDmg = 0.0; player.bonusMaxHp = 0; player.skillPoints = 1;
+    player.level = 1; player.xp = 0; player.maxXp = 50; player.gold = 0; player.bonusDmg = 0.0; player.orbDmg = 0.0; player.bonusMaxHp = 0; player.skillPoints = 1;
     wave = 0; equipment = { weapon: null, armor: null, amulet: null, boots: null, gloves: null }; inventory = [];
     isEndlessMode = false;
     
@@ -17,21 +17,24 @@ function startGame(className) {
     player.flow = 0; player.maxFlow = 100; player.stance = 'handheld'; player.comboStep = 0; player.comboTimer = 0;
     player.airborneBlade = { x: player.x, y: player.y, angle: 0, overrideX: null, overrideY: null, attackTimer: 0 };
     player.flowGainTimer = 0; // for decay tracking
+    player.arcaneResonance = 0; // Spellweaver Resonance charges
+    player.scrap = 0; // Machinist Scrap (bigger turrets)
 
     recalcStats(); player.hp = player.maxHp; player.shield = 0; player.shieldTimer = 0; player.markTimer = 0; player.cowlCooldown = 0; player.iFrames = 0;
-    buffs.rooted = 0; buffs.powerSurgeStacks = 0; buffs.powerSurgeTimer = 0; buffs.weakened = 0; buffs.evade100 = 0; buffs.deathMarkActive = 0; buffs.overclockTimer = 0;
-    player.phantomDecoy = null; player.pounceCharges = 0; player.pounceRecharge = 0;
-    player.dash = null; player.z = 0; player.grappleTarget = null; dashGhosts.length = 0;
-    player.wolfComboStep = 0; player.wolfComboTimer = 0; player.lastWolfStep = 0;
+    buffs.rooted = 0; buffs.weakened = 0; buffs.evade100 = 0; buffs.deathMarkActive = 0; buffs.overclockTimer = 0; buffs.dragonfire = 0; buffs.lightningRod = false;
+    player.phantomDecoy = null;
+    player.dash = null; player.z = 0; player.grappleTarget = null; player.charge = null; player.heavy = null; comboOpen = null; dashGhosts.length = 0;
     resetPaladinState();
     enemies.length = 0; projectiles.length = 0; effects.length = 0; drops.length = 0; gameTimers.length = 0; particles.length = 0;
     currentMap.type = null; setStageMap(mapTypeForWave(1)); // stage.js: places the hero at the map's start
+    resetDruidState(true); // druid.js: the wolf starts at the hero's side, Bond empty
     
     el('start-screen').classList.add('hidden'); 
-    resetHUD(); shopWave = -1;
+    resetHUD(); shopWave = -1; waveBreak = 0;
     el('hud').classList.remove('hidden');
     el('hud-top').classList.remove('hidden');
-    triggerLevelUp("Choose Starting Skill");
+    if (isTraining()) startTraining(); // training.js: no waves, every skill at rank 1, the panel
+    else triggerLevelUp("Choose Starting Skill");
     loop();
 }
 
@@ -45,8 +48,10 @@ window.startEndlessMode = function() {
 }
 
 window.startNextWave = function() {
-    wave++;
-    resetPaladinState(); // the Paladin's hammer returns to hand between waves
+    // Regular waves start mid-fight (stage.js onWaveCleared), so only a new run, a new map or a screen resets the hero's kit
+    const fresh = gameState !== STATE.PLAYING || wave === 0 || mapTypeForWave(wave + 1) !== currentMap.type;
+    wave++; waveBreak = 0;
+    if (fresh) resetPaladinState(); // the Paladin's hammer returns to hand
     isBossWave = (wave % 5 === 0); 
     bossSpawned = false;
     enemiesToSpawn = isBossWave ? 4 : 3 + Math.floor(wave * 2.5); 
@@ -54,7 +59,7 @@ window.startNextWave = function() {
     if (activeDungeonId === 'bandit_bastion' && wave === 11 && !isEndlessMode) { isBossWave = true; enemiesToSpawn = 0; }
     setStageMap(mapTypeForWave(wave)); // stage.js
     player.exitFade = 0; player.fadeOut = 0;
-    player.dash = null; player.z = 0; player.grappleTarget = null; // never carry a dash across a map change
+    if (fresh) { player.dash = null; player.z = 0; player.grappleTarget = null; player.charge = null; player.heavy = null; } // never carry a dash or a charge across a map change
 
     if (activeDungeonId === 'bandit_bastion' && wave === 11 && !isEndlessMode) {
         currentMap.valeriusTriggered = false;
@@ -62,6 +67,8 @@ window.startNextWave = function() {
         player.y = (currentMap.top + currentMap.bottom) / 2;
     }
 
+    if (fresh) resetDruidState(); // druid.js: the companion comes back to heel (spirits stay through a regular wave)
+    if (wave > 1) awakenWeapon(); // items.js: the last wave was cleared, so the rare weapon grows
     el('intermission-screen').classList.add('hidden'); el('inventory-screen').classList.add('hidden'); el('shop-screen').classList.add('hidden');
     player.hp = Math.min(player.maxHp, player.hp + (player.maxHp * 0.3)); 
     waveStats = { kills: 0, gold0: player.gold, time: 0, dmgTaken: 0, peak: 0 };
@@ -103,12 +110,8 @@ function recalcStats() {
 
     let gearMs = equipment.boots ? equipment.boots.val : 0;
     player.speed = 250 + gearMs;
-    if (equipment.armor && equipment.armor.name === 'Windrunner Tunic') player.speed *= 1.3;
     
     player.maxFlow = 100;
-    if (activeClass && activeClass.name === 'Swordsaint' && equipment.amulet && equipment.amulet.name === 'Prismatic Core') {
-        player.maxFlow *= 1.25;
-    }
     
     if (typeof updateHUD === "function") updateHUD();
 }
@@ -157,20 +160,24 @@ function spawnEnemy() {
     for (const minion of minionList) { cumulative += minion.weight; if (roll <= cumulative) { m = minion; break; } }
     
     const speed = m.baseSpeed + Math.random() * m.speedVar + (wave * 2.5); 
-    enemies.push({ x: ex, y: ey, size: m.size, color: m.color, speed: speed, hp: m.baseHp + (wave * m.hpScale), maxHp: m.baseHp + (wave * m.hpScale), type: m.type, dmg: m.baseDmg + (wave * m.dmgScale), xp: m.baseXp + (wave * m.xpScale), attackTimer: m.attackTimer || 0, meleeTimer: 0, ammo: m.ammo || 0, frozenTimer: 0, facingAngle: 0, shieldHp: m.shieldHp, shieldMax: m.shieldMax, puddleTimer: m.puddleTimer || 0, bleedTimer: 0, bleedDmg: 0, orbs: m.orbs || 0, spawnFrom });
+    enemies.push({ x: ex, y: ey, size: m.size, color: m.color, speed: speed, hp: m.baseHp + (wave * m.hpScale), maxHp: m.baseHp + (wave * m.hpScale), type: m.type, dmg: m.baseDmg + (wave * m.dmgScale), xp: m.baseXp + (wave * m.xpScale), attackTimer: m.attackTimer || 0, meleeTimer: 0, ammo: m.ammo || 0, frozenTimer: 0, facingAngle: 0, shieldHp: m.shieldHp, shieldMax: m.shieldMax, puddleTimer: m.puddleTimer || 0, bleedTimer: 0, bleedDmg: 0, orbs: m.orbs || 0, maxOrbs: m.orbs || 0, spawnFrom });
     onEnemySpawned(enemies[enemies.length - 1]); // stage.js
     updateHUD();
 }
 
 window.addEventListener('mousemove', e => { mouseScreenX = e.clientX; mouseScreenY = e.clientY; mouseX = e.clientX + camera.x; mouseY = e.clientY + camera.y; }); // world coordinates
 window.addEventListener('mousedown', e => { 
-    if (e.button === 0) isMouseDown = true; 
-    if (e.button === 2 && equipment.weapon && equipment.weapon.rarity === 'rare' && activeClass.rareWeapon.rmbSkill && (cooldowns.rmb <= 0 || devNoCooldowns) && gameState === STATE.PLAYING && !(stageEvent && stageEvent.blocking)) {
-        cooldowns.rmb = devNoCooldowns ? 0 : 4.0 * getCDR();
-        window.SkillRegistry[activeClass.name]['rmb']();
+    if (e.button === 0) { isMouseDown = true; lmbClicked = gameState === STATE.PLAYING; lmbPressedAt = fxTime; } // skills.js: a Dragonknight click mid-cooldown still swings (not a menu click); combos.js: fresh-press gates
+    if (e.button === 2 && equipment.weapon && equipment.weapon.rarity === 'rare' && activeClass.rareWeapon.rmbSkill && (cooldowns.rmb <= 0 || devNoCooldowns) && gameState === STATE.PLAYING && !(stageEvent && stageEvent.blocking) && !player.charge) {
+        if (startCharge('rmb')) return; // hold-to-charge ability: it fires on release (mouseup)
+        castRmb();
     }
 });
-window.addEventListener('mouseup', e => { if (e.button === 0) isMouseDown = false; });
+window.addEventListener('mouseup', e => {
+    if (e.button === 0) isMouseDown = false;
+    if (e.button === 2) releaseCharge('rmb');
+});
+window.addEventListener('blur', () => { player.charge = null; player.heavy = null; isMouseDown = false; }); // a release we'll never hear about
 window.addEventListener('contextmenu', e => e.preventDefault());
 
 window.addEventListener('keydown', e => {
@@ -192,63 +199,19 @@ window.addEventListener('keydown', e => {
     const keyMap = { 'q': 1, 'e': 2, 'space': 3, 'r': 4 };
     if (keyMap[k]) {
         let i = keyMap[k];
+        if (player.charge && player.charge.slot === i) return; // key auto-repeat while a charge is held
         if ((cooldowns[`s${i}`] <= 0 || devNoCooldowns) && activeClass.skills[i].level > 0) {
-            if (activeClass.name === 'Swordsaint' && i === 2 && player.stance === 'handheld' && player.flow < player.maxFlow) {
+            if (activeClass.name === 'Swordsaint' && i === 2 && player.stance === 'handheld' && player.flow < player.maxFlow * (activeClass.skills[2].selectedUpg === 'B' ? 0.7 : 1)) { // Early Deploy: from 70%
                 effects.push({ type: 'text', text: 'Not Enough Flow!', x: player.x, y: player.y - 40, color: '#ff5252', life: 0.6, maxLife: 0.6 });
                 return;
             }
-            // Optional per-class gate (e.g. Paladin's Bastion Dome needs a deployed hammer); refusing keeps the cooldown unspent
+            // Optional per-class gate (e.g. the Paladin's shackle needs an enemy in range); refusing keeps the cooldown unspent
             const canCast = window.SkillRegistry[activeClass.name].canCast;
             if (canCast && !canCast(i)) return;
 
-            const sk = activeClass.skills[i];
-            let cdReduction = getCDR();
-            let baseCd = sk.maxCd;
-            
-            // Dash skills (usually Slot 3) and Swordsaint's Stance Toggle (Slot 2) get level-based cooldown scaling 
-            if (i === 3 || (activeClass.name === 'Swordsaint' && i === 2)) {
-                baseCd = calcCooldown(baseCd, sk.level);
-            }
-
-            cooldowns[`s${i}`] = devNoCooldowns ? 0 : baseCd * cdReduction;
-            cooldownMax[`s${i}`] = cooldowns[`s${i}`];
-            
-            if (equipment.amulet && equipment.amulet.name === 'Amulet of Power') {
-                buffs.powerSurgeStacks = Math.min(5, buffs.powerSurgeStacks + 1);
-                buffs.powerSurgeTimer = 3.0;
-            }
-
-            if (activeClass && activeClass.name === 'Cleric' && buffs.aspectOfReaper > 0 && i !== 4) {
-                // ASCENSION is cost-free to cast. Other abilities cost 8% max HP.
-                let cost = player.maxHp * 0.08;
-                player.hp -= cost;
-                effects.push({ type: 'text', x: player.x, y: player.y + 20, text: `-${Math.floor(cost)}`, color: '#e53935', life: 0.8, maxLife: 0.8 });
-                if (player.hp <= 0) player.hp = 1; // Don't let casting kill you technically? Let's just leave it at 1.
-            }
-
-            if (activeClass && activeClass.name === 'Cleric' && buffs.avatarOfRenewal > 0 && i !== 4) {
-                let bolts = 3;
-                for(let b=0; b<bolts; b++) {
-                    let angle = Math.random() * Math.PI * 2;
-                    projectiles.push({
-                        x: player.x, y: player.y, vx: Math.cos(angle)*400, vy: Math.sin(angle)*400,
-                        radius: 8, color: '#fff', life: 3.0, type: 'basic', shape: 'light_spear', damage: activeClass.skills[4].baseDmg ? calcDmg(activeClass.skills[4].baseDmg, activeClass.skills[4].level) : 50, pierce: false, isEnemy: false,
-                        customUpdate: function(dt, p) {
-                            let nearest = getNearestEnemyFromPoint(p.x, p.y, 400);
-                            if (nearest) {
-                                let [dx, dy, dist] = getVector(p.x, p.y, nearest.x, nearest.y);
-                                p.vx += (dx/dist)*900 * dt;
-                                p.vy += (dy/dist)*900 * dt;
-                                let vDist = Math.hypot(p.vx, p.vy);
-                                if (vDist > 600) { p.vx = (p.vx/vDist)*600; p.vy = (p.vy/vDist)*600; }
-                            }
-                        }
-                    });
-                }
-            }
-
-            let dmg = calcDmg(sk.baseDmg, sk.level);
-            window.SkillRegistry[activeClass.name][i](sk, dmg);
+            if (comboSkill(i)) return; // combos.js: a skill pressed in a Space window or mid-dash (Skyline Shot, Wyrmfall)
+            if (startCharge(i)) return; // hold-to-charge skill: it fires on release (keyup)
+            castSkill(i);
         }
     }
 });
@@ -256,19 +219,93 @@ window.addEventListener('keyup', e => {
     let k = e.key.toLowerCase(); 
     if (k === ' ') k = 'space';
     if (k === 'w') keys.w = false; if (k === 'a') keys.a = false; if (k === 's') keys.s = false; if (k === 'd') keys.d = false; 
+    const slot = { 'q': 1, 'e': 2, 'space': 3, 'r': 4 }[k]; if (slot) releaseCharge(slot);
 });
+
+// Cast skill slot i: spend the cooldown, run the on-cast class hooks, then the skill itself.
+// k is the charge fraction (0..1) for hold-to-charge skills, undefined otherwise.
+function castSkill(i, k, opt) { // opt: extra flags for the skill (combos.js, e.g. { skyline: true })
+    const sk = activeClass.skills[i];
+    let cdReduction = getCDR();
+    let baseCd = skillBaseCd(i, sk.level); // combat.js: only some slots get shorter with rank
+
+    cooldowns[`s${i}`] = devNoCooldowns ? 0 : baseCd * cdReduction;
+    cooldownMax[`s${i}`] = cooldowns[`s${i}`];
+    
+    if (activeClass && activeClass.name === 'Cleric' && buffs.avatarOfRenewal > 0 && i !== 4) {
+        let bolts = 3;
+        for(let b=0; b<bolts; b++) {
+            let angle = Math.random() * Math.PI * 2;
+            projectiles.push({
+                x: player.x, y: player.y, vx: Math.cos(angle)*400, vy: Math.sin(angle)*400,
+                radius: 8, color: '#fff', life: 3.0, type: 'basic', shape: 'light_spear', damage: calcDmg(activeClass.skills[4].baseDmg, activeClass.skills[4].level), pierce: false, isEnemy: false,
+                customUpdate: function(dt, p) {
+                    let nearest = getNearestEnemyFromPoint(p.x, p.y, 400);
+                    if (nearest) {
+                        let [dx, dy, dist] = getVector(p.x, p.y, nearest.x, nearest.y);
+                        p.vx += (dx/dist)*900 * dt;
+                        p.vy += (dy/dist)*900 * dt;
+                        let vDist = Math.hypot(p.vx, p.vy);
+                        if (vDist > 600) { p.vx = (p.vx/vDist)*600; p.vy = (p.vy/vDist)*600; }
+                    }
+                }
+            });
+        }
+    }
+
+    let dmg = calcDmg(sk.baseDmg, sk.level);
+    // items.js: what some rares need from before the cast (where you stood, your Zeal, the turret a grapple latches onto)
+    const before = { x: player.x, y: player.y, zeal: buffs.zealLocked && buffs.aspectOfReaper <= 0 ? 100 : (player.zeal || 0),
+        anchor: i === 3 && activeClass.name === 'Machinist' ? projectiles.find(p => (p.type === 'turret' || p.type === 'tesla_coil_trap') && Math.hypot(p.x - mouseX, p.y - mouseY) < 50) : null };
+    window.SkillRegistry[activeClass.name][i](sk, dmg, k, opt);
+    if (i === 3) { // combos.js: the dash (or a pull: Paladin charge / Iron Pull, Machinist grapple) opens the finisher window when it lands
+        comboCastAt = fxTime; // only an LMB press from now on counts for the finisher
+        if (player.dash) player.dash.combo = true; else if (player.grappleTarget) player.grappleTarget.combo = true;
+        else openCombo({ x0: before.x, y0: before.y, x1: player.x, y1: player.y }); // an instant one (Blink): the path from where it started
+    }
+    itemsOnCast(i, before);
+}
+
+function castRmb(k) {
+    cooldowns.rmb = devNoCooldowns ? 0 : 4.0 * getCDR();
+    window.SkillRegistry[activeClass.name]['rmb'](k);
+}
+
+// Hold-to-charge: SkillRegistry[class].charge[slot](sk) returns { max, slow } (and may start its own visuals),
+// or null to cast at once this time (e.g. the Machinist with too little Scrap).
+// Slot is 1-4 or 'rmb'. The cooldown starts on release, when the skill fires with the charge fraction.
+function startCharge(slot) {
+    const ch = window.SkillRegistry[activeClass.name].charge;
+    if (!ch || !ch[slot]) return false;
+    const cfg = ch[slot](slot === 'rmb' ? null : activeClass.skills[slot]);
+    if (!cfg) return false;
+    player.charge = { slot, t: 0, max: 1, slow: 1, ...cfg };
+    return true;
+}
+function releaseCharge(slot) {
+    const c = player.charge;
+    if (!c || c.slot !== slot) return;
+    player.charge = null;
+    if (gameState !== STATE.PLAYING || (stageEvent && stageEvent.blocking)) return; // released during a pause or cutscene: the charge is lost
+    const k = Math.min(1, c.t / c.max);
+    if (slot === 'rmb') castRmb(k); else castSkill(slot, k);
+}
 
 function update(dt) {
     if (stageEvent && stageEvent.blocking) { // stage.js cutscene: only the scene, effects and particles move
+        player.charge = null; // no charging through a cutscene
         updateStageEvent(dt); updateFx(dt);
         for (let i = effects.length - 1; i >= 0; i--) { if ((effects[i].life -= dt) <= 0) effects.splice(i, 1); }
         updateHUD(); return;
     }
     updateStage(dt);
+    updateTraining(dt); // training.js: dummy meters, god mode
+    if (waveBreak > 0 && (waveBreak -= dt) <= 0) { startNextWave(); return; } // the breather between regular waves ran out
     waveStats.time += dt;
     updateGameTimers(dt);
     updateFx(dt);
     updatePaladin(dt);
+    updateDruid(dt); // druid.js: the wolves
     if (enemiesToSpawn > 0) { enemySpawnTimer -= dt; if (enemySpawnTimer <= 0) { spawnEnemy(); enemySpawnTimer = Math.max(0.5, 2.0 - (wave * 0.1)); } }
     if (cooldowns.basic > 0) cooldowns.basic -= dt;
     if (cooldowns.rmb > 0) cooldowns.rmb -= dt;
@@ -276,46 +313,31 @@ function update(dt) {
     if (buffs.msBoost > 0) buffs.msBoost -= dt;
     if (buffs.slowed > 0) buffs.slowed -= dt;
     if (buffs.rooted > 0) buffs.rooted -= dt;
-    if (buffs.ironBulwark > 0) buffs.ironBulwark -= dt;
+    if (buffs.dragonfire > 0) buffs.dragonfire -= dt;
+    updateCombo(dt); // combos.js: the finisher window runs out
     if (buffs.weakened > 0) buffs.weakened -= dt;
     if (buffs.evade100 > 0) buffs.evade100 -= dt;
     if (buffs.deathMarkActive > 0) buffs.deathMarkActive -= dt;
-    if (buffs.wildFormTimer > 0) buffs.wildFormTimer -= dt;
     if (player.cowlCooldown > 0) player.cowlCooldown -= dt;
+    if (player.windGuardCd > 0) player.windGuardCd -= dt; // items.js: Windrunner Tunic
     if (player.vestmentCD > 0) player.vestmentCD -= dt;
     if (player.iFrames > 0) player.iFrames -= dt;
     if (player.phantomDecoy && player.phantomDecoy.life > 0) player.phantomDecoy.life -= dt;
 
-    if (buffs.powerSurgeTimer > 0) { buffs.powerSurgeTimer -= dt; if (buffs.powerSurgeTimer <= 0) buffs.powerSurgeStacks = 0; }
-    if (player.shield > 0 && !buffs.shieldDecayPaused) { player.shieldTimer -= dt; if (player.shieldTimer <= 0) { player.shield = 0; updateHUD(); } }
-    if (activeClass && activeClass.name === 'Dragonknight') { if (player.frenzyTimer > 0) { player.frenzyTimer -= dt; if (player.frenzyTimer <= 0) player.frenzyStacks = 0; } }
+    if (player.shield > 0) { player.shieldTimer -= dt; if (player.shieldTimer <= 0) { player.shield = 0; updateHUD(); } }
+    // Frenzy: after 3 s without a melee hit, stacks drain one every 0.5 s (a short dodge doesn't wipe the bar)
+    if (activeClass && activeClass.name === 'Dragonknight' && player.frenzyStacks > 0 && (player.frenzyTimer -= dt) <= 0) { player.frenzyStacks--; player.frenzyTimer = 0.5; }
     if (equipment.armor && equipment.armor.name === 'Hazard Suit') buffs.slowed = 0;
-
-    if (activeClass && activeClass.name === 'Druid') {
-        // Barkskin Shift ends when its shield breaks or expires
-        if (buffs.barkskin && player.shield <= 0) {
-            buffs.barkskin = false;
-            if (activeClass.skills[2].selectedUpg === 'B') { // Splintering Shell
-                effects.push({ type: 'bark_burst', x: player.x, y: player.y, radius: 180, life: 0.4, maxLife: 0.4 });
-                for (const e of enemies) if (Math.hypot(e.x - player.x, e.y - player.y) <= 180 + e.size/2) applyDamage(e, buffs.barkskinDmg, 'physical');
-            }
-        }
-        if (buffs.sporeSurgeTimer > 0) buffs.sporeSurgeTimer -= dt;
-        // Predatory Momentum: the extra Feral Pounce charge refills on its own timer
-        if (activeClass.skills[3].selectedUpg === 'B' && player.pounceCharges < 1) {
-            player.pounceRecharge -= dt;
-            if (player.pounceRecharge <= 0) player.pounceCharges = 1;
-        }
-    }
 
     if (activeClass && activeClass.name === 'Nightblade') {
         player.markTimer = (player.markTimer || 0) - dt;
         if (player.markTimer <= 0) {
             player.markTimer = 3.0;
-            let unmarked = enemies.filter(e => e.markAngle === undefined && Math.hypot(player.x - e.x, player.y - e.y) < 400);
-            let count = Math.floor(Math.random() * 3) + 1;
+            let unmarked = enemies.filter(e => e.markAngle === undefined && !e.dead && !e.pod && Math.hypot(player.x - e.x, player.y - e.y) < 400);
+            let count = Math.floor(Math.random() * 3) + 1 + (hasItem('Sigil of the Hunt') ? 1 : 0); // items.js
             for (let i=0; i<count && unmarked.length > 0; i++) {
-                let idx = Math.floor(Math.random() * unmarked.length);
+                // the biggest first (a boss always gets its weak point to hunt), then at random
+                let idx = i === 0 ? unmarked.reduce((b, e, j) => e.size > unmarked[b].size ? j : b, 0) : Math.floor(Math.random() * unmarked.length);
                 unmarked[idx].markAngle = Math.random() * Math.PI * 2;
                 unmarked.splice(idx, 1);
             }
@@ -337,6 +359,7 @@ function update(dt) {
         }
         if (buffs.aspectOfReaper > 0) {
             buffs.aspectOfReaper -= dt;
+            player.hp = Math.max(1, player.hp - player.maxHp * REAPER_DRAIN * dt); // the Reaper drinks your life while it lasts (it never kills; kills heal)
             buffs.zealLocked = true;
             player.zeal = 0;
             if (buffs.aspectOfReaper <= 0) buffs.zealLocked = false;
@@ -345,11 +368,6 @@ function update(dt) {
             buffs.ascension -= dt;
             // Maybe slight passive healing/dmg boost which we handle in dmg calc
         }
-    }
-
-    if (player.wolfComboTimer > 0) { // Druid Wild Form combo
-        player.wolfComboTimer -= dt;
-        if (player.wolfComboTimer <= 0) player.wolfComboStep = 0;
     }
 
     if (activeClass && activeClass.name === 'Swordsaint') {
@@ -366,13 +384,14 @@ function update(dt) {
             if (player.flowGainTimer >= 1.5) {
                 player.flow = Math.max(0, player.flow - (15 * dt)); // Decay 15 flow per second
             }
-            // Reposition blade to player
+            // Reposition blade to player (and drop a Guardian Orbit cut short by a recall)
             player.airborneBlade.x = player.x;
             player.airborneBlade.y = player.y;
+            player.airborneBlade.orbit = null;
             player.airborneBlade.angle = Math.atan2(mouseY - player.y, mouseX - player.x);
         } else if (player.stance === 'airborne') {
             // Flow constantly decays in Airborne to put a cap on it
-            player.flow = Math.max(0, player.flow - (10 * dt)); // Deplete a bit faster in Airborne
+            player.flow = Math.max(0, player.flow - (15 * (hasItem('Prismatic Core') ? 0.7 : 1) * airborneDrain(activeClass.skills[2].level) * dt)); // a full bar keeps the blade out ~6.7 s (~9.5 s at E rank 4 or with the Prismatic Core)
             if (player.flow <= 0) {
                 effects.push({ type: 'flash_line', x1: player.airborneBlade.x, y1: player.airborneBlade.y, x2: player.x, y2: player.y, color: '#00e5ff', life: 0.25, maxLife: 0.25, lineWidth: 6 });
                 effects.push({ type: 'circle_burst', x: player.x, y: player.y, radius: 40, color: 'rgba(0, 229, 255, 0.8)', life: 0.3, maxLife: 0.3 });
@@ -394,8 +413,10 @@ function update(dt) {
                 ab.overrideY = null;
             }
 
+            // Guardian Orbit (combos.js, the Spatial Swap finisher) circles the blade round you first; then steering, then seeking
+            if (ab.orbit) updateOrbit(ab, dt);
             // Override takes precedence (Left click follow & slash)
-            if (ab.overrideX !== null) {
+            else if (ab.overrideX !== null) {
                 let dx = ab.overrideX - ab.x; let dy = ab.overrideY - ab.y;
                 let dist = Math.hypot(dx, dy);
                 
@@ -417,9 +438,7 @@ function update(dt) {
                     let hitAnything = false;
                     for (const e of enemies) {
                         if (Math.hypot(e.x - ab.x, e.y - ab.y) < e.size / 2 + 50) {
-                            let dmg = activeClass.basicDmg * 1.2 * (1 + (player.flow/player.maxFlow));
-                            if (player.empoweredAirborne) dmg *= 1.5;
-                            applyDamage(e, dmg, 'slash');
+                            applyDamage(e, bladeHitDmg(BLADE_STEER_MULT), 'slash');
                             let slashColor = player.empoweredAirborne ? 'rgba(0, 229, 255, 0.9)' : 'rgba(0, 188, 212, 0.7)';
                             let slashRadius = player.empoweredAirborne ? 75 : 50;
                             effects.push({ type: 'slash', x: e.x, y: e.y, angle: ab.angle, color: slashColor, life: 0.15, maxLife: 0.15, radius: slashRadius });
@@ -428,7 +447,7 @@ function update(dt) {
                     }
                     if (hitAnything) {
                         let stanceBonus = (player.flow / player.maxFlow) * 0.5;
-                        ab.attackTimer = (player.empoweredAirborne ? 0.1 : 0.2) / (1 + stanceBonus); 
+                        ab.attackTimer = (player.empoweredAirborne ? 0.1 : 0.2) / (1 + stanceBonus) / bladeAttackSpeed(); 
                     }
                 } else {
                     ab.attackTimer -= dt;
@@ -475,12 +494,9 @@ function update(dt) {
                     ab.attackTimer -= dt;
                     // If close, damage as it flies through
                     if (ab.attackTimer <= 0 && dist < bestTarget.size / 2 + 50) {
-                        let dmg = activeClass.basicDmg * (1 + (player.flow/player.maxFlow));
-                        if (player.empoweredAirborne) dmg *= 1.5;
-                        
-                        applyDamage(bestTarget, dmg, 'slash');
+                        applyDamage(bestTarget, bladeHitDmg(1), 'slash');
                         let stanceBonus = (player.flow / player.maxFlow) * 0.5; 
-                        ab.attackTimer = Math.max(player.empoweredAirborne ? 0.1 : 0.2, (player.empoweredAirborne ? 0.3 : 0.6) / (1 + stanceBonus)); 
+                        ab.attackTimer = Math.max(player.empoweredAirborne ? 0.1 : 0.2, (player.empoweredAirborne ? 0.3 : 0.6) / (1 + stanceBonus)) / bladeAttackSpeed(); 
                     }
                 } else {
                     // Orbit player smoothly
@@ -542,12 +558,12 @@ function update(dt) {
 
                     mb.attackTimer -= dt;
                     if (dist < mb.target.size/2 + 25 && mb.attackTimer <= 0) {
-                        let dmg = activeClass.basicDmg * (1 + (player.flow/player.maxFlow)) * 0.25;
-                        if (player.empoweredAirborne) dmg *= 1.5;
-                        applyDamage(mb.target, dmg, 'shatter_storm');
-                        mb.attackTimer = 0.25;
-                        effects.push({ type: 'slash', x: mb.target.x, y: mb.target.y, angle: mb.angle, color: '#18ffff', life: 0.15, maxLife: 0.15, radius: 45 });
-                        if (!mb.pierce) mb.target = null;
+                        const tgt = mb.target; // Tempest Shards: every enemy within 60 px of the strike is cut too
+                        const cut = mb.tempest ? enemies.filter(o => !o.dead && (o === tgt || Math.hypot(o.x - tgt.x, o.y - tgt.y) < o.size / 2 + 60)) : [tgt];
+                        for (const o of cut) applyDamage(o, mb.dmg || 0, 'shatter_storm'); // skills.js: 5% of Shatter Storm's damage; flat, so six shards don't multiply Flow
+                        mb.attackTimer = mb.tempest ? 0.3 : 0.5;
+                        effects.push({ type: 'slash', x: tgt.x, y: tgt.y, angle: mb.angle, color: '#18ffff', life: 0.15, maxLife: 0.15, radius: mb.tempest ? 70 : 45 });
+                        mb.target = null;
                         
                         // Recoil bounce
                         mb.x -= Math.cos(mb.angle) * 40;
@@ -583,7 +599,10 @@ function update(dt) {
         }
     }
 
-    if (isMouseDown && cooldowns.basic <= 0) castBasic();
+    if (player.charge) player.charge.t += dt; // a held right-click charge (e.g. Storm Arrow)
+    if (activeClass.name === 'Dragonknight') updateHeavySwing(dt); // skills.js: tap for a light swing, hold for an overhead slam
+    else if (comboInFlight()) { if (isMouseDown) comboQueued = true; } // combos.js: a press mid-dash waits for the landing, as the finisher
+    else if ((isMouseDown || (comboQueued && comboOpen)) && cooldowns.basic <= 0 && !player.charge) { comboQueued = false; castBasic(); } // can't shoot while drawing a charged shot
 
     let vx = 0; let vy = 0;
     if (keys.w) vy -= 1; if (keys.s) vy += 1; if (keys.a) vx -= 1; if (keys.d) vx += 1;
@@ -592,8 +611,10 @@ function update(dt) {
     
     let currentSpeed = player.speed; 
     if (buffs.msBoost > 0) currentSpeed *= 1.5;
-    if (buffs.sporeSurgeTimer > 0) currentSpeed *= 1 + buffs.sporeSurgeBonus;
     if (buffs.slowed > 0) currentSpeed *= 0.5;
+    if (activeClass.name === 'Ranger') currentSpeed *= 1 + player.momentum; // Fleetfoot: momentum is move speed too
+    if (player.charge) currentSpeed *= player.charge.slow; // drawing a charged shot
+    if (player.heavy && player.heavy.raw >= SLAM_TAP) currentSpeed *= SLAM_SLOW; // the greatsword raised overhead
     if (player.wading) currentSpeed *= 0.5; // map_cavern.js: knee-deep in a slime lake
     if (buffs.rooted > 0) currentSpeed = 0;
 
@@ -619,11 +640,16 @@ function update(dt) {
         clampToBounds(player, player.radius);
         if (gt.onStep) gt.onStep(dt);
         if (arrived && gt.onArrive) gt.onArrive();
+        if (arrived && gt.combo) openCombo({ anchor: gt.anchor }); // combos.js (anchor: the Machinist's turret or coil it latched onto)
     } else if (mag > 0 && currentSpeed > 0) {
         player.x += (vx / mag) * currentSpeed * dt; player.y += (vy / mag) * currentSpeed * dt;
         clampToBounds(player, player.radius);
-        if (activeClass && activeClass.name === 'Ranger') player.momentum = Math.min(0.20, player.momentum + (0.05 * dt)); 
-    } else { if (activeClass && activeClass.name === 'Ranger') player.momentum = 0; }
+        if (activeClass && activeClass.name === 'Ranger') { player.momentum = Math.min(0.20, player.momentum + 0.10 * dt * (hasItem('Trailblazer Boots') ? 2 : 1)); player.stillTime = 0; } // full in 2 s
+    } else if (activeClass && activeClass.name === 'Ranger') {
+        // Standing still to aim keeps Momentum for 1 s, then it drains over 2 s
+        player.stillTime = (player.stillTime || 0) + dt;
+        if (player.stillTime > 1.0) player.momentum = Math.max(0, player.momentum - 0.10 * dt);
+    }
 
     if (currentMap.type === 'bridge' && wave === 11 && !currentMap.valeriusTriggered && player.x > currentMap.right - 200) {
         currentMap.valeriusTriggered = true; bossSpawned = true; let b = activeDungeon.stage3_boss;
@@ -637,11 +663,10 @@ function update(dt) {
         const d = drops[i]; d.life -= dt; if (d.life <= 0) { drops.splice(i, 1); continue; }
         if (Math.hypot(player.x - d.x, player.y - d.y) < player.radius + d.radius) {
             if (d.type === 'hp') { player.hp = Math.min(player.maxHp, player.hp + (player.maxHp * 0.25)); } 
-            else if (d.type === 'dmg') { player.bonusDmg += 0.05; } 
+            else if (d.type === 'dmg') { pickUpDmgOrb(); }
             else if (d.type === 'gold') { player.gold += d.val; }
             else if (d.type === 'item') { inventory.push(d.itemData); }
-            else if (d.type === 'shield_catch') { let shieldAmt = d.skill && d.skill.selectedUpg === 'B' ? 100 : 50; player.shield += calcUtility(shieldAmt, d.skill ? d.skill.level : 1); player.shieldTimer = calcUtility(5.0, d.skill ? d.skill.level : 1); }
-            else if (d.type === 'scrap') { player.hp = Math.min(player.maxHp, player.hp + 5); for(let j=1; j<=4; j++) cooldowns[`s${j}`] = Math.max(0, cooldowns[`s${j}`] - 0.5); }
+            else if (d.type === 'scrap') { pickUpScrap(); } // skills.js: stored for bigger turrets
             drops.splice(i, 1); updateHUD();
         }
     }
@@ -676,26 +701,8 @@ function update(dt) {
             if (Math.hypot(player.x - effects[i].x, player.y - effects[i].y) < player.radius + effects[i].radius) {
                 buffs.rooted = 1.5; takeDamage(effects[i].dmg); effects.splice(i, 1); continue;
             }
-        } else if (effects[i].type === 'spore_cloud') {
-            if (effects[i].isFriendly) {
-                // Friendly spore cloud continuously applies Spore stacks to enemies
-                for(let k=enemies.length-1; k>=0; k--) {
-                    let ek = enemies[k];
-                    if (Math.hypot(ek.x - effects[i].x, ek.y - effects[i].y) <= effects[i].radius + ek.size/2) {
-                        applyDamage(ek, effects[i].dmg * dt, 'dot');
-                        if (Math.random() < 0.1) {
-                            let maxStacks = 3;
-                            let dpsPerStack = effects[i].dmg * 0.25;
-                            if (!ek.sporeStacks) ek.sporeStacks = 0;
-                            ek.sporeStacks = Math.min(maxStacks, ek.sporeStacks + 1);
-                            ek.sporeTimer = 5.0;
-                            ek.sporeDps = dpsPerStack * ek.sporeStacks;
-                        }
-                    }
-                }
-            } else {
-                if (Math.hypot(player.x - effects[i].x, player.y - effects[i].y) < player.radius + effects[i].radius) buffs.weakened = 0.5;
-            }
+        } else if (effects[i].type === 'spore_cloud') { // a Spore Slime's haze: standing in it weakens you
+            if (Math.hypot(player.x - effects[i].x, player.y - effects[i].y) < player.radius + effects[i].radius) buffs.weakened = 0.5;
         }
         if (effects[i].life <= 0) effects.splice(i, 1); 
     }
@@ -711,9 +718,11 @@ function update(dt) {
 
     for (let i = projectiles.length - 1; i >= 0; i--) {
         const p = projectiles[i]; 
+        if (!p) continue; // the Queen's last stand / death clears her shots mid-loop (map_hive.js)
         
         if (p.customUpdate) { p.customUpdate(dt, p); }
-        
+        if (p.homeTarget) steerShot(p, dt); // skills.js: Ranger aim assist (not a customUpdate, so rock still stops the arrow)
+
         if (p.source === 'fan_of_knives' && p.returnDmg && p.life <= 0.5 && !p.returning) {
             p.returning = true; p.hitList = [];
         }
@@ -746,11 +755,7 @@ function update(dt) {
         if (currentMap.grid && p.life > 0 && shotHitsWall(p)) p.life = 0; // stage.js: rock stops shots
         
         if (p.life <= 0 || p.x < currentMap.left - 50 || p.x > currentMap.right + 50 || p.y < currentMap.top - 50 || p.y > currentMap.bottom + 50) { 
-            if (p.type === 'bramble_core') {
-                let pRadius = p.sourceSkill && p.sourceSkill.selectedUpg === 'A' ? 75 : 50;
-                let pSlow = p.sourceSkill && p.sourceSkill.selectedUpg === 'A' ? 0.5 : 0.0;
-                effects.push({ type: 'thorn_patch', x: p.x, y: p.y, radius: pRadius, color: 'rgba(76, 175, 80, 0.4)', life: 4.0, maxLife: 4.0, dmg: p.damage * 0.5, slow: pSlow });
-            }
+            if (p.type === 'bramble_core') snareBurst(p.x, p.y, p.damage, p.sourceSkill); // druid.js: Bramble Snare bursts where it lands
             if (p.type === 'boss_slimeball') { effects.push({ type: 'puddle', x: p.x, y: p.y, radius: 30, color: '#009688', life: 1.5, maxLife: 1.5 }); }
             if (p.type === 'trap_throw') { effects.push({ type: 'bear_trap', x: p.x, y: p.y, radius: 15, color: '#5d4037', life: 8.0, maxLife: 8.0, dmg: p.damage }); }
             if (p.type === 'spore') { effects.push({ type: 'spore_cloud', x: p.x, y: p.y, radius: 100, color: 'rgba(205, 220, 57, 0.4)', life: 3.0, maxLife: 3.0 }); }
@@ -793,25 +798,30 @@ function update(dt) {
             if (p.type === 'turret' || p.type === 'tesla_coil_trap') continue; 
             
             if (p.type === 'shield_throw') {
-                if (!p.returning && (p.life <= 1.0 || p.x<=currentMap.left+20 || p.x>=currentMap.right-20 || p.y<=currentMap.top+20 || p.y>=currentMap.bottom-20)) { p.returning = true; p.hitList = []; }
-                if (p.returning) {
-                    const [rx, ry, rd] = getVector(p.x, p.y, p.startX, p.startY);
-                    if (rd < p.radius + 10) {
-                        drops.push({ type: 'shield_catch', x: p.x, y: p.y, radius: 12, life: 5.0, skill: p.sourceSkill });
-                        projectiles.splice(i, 1); continue;
-                    } else { p.vx = (rx/rd)*800; p.vy = (ry/rd)*800; }
+                const leap = player.dash && player.dash.shields && player.dash.shields.includes(p) ? player.dash : null; // combos.js Skyfall Catch
+                if (leap && Math.hypot(p.x - player.x, p.y - player.y) < p.radius + player.radius + SKYFALL_REACH) { // snatched out of the air, either way it flies
+                    leap.skyfall = true; catchShield(p.sourceSkill); projectiles.splice(i, 1); continue;
+                }
+                if (p.hold) updateShieldHold(p, dt); // combos.js: a leap aimed at it holds it in the air
+                if (p.batted && updateBattedShield(p, dt)) continue; // combos.js Rebound: it ricochets for itself
+                if (!p.returning && !p.hold && (p.life <= 1.0 || p.x<=currentMap.left+20 || p.x>=currentMap.right-20 || p.y<=currentMap.top+20 || p.y>=currentMap.bottom-20)) { p.returning = true; p.hitList = []; }
+                if (p.returning) { // flies back to the Dragonknight wherever they are; touching it is the catch
+                    const [rx, ry, rd] = getVector(p.x, p.y, player.x, player.y);
+                    if (rd < p.radius + player.radius) { catchShield(p.sourceSkill); projectiles.splice(i, 1); continue; }
+                    p.vx = (rx/rd)*900; p.vy = (ry/rd)*900; p.life = Math.max(p.life, 0.5); // never expires on the way home
                 }
             }
 
             let hit = false;
             for (let j = enemies.length - 1; j >= 0; j--) {
                 const e = enemies[j];
-                if (e.dead) continue;
+                if (e.dead || e.submerged) continue; // the Amalgam's Undertow: shots pass over the ripple
                 if (Math.hypot(p.x - e.x, p.y - e.y) < e.size/2 + p.radius) {
-                    if ((p.pierce || p.type === 'shield_throw' || p.type === 'fan_of_knives' || p.type === 'scattergun' || p.type === 'censer_pulse') && p.hitList.includes(e)) continue;
+                    if ((p.pierce || p.type === 'shield_throw' || p.type === 'fan_of_knives' || p.type === 'scattergun' || p.type === 'censer_pulse' || p.type === 'ricochet') && p.hitList.includes(e)) continue; // a ricochet never re-hits the enemy it just bounced off
 
                     if (p.type === 'fireball' || p.resonance) {
-                        let explRadius = p.sourceSkill && p.sourceSkill.selectedUpg === 'B' ? 100 : 70;
+                        let explRadius = p.resonance ? resonanceRadius() : (p.sourceSkill && p.sourceSkill.selectedUpg === 'B' ? 100 : 70);
+                        if (p.resonance && !p.weaveDone) { p.weaveDone = true; weaveRefund(); } // skills.js: a landed empowered bolt speeds up the next spells
                         effects.push({ type: 'fiery_explosion', x: p.x, y: p.y, radius: explRadius, life: 0.4, maxLife: 0.4 });
                         if (p.sourceSkill && p.sourceSkill.selectedUpg === 'B') {
                             effects.push({ type: 'fire_puddle', x: p.x, y: p.y, radius: explRadius, color: 'rgba(255, 87, 34, 0.4)', life: 0.75, maxLife: 0.75, dmg: p.damage * 0.5 });
@@ -829,43 +839,33 @@ function update(dt) {
                         }
                     } else if (p.type === 'ricochet') {
                         applyDamage(e, p.damage, 'ranged');
-                        if (p.sourceSkill && p.sourceSkill.selectedUpg === 'B') { e.slowTimer = 1.5; e.slowAmount = 0.5; e.bleedTimer = 3.0; e.bleedDmg = p.damage * 0.4; }
                         if (p.bounces > 0) {
                             p.bounces--; p.hitList.push(e);
                             let nextT = null; let minDist = 400;
                             for(const et of enemies) { if (et.dead || p.hitList.includes(et)) continue; const dist = Math.hypot(et.x - p.x, et.y - p.y); if(dist < minDist) { minDist = dist; nextT = et; } }
-                            if (nextT) { const [nx, ny, nd] = getVector(p.x, p.y, nextT.x, nextT.y); p.vx = (nx/nd)*900; p.vy = (ny/nd)*900; } 
+                            if (nextT) { const [nx, ny, nd] = getVector(p.x, p.y, nextT.x, nextT.y); p.vx = (nx/nd)*900; p.vy = (ny/nd)*900; p.homeTarget = nextT; p.life = Math.max(p.life, 0.6); // keeps tracking a target that moves, and lives long enough to reach it
+                                if (p.shape === 'storm_arrow') effects.push({ type: 'lightning', x1: e.x, y1: e.y, x2: nextT.x, y2: nextT.y, color: '#80d8ff', life: 0.2, maxLife: 0.2 }); } // Chain Lightning: the jump arcs across
                             else { hit = true; } 
                         } else { hit = true; }
                     } else if (p.type === 'scattergun') {
                         applyDamage(e, p.damage, 'ranged');
+                        salvagePellet(); // items.js: Salvager's Gauntlets
                         let [ebx, eby, ebd] = getVector(player.x, player.y, e.x, e.y);
-                        if (!e.type.startsWith('boss') && ebd > 0) { e.x += (ebx/ebd)*15; e.y += (eby/ebd)*15; clampToBounds(e, e.size/2); }
+                        const knock = p.knock || 15; // combos.js Point Blank pellets hit harder
+                        if (!e.type.startsWith('boss') && ebd > 0) { e.x += (ebx/ebd)*knock; e.y += (eby/ebd)*knock; clampToBounds(e, e.size/2); }
                     } else if (p.type === 'net_throw') {
                         applyDamage(e, p.damage, 'ranged');
-                        e.rootedTimer = 2.0; e.netTimer = 2.0;
-                    } else if (p.type === 'druid_spore' || p.type === 'bramble_core') {
-                        applyDamage(e, p.damage, 'magic');
-                        // Apply Spores: 5 seconds duration, DPS based on player scale (e.g. 50% of hit dmg per second)
-                        let sporeDur = 5.0;
-                        let maxStacks = 3;
-                        let dpsPerStack = p.damage * 0.25;
-                        if (!e.sporeStacks) e.sporeStacks = 0;
-                        e.sporeStacks = Math.min(maxStacks, e.sporeStacks + 1);
-                        e.sporeTimer = sporeDur;
-                        e.sporeDps = dpsPerStack * e.sporeStacks;
-                        
-                        if (p.type === 'bramble_core') {
-                            // Create Thorn Patch (using 'fire_puddle' style or new type)
-                            let pRadius = p.sourceSkill && p.sourceSkill.selectedUpg === 'A' ? 75 : 50;
-                            let pSlow = p.sourceSkill && p.sourceSkill.selectedUpg === 'A' ? 0.5 : 0.0;
-                            effects.push({ type: 'thorn_patch', x: p.x, y: p.y, radius: pRadius, color: 'rgba(76, 175, 80, 0.4)', life: 4.0, maxLife: 4.0, dmg: p.damage * 0.5, slow: pSlow });
-                        }
+                        e.rootedTimer = 2.0; e.netTimer = 2.0; e.nettedAt = fxTime; // combos.js Conductive Net
+                    } else if (p.type === 'bramble_core') {
+                        snareBurst(p.x, p.y, p.damage, p.sourceSkill); // druid.js
                     } else { applyDamage(e, p.damage, activeClass.name === 'Ranger' ? 'ranged' : (p.source === 'fan_of_knives' ? 'assassin_skill' : 'magic'), Math.atan2(p.vy, p.vx)); }
                     
+                    if (p.type === 'druid_spore') { druidBoltHit(e); if (p.call) pounceCall(e); } // druid.js: Packbond Bracers; Pounce Strike (combos.js)
+                    if (p.burn) { e.burnTimer = 3.0; e.burnDps = p.burn; e.burnColor = p.burnColor; } // Dragon Breath: refreshes, doesn't stack
+
                     if (p.type === 'censer_pulse') {
                         if (!buffs.zealLocked) {
-                            let zealGain = 15 * (p.zealMult || 1.0);
+                            let zealGain = (hasItem('Thurible Chains') ? 20 : 15) * (p.zealMult || 1.0);
                             if (p.isInSanctuary) zealGain *= 2.0;
                             player.zeal = Math.min(player.maxZeal, player.zeal + zealGain);
                         }
@@ -884,10 +884,11 @@ function update(dt) {
         if (e.dead) continue;
         if (e.pod) continue; // map_hive.js brood pods just sit there until popped or hatched
         if (e.spawnT > 0) { e.spawnT -= dt; continue; } // stage.js spawn: still forming
-        if (e.frozenTimer > 0) { e.frozenTimer -= dt; e.renderColor = '#90caf9'; } 
-        else if (e.rootedTimer > 0) { e.rootedTimer -= dt; e.renderColor = '#b0bec5'; }
-        else if (e.stunTimer > 0) { e.stunTimer -= dt; e.renderColor = '#ffeb3b'; }
-        else if (e.blindTimer > 0) { e.blindTimer -= dt; e.renderColor = '#e0e0e0'; }
+        const ccDt = e.type.startsWith('boss') ? dt * BOSS_CC_RATE : dt; // bosses shake crowd control off faster
+        if (e.frozenTimer > 0) { e.frozenTimer -= ccDt; e.renderColor = '#90caf9'; }
+        else if (e.rootedTimer > 0) { e.rootedTimer -= ccDt; e.renderColor = '#b0bec5'; }
+        else if (e.stunTimer > 0) { e.stunTimer -= ccDt; e.renderColor = '#ffeb3b'; }
+        else if (e.blindTimer > 0) { e.blindTimer -= ccDt; e.renderColor = '#e0e0e0'; }
         else if (e.slowTimer > 0 && e.slowAmount > 0) { e.renderColor = '#4fc3f7'; }
         else { e.renderColor = e.color; }
 
@@ -895,28 +896,11 @@ function update(dt) {
             e.bleedTimer -= dt; applyDamage(e, e.bleedDmg * dt, 'dot');
             if (Math.random() < 0.1) effects.push({ type: 'circle', x: e.x, y: e.y, radius: 4, color: '#f44336', life: 0.2, maxLife: 0.2 });
         }
-        
-        // Druid Spores DoT
-        if (e.sporeTimer > 0) {
-            e.sporeTimer -= dt;
-            
-            let myDps = e.sporeDps || 0;
-            // Spore ticks 50% faster if Barkskin Shift Accelerated Decay is active
-            if (activeClass && activeClass.name === 'Druid' && activeClass.skills[2].selectedUpg === 'A' && buffs.barkskin) {
-                myDps *= 1.5;
-            }
-
-            applyDamage(e, myDps * dt, 'dot');
-            if (Math.random() < 0.15) {
-                effects.push({ type: 'circle', x: e.x + (Math.random()-0.5)*e.size, y: e.y + (Math.random()-0.5)*e.size, radius: 3 + Math.random()*3, color: '#cddc39', life: 0.4, maxLife: 0.4 });
-            }
-
-            // Gnarled Heartwood Totem: every 3s an enemy spends spored grants +10% DMG to the next Feral Pounce (max 5)
-            if (equipment.weapon && equipment.weapon.name === 'Gnarled Heartwood Totem') {
-                e.sporedTime = (e.sporedTime || 0) + dt;
-                if (e.sporedTime >= 3.0) { e.sporedTime -= 3.0; buffs.pounceStacks = Math.min(5, buffs.pounceStacks + 1); }
-            }
+        if (e.burnTimer > 0) { // Dragon Breath burn
+            e.burnTimer -= dt; applyDamage(e, e.burnDps * dt, 'dot');
+            if (Math.random() < 0.2) spawnParticle({ kind: 'dot', color: e.burnColor || '#ff7043', x: e.x + jitter(e.size * 0.4), y: e.y + jitter(e.size * 0.4), vx: jitter(15), vy: -40 - Math.random() * 30, size: 2, life: 0.45, drag: 1, grow: 0, spin: 0, rot: 0 });
         }
+        
         if (e.dead) continue; // killed by a DoT this frame
 
         if (e.aoeResistTimer > 0) {
@@ -948,11 +932,10 @@ function update(dt) {
         if (player.inSmoke || e.blindTimer > 0) { edx = 0; edy = 0; edist = Infinity; }
         if (e.meleeTimer > 0) e.meleeTimer -= dt;
 
-        if (edist < player.radius + e.size / 2 && e.state !== 'dash_execute' && e.state !== 'bounce_telegraph' && e.state !== 'charge' && e.state !== 'jousting' && e.state !== 'death_throes') {
-            if (!(equipment.boots && equipment.boots.name === 'Ethereal Treads')) {
-                let overlap = (player.radius + e.size / 2) - edist;
-                e.x -= (edx / edist) * overlap; e.y -= (edy / edist) * overlap;
-            }
+        // bodies push apart, but not while the hero dashes or leaps past (that used to carry a boss along under a Vault)
+        if (edist < player.radius + e.size / 2 && !e.submerged && !player.dash && e.state !== 'dash_execute' && e.state !== 'bounce_telegraph' && e.state !== 'charge' && e.state !== 'jousting' && e.state !== 'death_throes') {
+            let overlap = (player.radius + e.size / 2) - edist;
+            e.x -= (edx / edist) * overlap; e.y -= (edy / edist) * overlap;
         }
 
         if (edist > 0) {
@@ -994,6 +977,8 @@ function draw() {
         drawCavernGround(); // map_cavern.js: terrain, lakes, darkness and lights
     } else if (currentMap.type === 'hive') {
         drawHiveGround(); // map_hive.js: throne hall, pool, opened pods, the sleeping Queen
+    } else if (currentMap.type === 'training') {
+        drawTrainingGround(); // training.js: the sand yard
     } else if (currentMap.type === 'bridge') {
         ctx.fillStyle = '#2c2c2c'; ctx.fillRect(currentMap.left, currentMap.top, currentMap.right - currentMap.left, currentMap.bottom - currentMap.top);
         ctx.fillStyle = '#3e2723'; 
@@ -1038,8 +1023,7 @@ function draw() {
     drawGroundProjectiles(); // skillfx_e.js: Hallowed Ground, Tesla field
 
     for (const d of drops) {
-        if (d.type === 'shield_catch') drawShieldCatch(d); // skillfx.js
-        else if (d.type === 'scrap') {
+        if (d.type === 'scrap') {
             ctx.fillStyle = '#ff9800'; ctx.beginPath();
             for(let j=0; j<6; j++) { let a = (Math.PI*2/6)*j; ctx.lineTo(d.x + Math.cos(a)*d.radius, d.y + Math.sin(a)*d.radius); }
             ctx.closePath(); ctx.fill(); ctx.fillStyle = '#fff'; ctx.font = '10px monospace'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('⚙', d.x, d.y);
@@ -1158,18 +1142,6 @@ function draw() {
             ctx.strokeStyle = ef.color; 
             ctx.lineWidth = 4 * (ef.life/ef.maxLife);
             ctx.stroke();
-        }
-        else if (ef.type === 'iron_bulwark') {
-            ctx.strokeStyle = ef.color; ctx.lineWidth = 4;
-            ctx.beginPath();
-            for(let i=0; i<6; i++) {
-                let ang = (Math.PI*2/6) * i + (ef.life * 2);
-                let px = ef.x + Math.cos(ang) * ef.radius;
-                let py = ef.y + Math.sin(ang) * ef.radius;
-                if(i===0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-            }
-            ctx.closePath(); ctx.stroke();
-            ctx.fillStyle = ef.color; ctx.globalAlpha = (ef.life/ef.maxLife) * 0.3; ctx.fill();
         }
         else if (ef.type === 'flames') {
             ctx.fillStyle = ef.color;
@@ -1509,6 +1481,7 @@ function draw() {
         ctx.globalAlpha = 1.0;
     }
 
+    drawDruidGround(); // druid.js: scent rings, brambles, leap slams
     drawPaladinWorld();
 
     for (const e of enemies) {
@@ -1695,6 +1668,8 @@ function draw() {
         }
     }
 
+    drawDruidWorld(); // druid.js: the wolves, the howl, the Maul
+
     if (player.hp > 0 && gameState !== STATE.MENU && gameState !== STATE.DEAD && !(player.fadeOut >= 1)) {
         if (player.fadeOut > 0) ctx.filter = `opacity(${1 - player.fadeOut})`; // walking into the dark at a stage exit
         if (player.grappleTarget) drawGrappleCable(player.grappleTarget); // skillfx_space.js
@@ -1714,10 +1689,12 @@ function draw() {
         // Leaps lift the hero (and everything they carry) off the ground, above their shadow
         const lift = player.z || 0;
         if (lift > 0) { const s = 1 + lift / 300; ctx.save(); ctx.translate(player.x, player.y - lift); ctx.scale(s, s); ctx.translate(-player.x, -player.y); }
-        drawPlayerSprite(aimAngle); // sprites.js (also renders the Druid's Wild Form)
+        drawPlayerSprite(aimAngle); // sprites.js
         drawPlayerWeapon(aimAngle); // weapons.js
 
         drawPlayerShield(); // skillfx_e.js
+        drawSlamCharge(); // weapons.js: the Dragonknight's charge ring, above the shield
+        drawComboWindow(); // combos.js: a finisher is ready
         if (lift > 0) ctx.restore();
         drawUltAuraFront(aimAngle); // skillfx_ult.js: halo, Overclock gauge
 

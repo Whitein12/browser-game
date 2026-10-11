@@ -347,7 +347,7 @@ const CLASS_SPRITES = {
     },
 };
 
-// Druid Wild Form
+// The Druid's wolf (druid.js stamps it for the companion and the spirit wolves; pose.bite opens the jaws)
 function sprWolf(c, p) {
     const g = Math.sin(p.walk * 1.4) * 7 * p.move; // diagonal pairs step together
     for (const s of [-1, 1]) {
@@ -399,6 +399,62 @@ function sprWolf(c, p) {
     c.restore();
 }
 
+// The Druid's black jaguar (the other companion): long and low, a heavy tail, faint rosettes, gold eyes.
+// pose.pounce (0..1) stretches it out mid-spring, forepaws reaching; pose.bite opens the jaws like the wolf's.
+const JAG_FUR = '#211f29', JAG_DARK = '#141319', JAG_RIM = 'rgba(170, 170, 200, 0.55)';
+const JAG_ROSETTES = [[-20, -5], [-13, 4], [-6, -6], [1, 5], [5, -3], [-24, 3], [-9, -1], [-17, 7], [-2, -8], [-27, -2]];
+function sprJaguar(c, p) {
+    const pz = p.pounce === null || p.pounce === undefined ? 0 : Math.sin(p.pounce * Math.PI);
+    const g = Math.sin(p.walk * 1.2) * 6 * p.move * (1 - pz); // a smooth, rolling cat gait
+    c.save();
+    c.scale(1 + 0.14 * pz, 1 - 0.06 * pz); // stretched out in the air
+    // Paws: hind legs kick back and forepaws reach forward mid-pounce, claws out
+    for (const s of [-1, 1]) {
+        const fx = 15 - s * g + pz * 10, fy = s * (8.5 - pz * 2.5);
+        if (pz > 0.3) sprStroke(c, '#e0e0e0', 0.9, () => { for (const k of [-1.6, 0, 1.6]) { c.moveTo(fx + 3, fy + k); c.lineTo(fx + 6.5, fy + k * 1.5); } });
+        sprEllipse(c, fx, fy, 4.2 + pz, 3.2, JAG_DARK);
+        sprEllipse(c, -17 + s * g - pz * 9, s * (8.5 + pz), 4.2, 3.2, JAG_DARK);
+    }
+    // Tail: long, thick, swaying slowly with a curl at the tip
+    const sway = Math.sin(p.t * 2.2) * 7 + p.trail.y * 1.2, tx = Math.min(-34, -48 + p.trail.x * 0.4) - pz * 6;
+    sprStroke(c, JAG_FUR, 5.5, () => { c.moveTo(-22, 0); c.bezierCurveTo(-32, sway * 0.2, -40, sway * 0.9, tx, sway); c.quadraticCurveTo(tx - 5, sway + 4 * Math.sign(sway || 1), tx - 3, sway + 7 * Math.sign(sway || 1)); });
+    // Body: haunches, a long barrel, heavy shoulders
+    sprEllipse(c, -16, 0, 8.5, 10.5, JAG_FUR);
+    sprEllipse(c, -4, 0, 22, 10.5, JAG_FUR);
+    sprEllipse(c, 9, 0, 8.5, 11.5, '#201f27');
+    c.strokeStyle = JAG_RIM; c.lineWidth = 1.2; // a rim of light along both flanks so it never reads as a hole in dark caves
+    for (const s of [-1, 1]) { c.beginPath(); c.ellipse(-4, 0, 20.5, 9.4, 0, s > 0 ? 0.25 : Math.PI + 0.25, s > 0 ? Math.PI - 0.25 : Math.PI * 2 - 0.25); c.stroke(); }
+    c.strokeStyle = 'rgba(70, 68, 84, 0.55)'; c.lineWidth = 1.1; // rosettes, barely there on the black coat
+    for (const [x, y] of JAG_ROSETTES) { c.beginPath(); c.arc(x, y, 2.1, 0.4, Math.PI * 1.7); c.stroke(); }
+    sprEllipse(c, -6, 0, 16, 2.6, '#26252e', false); // spine highlight
+    // Head: round, small rounded ears, a short broad muzzle; the jaws work like the wolf's (top-down foreshortening)
+    const b = p.bite;
+    const open = b === undefined || b === null ? 0 : (b < 0.12 ? b / 0.12 : Math.max(0, 1 - (b - 0.12) / 0.1));
+    c.save();
+    if (b !== undefined && b !== null) c.translate(Math.sin(Math.min(1, b * 2) * Math.PI) * 6, 0);
+    for (const s of [-1, 1]) { sprEllipse(c, 15, s * 7, 3.2, 3.2, JAG_FUR); sprEllipse(c, 15.3, s * 7, 1.5, 1.5, '#3b2f33', false); }
+    sprEllipse(c, 19, 0, 8.5, 8.2, '#24222c');
+    c.strokeStyle = JAG_RIM; c.lineWidth = 1.1; c.beginPath(); c.arc(19, 0, 7.4, -2.2, 2.2); c.stroke();
+    if (open > 0) {
+        sprEllipse(c, 26.5, 0, 5.5, 3.6, '#18171d'); // lower jaw
+        sprEllipse(c, 27.3, 0, 4.2, 2.5, '#4a0e0e', false); // open mouth
+        c.fillStyle = '#fafafa';
+        for (const s of [-1, 1]) { c.beginPath(); c.moveTo(29.5, s * 2.5); c.lineTo(31, s * 2.1); c.lineTo(29.8, s * 0.9); c.closePath(); c.fill(); }
+    }
+    const mx = 25 - 3.5 * open, mrx = 4.8 - 1.8 * open, mry = 4.8 * (1 + 0.1 * open);
+    sprEllipse(c, mx, 0, mrx, mry, '#25242c'); // upper muzzle
+    if (open > 0.1) {
+        c.fillStyle = '#fafafa';
+        for (const s of [-1, 1]) { c.beginPath(); c.moveTo(mx + mrx - 1.2, s * 2.6); c.lineTo(mx + mrx + 1.2 * open + 0.5, s * 1.9); c.lineTo(mx + mrx - 0.8, s * 1.1); c.closePath(); c.fill(); }
+    }
+    sprEllipse(c, mx + mrx - 0.8, 0, 1.6, 1.9, '#3a2c30', false); // nose
+    c.shadowBlur = 8; c.shadowColor = '#ffb300';
+    for (const s of [-1, 1]) { c.beginPath(); c.ellipse(21.5, s * 3.6, 1.7, 1.1, s * 0.35, 0, Math.PI * 2); c.fillStyle = '#ffd54f'; c.fill(); }
+    c.shadowBlur = 0;
+    c.restore();
+    c.restore();
+}
+
 function sprGeneric(c, p) {
     sprFeet(c, p, '#424242');
     sprTorso(c, p.color || '#9e9e9e');
@@ -415,7 +471,8 @@ function drawCharacter(c, classId, pose) {
     c.lineJoin = 'round';
     const breathe = 1 + Math.sin(pose.t * 2.5) * 0.015 * (1 - pose.move) + Math.abs(Math.sin(pose.walk)) * 0.03 * pose.move;
     c.scale(breathe, breathe);
-    if (pose.wolf) sprWolf(c, pose);
+    if (pose.jaguar) sprJaguar(c, pose);
+    else if (pose.wolf) sprWolf(c, pose);
     else (CLASS_SPRITES[classId] || sprGeneric)(c, pose);
     c.restore();
 }
@@ -447,8 +504,6 @@ function stampSprite(x, y, facing, classId, pose, flash = 0, alpha = 1) {
     ctx.restore();
 }
 
-function isWildForm() { return selectedClassId === 'druid' && buffs.wildFormTimer > 0; }
-
 // Call once per frame before drawing the player
 function updatePlayerSpriteAnim() {
     const a = spriteAnim, now = performance.now();
@@ -473,25 +528,18 @@ function playerPose(facing) {
     let tx = -(a.vx * cos + a.vy * sin) * 0.03, ty = -(-a.vx * sin + a.vy * cos) * 0.03;
     const m = Math.hypot(tx, ty);
     if (m > 12) { tx *= 12 / m; ty *= 12 / m; }
-    // Wild Form combo: steps 0/1 rake with the left/right paw, step 2 bites
-    const wolf = isWildForm(), step = player.lastWolfStep || 0;
-    const q = attackProgress(step === 2 ? 0.28 : 0.2), attacking = wolf && weaponAnim.swing > 0 && q < 1;
     return {
         t: performance.now() / 1000, walk: a.walk, move: Math.min(1, Math.hypot(a.vx, a.vy) / 150),
-        trail: { x: tx, y: ty }, live: true, wolf, color: player.color,
-        swipe: attacking && step < 2 ? { q, side: step === 0 ? -1 : 1 } : null,
-        // mid-pounce the jaws hang wide open, then snap shut on landing
-        bite: attacking && step === 2 ? q : (wolf && player.dash && player.dash.kind === 'pounce' ? 0.01 + 0.11 * dashProgress() : null)
+        trail: { x: tx, y: ty }, live: true, wolf: false, color: player.color
     };
 }
 
 function drawPlayerShadow(facing) {
-    const wolf = isWildForm();
     const z = player.z || 0, s = 1 - Math.min(0.45, z / 160); // leaping: the shadow shrinks and fades below the hero
     ctx.save();
     ctx.fillStyle = `rgba(0, 0, 0, ${0.35 * (1 - Math.min(0.5, z / 200))})`;
     ctx.beginPath();
-    ctx.ellipse(player.x + 3, player.y + 6, (wolf ? 30 : 15) * s, (wolf ? 15 : 18) * s, facing, 0, Math.PI * 2);
+    ctx.ellipse(player.x + 3, player.y + 6, 15 * s, 18 * s, facing, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
 }
@@ -499,10 +547,8 @@ function drawPlayerShadow(facing) {
 function drawPlayerSprite(facing) {
     const flash = player.hurtFlash > 0 ? Math.min(1, player.hurtFlash / 0.2) : 0;
     const pose = playerPose(facing);
-    // The wolf leans into its claw rakes, and lunges harder on a Bite
-    const lunge = pose.swipe ? Math.sin(pose.swipe.q * Math.PI) * 6 : (pose.bite !== null && pose.bite !== undefined ? Math.sin(pose.bite * Math.PI) * 10 : 0);
     // Hidden in a Smoke Bomb, the player turns translucent
-    stampSprite(player.x + Math.cos(facing) * lunge, player.y + Math.sin(facing) * lunge, facing, selectedClassId, pose, flash, player.inSmoke ? 0.55 : 1);
+    stampSprite(player.x, player.y, facing, selectedClassId, pose, flash, player.inSmoke ? 0.55 : 1);
 }
 
 // A frozen, translucent copy of the player (e.g. the phantom decoy)

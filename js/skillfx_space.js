@@ -20,7 +20,20 @@ function startDash(o) {
     if (clip) { [tx, ty] = clip; d.intoWall = true; }
     Object.assign(d, { x0: player.x, y0: player.y, x1: tx, y1: ty, t: 0, angle: Math.atan2(ty - player.y, tx - player.x) });
     player.dash = d;
+    if (d.iFrames) player.iFrames = Math.max(player.iFrames, 0.05); // safe from the instant it starts, not from the next frame
     return d;
+}
+
+// A leap never comes down inside a body: it slides on along the leap (up to 160 px) until the hero is clear.
+// Walls still stop it. Runs after onArrive, so a landing slam still hits where the leap came down.
+function clearLanding(d) {
+    const ux = Math.cos(d.angle), uy = Math.sin(d.angle), STEP = 8;
+    const inBody = () => enemies.some(e => !e.dead && !e.pod && !e.submerged && !e.airborne && !(e.flyUntil > fxTime) && !(e.spawnT > 0) && Math.hypot(e.x - player.x, e.y - player.y) < e.size / 2 + player.radius);
+    for (let s = 0; s < 160 && inBody(); s += STEP) {
+        const nx = player.x + ux * STEP, ny = player.y + uy * STEP;
+        if (clipToWalls(player.x, player.y, nx, ny, player.radius, false)) return; // stage.js: rock ahead, stay put
+        player.x = nx; player.y = ny; clampToBounds(player, player.radius);
+    }
 }
 
 function dashProgress() { return player.dash ? Math.min(1, player.dash.t / player.dash.dur) : 0; }
@@ -45,6 +58,8 @@ function updateDash(dt) {
     if (q >= 1) {
         player.dash = null; player.z = 0;
         if (d.onArrive) d.onArrive();
+        if (d.arc > 0) clearLanding(d);
+        if (d.combo) openCombo({ x0: d.x0, y0: d.y0, x1: player.x, y1: player.y }); // combos.js: a Space dash landed
     }
 }
 
@@ -367,17 +382,18 @@ function drawSpaceEffect(ef, p, k) {
             return true;
         }
 
-        case 'iai_flash': { // Swordsaint Shadow Step: the cut appears along the path a beat after the dash
+        case 'iai_flash': { // Swordsaint Shadow Step: the cut appears along the path a beat after the dash (big: the Iaido finisher, combos.js)
             if (p < 0.12) return true;
             const q = (p - 0.12) / 0.88;
             if (!ef.burstDone) {
                 ef.burstDone = true;
-                for (let i = 0; i < 10; i++) { const t = Math.random(); burst(lerp(ef.x1, ef.x2, t), lerp(ef.y1, ef.y2, t), Math.random() * Math.PI * 2, 0.5, 1, { kind: 'spark', color: '#84ffff', size: 2, life: 0.25, speed: [60, 180], drag: 5 }); }
-                spawnParticle({ kind: 'ring', color: '#e0f7fa', x: ef.x2, y: ef.y2, vx: 0, vy: 0, size: 4, grow: 140, life: 0.2, drag: 0, spin: 0, rot: 0 });
+                for (let i = 0; i < (ef.big ? 22 : 10); i++) { const t = Math.random(); burst(lerp(ef.x1, ef.x2, t), lerp(ef.y1, ef.y2, t), Math.random() * Math.PI * 2, 0.5, 1, { kind: 'spark', color: ef.big ? '#ffffff' : '#84ffff', size: ef.big ? 2.6 : 2, life: 0.3, speed: [60, ef.big ? 260 : 180], drag: 5 }); }
+                spawnParticle({ kind: 'ring', color: '#e0f7fa', x: ef.x2, y: ef.y2, vx: 0, vy: 0, size: 4, grow: ef.big ? 260 : 140, life: ef.big ? 0.3 : 0.2, drag: 0, spin: 0, rot: 0 });
+                if (ef.big) addShake(2); // the sheathe: it lands whether or not anything was in the way
             }
             const dx = ef.x2 - ef.x1, dy = ef.y2 - ef.y1, len = Math.hypot(dx, dy);
             if (len < 4) return true;
-            const w = 7 * (1 - q) * Math.min(1, q * 8);
+            const w = 7 * (ef.big ? 2.2 : 1) * (1 - q) * Math.min(1, q * 8);
             ctx.save();
             ctx.translate(ef.x1, ef.y1); ctx.rotate(Math.atan2(dy, dx));
             ctx.globalCompositeOperation = 'lighter';
@@ -507,7 +523,7 @@ function drawSpaceEffect(ef, p, k) {
             return true;
         }
 
-        case 'pounce_rake': { // Druid Feral Pounce landing: three claw marks torn across the landing spot
+        case 'pounce_rake': { // Druid Spirit Leap, the wolf's landing: three claw marks torn across the landing spot
             if (!ef.burstDone) {
                 ef.burstDone = true;
                 dustPuff(ef.x, ef.y, 0, Math.PI * 2, 7, '#6d5d4b');
@@ -528,38 +544,6 @@ function drawSpaceEffect(ef, p, k) {
                 ctx.fillStyle = `rgba(255, 255, 255, ${k})`;
                 ctx.beginPath(); ctx.moveTo(-L * 0.4, 0); ctx.quadraticCurveTo(0, -w * 0.7, L * 0.4, 0); ctx.quadraticCurveTo(0, w * 0.1, -L * 0.4, 0); ctx.fill();
                 ctx.restore();
-            }
-            ctx.restore();
-            return true;
-        }
-
-        case 'spore_burst': { // Druid Spore Burst: a ring of spore puffs blasting outward
-            const R = ef.radius;
-            if (!ef.burstDone) {
-                ef.burstDone = true;
-                ef.puffs = Array.from({ length: 14 }, (_, i) => ({ a: i * Math.PI * 2 / 14 + jitter(0.3), r: 0.75 + Math.random() * 0.3, s: 0.7 + Math.random() * 0.6 }));
-                burst(ef.x, ef.y, 0, Math.PI * 2, 18, { kind: 'dot', color: '#eeff41', size: 2, life: 0.6, speed: [R * 1.2, R * 2.4], drag: 3 });
-                burst(ef.x, ef.y, 0, Math.PI * 2, 8, { kind: 'smoke', color: '#9ccc65', size: 8, grow: 40, life: 0.6, speed: [R * 0.8, R * 1.5], drag: 3 });
-                addShake(1.5);
-            }
-            const q = easeOut(Math.min(1, p * 1.7));
-            ctx.save();
-            ctx.translate(ef.x, ef.y);
-            ctx.globalCompositeOperation = 'lighter';
-            const fl = Math.max(0, 1 - p * 3);
-            if (fl > 0) {
-                const g = ctx.createRadialGradient(0, 0, 0, 0, 0, R * 0.6);
-                g.addColorStop(0, `rgba(238, 255, 65, ${0.7 * fl})`); g.addColorStop(1, 'rgba(139, 195, 74, 0)');
-                ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, R * 0.6, 0, Math.PI * 2); ctx.fill();
-            }
-            ctx.strokeStyle = `rgba(204, 255, 144, ${0.8 * k})`; ctx.lineWidth = 3 * k;
-            ctx.beginPath(); ctx.arc(0, 0, R * q, 0, Math.PI * 2); ctx.stroke();
-            ctx.globalCompositeOperation = 'source-over';
-            for (const f of ef.puffs) { // soft spore clouds with a pale, sunlit top
-                const r = R * q * f.r, s = (10 + 14 * q) * f.s, px = Math.cos(f.a) * r, py = Math.sin(f.a) * r;
-                const pg = ctx.createRadialGradient(px - s * 0.3, py - s * 0.3, 0, px, py, s);
-                pg.addColorStop(0, `rgba(230, 238, 156, ${0.6 * k})`); pg.addColorStop(0.5, `rgba(156, 204, 101, ${0.4 * k})`); pg.addColorStop(1, 'rgba(104, 159, 56, 0)');
-                ctx.fillStyle = pg; ctx.beginPath(); ctx.arc(px, py, s, 0, Math.PI * 2); ctx.fill();
             }
             ctx.restore();
             return true;
@@ -676,8 +660,9 @@ function updateSpaceEmitters(dt) {
         emit(90, dt, () => spawnParticle({ kind: 'smoke', color: '#311b92', x: player.x + jitter(14), y: player.y + jitter(14), vx: jitter(30), vy: jitter(30), size: 6, grow: 22, life: 0.45, drag: 2, spin: 0, rot: 0 }));
     } else if (d && d.kind === 'shadow_step') {
         emit(90, dt, () => spawnParticle({ kind: 'dot', color: '#84ffff', x: player.x + jitter(18), y: player.y + jitter(18), vx: jitter(40), vy: jitter(40), size: 1.6, life: 0.3, drag: 2, grow: 0, spin: 0, rot: 0 }));
-    } else if (d && d.kind === 'pounce') {
-        emit(50, dt, () => spawnParticle({ kind: 'smoke', color: '#8d8478', x: player.x + jitter(16), y: player.y + jitter(16), vx: jitter(30), vy: jitter(30), size: 4, grow: 18, life: 0.35, drag: 3, spin: 0, rot: 0 }));
+    } else if (d && d.kind === 'spirit_leap') { // Druid: leaves and green motes stream off the leaping druid
+        emit(50, dt, () => spawnParticle({ kind: 'dot', color: '#b2ff59', x: player.x + jitter(18), y: player.y - player.z + jitter(18), vx: -Math.cos(d.angle) * 120 + jitter(40), vy: -Math.sin(d.angle) * 120 + jitter(40), size: 1.7, life: 0.35, drag: 3, grow: 0, spin: 0, rot: 0 }));
+        emit(14, dt, () => spawnParticle({ kind: 'leaf', color: '#7cb342', x: player.x + jitter(16), y: player.y - player.z + jitter(16), vx: jitter(60), vy: jitter(60), size: 5, life: 0.5, drag: 2, grow: 0, spin: 4, rot: Math.random() * 6 }));
     }
 
     const gt = player.grappleTarget;

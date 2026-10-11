@@ -51,6 +51,33 @@ function icFlame(c, x, y, w, h, outer = '#ff7043', inner = '#ffd54f') { // flame
 }
 function icShieldPath(c, x, y, w, h) { c.beginPath(); c.moveTo(x - w, y - h * 0.55); c.quadraticCurveTo(x, y - h * 0.75, x + w, y - h * 0.55); c.quadraticCurveTo(x + w, y + h * 0.15, x, y + h * 0.6); c.quadraticCurveTo(x - w, y + h * 0.15, x - w, y - h * 0.55); c.closePath(); }
 function icBolt(c, x, y, s, fill = '#ffeb3b') { icPoly(c, [[x + 4 * s, y - 14 * s], [x - 6 * s, y + 1 * s], [x, y + 1 * s], [x - 4 * s, y + 14 * s], [x + 7 * s, y - 3 * s], [x + 1 * s, y - 3 * s]], fill, 1.8); }
+// A front-facing wolf head centred on (x, y); `tint` paints a spirit wolf
+function icWolfHead(c, x, y, s, tint) {
+    c.save(); c.translate(x - 32 * s, y - 32 * s); c.scale(s, s);
+    c.beginPath(); c.moveTo(32, 58); c.lineTo(18, 44); c.lineTo(8, 26); c.lineTo(10, 6); c.lineTo(22, 18); c.quadraticCurveTo(32, 14, 42, 18); c.lineTo(54, 6); c.lineTo(56, 26); c.lineTo(46, 44); c.closePath(); icFill(c, tint || '#5d6b4a', 2.2);
+    icPoly(c, [[24, 40], [40, 40], [32, 58]], tint ? '#ccff90' : '#8d9c74', 1.6);
+    icGlow(c, 22, 30, 7, '#aeea00', 0.9); icGlow(c, 42, 30, 7, '#aeea00', 0.9);
+    icEll(c, 22, 30, 4, 2.2, '#f0f4c3', 0, 0.35); icEll(c, 42, 30, 4, 2.2, '#f0f4c3', 0, -0.35);
+    icEll(c, 32, 52, 3.5, 2.5, '#212121', 0);
+    c.restore();
+}
+// A front-facing black jaguar head centred on (x, y): round, small ears, broad muzzle, gold eyes
+function icJaguarHead(c, x, y, s, tint) {
+    c.save(); c.translate(x - 32 * s, y - 32 * s); c.scale(s, s);
+    for (const ex of [14, 50]) { icEll(c, ex, 16, 7, 7, tint || '#1f1e26', 2); icEll(c, ex, 17, 3.2, 3.2, tint ? '#ccff90' : '#4a3a3e', 0); }
+    icEll(c, 32, 33, 21, 19, tint || '#1f1e26', 2.2);
+    if (!tint) { c.strokeStyle = 'rgba(90, 88, 108, 0.7)'; c.lineWidth = 1.3; for (const [rx, ry] of [[24, 20], [32, 17], [40, 20], [19, 28], [45, 28]]) { c.beginPath(); c.arc(rx, ry, 2.4, 0.4, Math.PI * 1.7); c.stroke(); } }
+    icEll(c, 32, 45, 10, 7.5, tint ? '#ccff90' : '#2d2c36', 1.6);
+    icPoly(c, [[28, 40], [36, 40], [32, 45]], '#3a2c30', 1.2);
+    for (const s2 of [-1, 1]) { icGlow(c, 32 + s2 * 9, 31, 7, '#ffb300', 0.9); icEll(c, 32 + s2 * 9, 31, 4.2, 2.4, '#ffd54f', 0, -s2 * 0.3); icEll(c, 32 + s2 * 9, 31, 0.9, 2.1, '#111', 0); }
+    c.restore();
+}
+function icBeastHead(c, x, y, s, tint) { (player.companion === 'jaguar' ? icJaguarHead : icWolfHead)(c, x, y, s, tint); } // druid.js companion
+// A paw print (pad and four toes) centred on (x, y)
+function icPaw(c, x, y, s, fill) {
+    icEll(c, x, y + 3 * s, 7 * s, 6 * s, fill, 1.5);
+    for (const [dx, dy] of [[-8, -5], [-3, -10], [3, -10], [8, -5]]) icEll(c, x + dx * s, y + dy * s, 2.8 * s, 3.4 * s, fill, 1.2);
+}
 function icSpeed(c, pts, color = 'rgba(255, 255, 255, 0.6)') { c.strokeStyle = color; c.lineWidth = 2; c.lineCap = 'round'; c.beginPath(); for (const [x, y, l] of pts) { c.moveTo(x, y); c.lineTo(x + l, y); } c.stroke(); }
 
 // ---------- skill glyphs: SKILL_GLYPHS[classId][slot](c) ----------
@@ -63,11 +90,11 @@ const SKILL_GLYPHS = {
             c.strokeStyle = '#cfd8dc'; c.lineWidth = 3; icShieldPath(c, 0, 0, 13, 30); c.stroke();
             icPoly(c, [[0, -12], [5, -2], [0, 10], [-5, -2]], '#ffca28', 1.5); c.restore();
         },
-        2(c) { // Iron Bulwark
-            icArc(c, 'rgba(255, 183, 77, 0.8)', 2, 32, 32, 26, 0, Math.PI * 2, false);
-            icEll(c, 32, 32, 19, 19, '#78909c', 2.2); icEll(c, 32, 32, 14, 14, '#90a4ae', 1.5);
-            for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; icEll(c, 32 + Math.cos(a) * 16.5, 32 + Math.sin(a) * 16.5, 1.6, 1.6, '#eceff1', 0); }
-            icEll(c, 32, 32, 6, 6, '#cfd8dc', 1.8); icEll(c, 30, 30, 2, 2, 'rgba(255, 255, 255, 0.8)', 0);
+        2(c) { // Dragonfire Blade: a greatsword wreathed in flame
+            c.save(); c.translate(32, 34); c.rotate(Math.PI / 4); // the flame runs along the blade, up and to the right
+            icFlame(c, 0, 18, 13, 44, '#ff5722', '#ffca28'); c.restore();
+            icSword(c, 18, 50, 48, 12, 4.5, '#fff3e0', '#3e2723', '#ffb300');
+            icGlow(c, 40, 22, 10, '#ffab40', 0.5);
         },
         3(c) { // Thunder Leap
             c.setLineDash([3, 4]); icArc(c, 'rgba(255, 255, 255, 0.7)', 2, 30, 48, 22, Math.PI * 1.05, Math.PI * 1.75, false); c.setLineDash([]);
@@ -117,10 +144,10 @@ const SKILL_GLYPHS = {
         },
     },
     ranger: {
-        1(c) { // Ricochet Shot
-            c.setLineDash([3, 3]); c.strokeStyle = 'rgba(255, 255, 255, 0.6)'; c.lineWidth = 2; c.beginPath(); c.moveTo(6, 52); c.lineTo(22, 14); c.lineTo(38, 48); c.stroke(); c.setLineDash([]);
-            for (const [x, y] of [[22, 14], [38, 48]]) icStar(c, x, y, 5, '#fff59d');
-            icArrow(c, 38, 48, 58, 14);
+        1(c) { // Storm Arrow: one charged arrow down a long line
+            icLine(c, 'rgba(128, 216, 255, 0.55)', 7, [[6, 58], [56, 8]]);
+            icArrow(c, 8, 56, 54, 10, '#a1887f', '#e1f5fe');
+            icBolt(c, 18, 24, 0.75, '#80d8ff'); icBolt(c, 44, 46, 0.75, '#80d8ff');
         },
         2(c) { // Nature's Stride
             icSpeed(c, [[4, 30, 10], [6, 40, 12], [4, 50, 9]]);
@@ -139,9 +166,10 @@ const SKILL_GLYPHS = {
             icEll(c, 32, 52, 22, 7, 'rgba(129, 199, 132, 0.3)', 0); c.strokeStyle = '#81c784'; c.lineWidth = 1.5; c.beginPath(); c.ellipse(32, 52, 22, 7, 0, 0, Math.PI * 2); c.stroke();
             icArrow(c, 6, 6, 20, 46); icArrow(c, 22, 2, 34, 44); icArrow(c, 38, 6, 48, 48);
         },
-        rmb(c) { // Lightning Volley
-            icArrow(c, 8, 8, 28, 50, '#a1887f', '#fff59d'); icArrow(c, 30, 4, 46, 46, '#a1887f', '#fff59d');
-            icBolt(c, 48, 30, 1.1);
+        rmb(c) { // Chain Lightning: a bolt jumping from target to target
+            icLine(c, '#80d8ff', 3, [[6, 52], [22, 14], [38, 48], [58, 12]]);
+            for (const [x, y] of [[22, 14], [38, 48]]) icStar(c, x, y, 6, '#e1f5fe');
+            icBolt(c, 50, 30, 0.9, '#fff59d');
         },
     },
     nightblade: {
@@ -165,9 +193,10 @@ const SKILL_GLYPHS = {
             icGlow(c, 27, 30, 5, '#e040fb', 0.9); icGlow(c, 37, 30, 5, '#e040fb', 0.9);
             c.strokeStyle = IC_LINE; c.lineWidth = 1.2; c.beginPath(); for (const x of [29, 32, 35]) { c.moveTo(x, 40); c.lineTo(x, 45); } c.stroke();
         },
-        rmb(c) { // Execute
-            icSword(c, 32, 4, 32, 46, 4.5, '#cfd8dc', '#212121', '#7b1fa2');
-            icPoly(c, [[32, 48], [38, 56], [32, 61], [26, 56]], '#e53935', 1.6);
+        rmb(c) { // Expose: an eye of shadow sight over the cone it reveals
+            icPoly(c, [[32, 60], [4, 12], [60, 12]], 'rgba(171, 71, 188, 0.35)', 0);
+            icEll(c, 32, 30, 19, 10, '#eceff1', 2); icEll(c, 32, 30, 7, 7, '#7b1fa2', 0); icEll(c, 32, 30, 3, 3, '#12001a', 0);
+            icGlow(c, 32, 30, 9, '#e040fb', 0.8);
         },
     },
     machinist: {
@@ -269,29 +298,27 @@ const SKILL_GLYPHS = {
         },
     },
     druid: {
-        1(c) { // Bramble Core
+        1(c) { // Bramble Snare
             icEll(c, 32, 32, 16, 16, '#558b2f', 2.2);
             c.strokeStyle = '#33691e'; c.lineWidth = 2.5;
             for (const a of [0.3, 1.4, 2.6]) { c.beginPath(); c.ellipse(32, 32, 16, 6, a, 0, Math.PI * 2); c.stroke(); }
             for (let i = 0; i < 10; i++) { const a = i * Math.PI / 5; icPoly(c, [[32 + Math.cos(a - 0.15) * 15, 32 + Math.sin(a - 0.15) * 15], [32 + Math.cos(a) * 25, 32 + Math.sin(a) * 25], [32 + Math.cos(a + 0.15) * 15, 32 + Math.sin(a + 0.15) * 15]], '#8d6e63', 1.4); }
         },
-        2(c) { // Barkskin Shift
-            icShieldPath(c, 32, 34, 20, 44); icFill(c, '#795548', 2.2);
-            c.save(); icShieldPath(c, 32, 34, 20, 44); c.clip();
-            c.strokeStyle = '#4e342e'; c.lineWidth = 1.5; for (const r of [6, 12, 18]) { c.beginPath(); c.ellipse(32, 30, r, r * 1.2, 0, 0, Math.PI * 2); c.stroke(); }
-            c.restore();
-            c.save(); c.translate(32, 14); c.scale(2.2, 2.2); sprLeaf(c, 0, 0, -1.9, 8, '#9ccc65'); sprLeaf(c, 0, 0, -1.2, 8, '#7cb342'); c.restore();
+        2(c) { // Feral Surge: green light pouring into the wolf
+            icGlow(c, 32, 34, 30, '#76ff03', 0.55);
+            icBeastHead(c, 32, 34, 0.9);
+            for (const [x, y, a] of [[10, 52, -0.6], [54, 52, -2.5], [8, 30, 0.2], [56, 30, 2.9]]) { c.save(); c.translate(x, y); c.scale(1.8, 1.8); sprLeaf(c, 0, 0, a, 7, '#9ccc65'); c.restore(); }
         },
-        3(c) { // Spore Burst / Feral Pounce
-            for (const [x, y, r] of [[18, 20, 6], [28, 12, 4], [12, 34, 4], [26, 28, 5]]) { icGlow(c, x, y, r * 2, '#cddc39', 0.6); icEll(c, x, y, r, r, '#dce775', 1.5); }
-            for (let i = 0; i < 3; i++) { c.beginPath(); c.moveTo(34 + i * 7, 24 + i * 2); c.quadraticCurveTo(44 + i * 7, 40, 40 + i * 6, 58); c.quadraticCurveTo(46 + i * 7, 40, 38 + i * 7, 22 + i * 2); c.closePath(); icFill(c, '#eceff1', 1.6); }
+        3(c) { // Spirit Leap: a leap arc ending in paw prints
+            c.setLineDash([4, 5]); icArc(c, 'rgba(178, 255, 89, 0.85)', 2.5, 34, 52, 28, Math.PI * 1.05, Math.PI * 1.75, false); c.setLineDash([]);
+            for (const [x, y, s] of [[14, 50, 0.7], [46, 22, 1]]) icPaw(c, x, y, s, '#d7ccc8');
+            icGlow(c, 46, 22, 12, '#b2ff59', 0.5); icPaw(c, 46, 22, 1, '#eceff1');
         },
-        4(c) { // Aspect of the Wild
-            c.beginPath(); c.moveTo(32, 58); c.lineTo(18, 44); c.lineTo(8, 26); c.lineTo(10, 6); c.lineTo(22, 18); c.quadraticCurveTo(32, 14, 42, 18); c.lineTo(54, 6); c.lineTo(56, 26); c.lineTo(46, 44); c.closePath(); icFill(c, '#5d6b4a', 2.2);
-            icPoly(c, [[24, 40], [40, 40], [32, 58]], '#8d9c74', 1.6);
-            icGlow(c, 22, 30, 7, '#aeea00', 0.9); icGlow(c, 42, 30, 7, '#aeea00', 0.9);
-            icEll(c, 22, 30, 4, 2.2, '#f0f4c3', 0, 0.35); icEll(c, 42, 30, 4, 2.2, '#f0f4c3', 0, -0.35);
-            icEll(c, 32, 52, 3.5, 2.5, '#212121', 0);
+        4(c) { // Call of the Wild: the wolf howls under the moon, spirit wolves answer
+            icEll(c, 46, 16, 12, 12, '#f0f4c3', 1.6); icEll(c, 51, 13, 9, 9, '#263238', 0); // crescent
+            for (const r of [10, 17]) icArc(c, '#ccff90', 2.2, 24, 22, r, -2.6, -1.2, false);
+            c.save(); c.globalAlpha = 0.55; icBeastHead(c, 14, 44, 0.55, '#76ff03'); icBeastHead(c, 50, 44, 0.55, '#76ff03'); c.restore();
+            icBeastHead(c, 32, 40, 0.8);
         },
         rmb(c) { // Thistle-Grip Claws
             for (let i = 0; i < 3; i++) { c.beginPath(); c.moveTo(12 + i * 12, 54); c.quadraticCurveTo(10 + i * 12, 30, 24 + i * 12, 10); c.quadraticCurveTo(18 + i * 12, 32, 20 + i * 12, 54); c.closePath(); icFill(c, '#eceff1', 1.6); }
@@ -308,11 +335,14 @@ const SKILL_GLYPHS = {
             c.restore();
             icGlow(c, 36, 28, 14, '#ffd54f', 0.5);
         },
-        2(c) { // Bastion Dome
-            icGlow(c, 32, 44, 30, '#ffd54f', 0.35);
-            c.beginPath(); c.moveTo(6, 48); c.arc(32, 48, 26, Math.PI, 0); c.closePath(); icFill(c, 'rgba(255, 236, 179, 0.35)', 0);
-            icArc(c, '#ffd54f', 3, 32, 48, 26, Math.PI, 0); icArc(c, 'rgba(255, 245, 200, 0.6)', 1.5, 32, 48, 18, Math.PI * 1.15, Math.PI * 1.55, false);
-            icLine(c, '#ffd54f', 3, [[4, 48], [60, 48]]);
+        2(c) { // Divine Tether: a glowing chain of golden links running corner to corner
+            icGlow(c, 32, 32, 26, '#ffd54f', 0.35);
+            icLine(c, 'rgba(255, 213, 79, 0.45)', 9, [[10, 54], [54, 10]]);
+            c.save(); c.translate(32, 32); c.rotate(-Math.PI / 4);
+            c.strokeStyle = '#ffca28'; c.lineWidth = 3.5;
+            for (let s = -24, i = 0; s <= 24; s += 12, i++) { c.beginPath(); if (i % 2) c.ellipse(s, 0, 7, 4.5, 0, 0, Math.PI * 2); else { c.moveTo(s - 7, 0); c.lineTo(s + 7, 0); } c.stroke(); }
+            c.restore();
+            icEll(c, 54, 10, 5, 5, '#fff8e1', 1.5);
         },
         3(c) { // Righteous Charge / Iron Pull
             icSpeed(c, [[4, 22, 12], [2, 32, 14], [4, 42, 12]], 'rgba(255, 213, 79, 0.75)');
@@ -394,7 +424,7 @@ function renderIcon(key, tint, glyph) {
 function skillIcon(classId, slot) {
     const glyph = SKILL_GLYPHS[classId] && SKILL_GLYPHS[classId][slot];
     const tint = (classDataConfig[classId] && classDataConfig[classId].color) || '#888888';
-    return renderIcon(`s:${classId}:${slot}`, tint, glyph || (c => icStar(c, 32, 32, 16, '#fff')));
+    return renderIcon(`s:${classId}:${slot}${classId === 'druid' ? ':' + (player.companion || 'wolf') : ''}`, tint, glyph || (c => icStar(c, 32, 32, 16, '#fff')));
 }
 function itemIcon(item) {
     const rare = item.rarity === 'rare', p = itemPalette(rare);

@@ -1,7 +1,7 @@
 // ==========================================
 // skillfx.js - Visuals for the class Q abilities (E abilities: skillfx_e.js)
 // ==========================================
-// Hooks: drawSkillProjectile (weapons.js), drawSkillEffect / drawSkillGround / drawShieldCatch (main.js draw),
+// Hooks: drawSkillProjectile (weapons.js), drawSkillEffect / drawSkillGround (main.js draw),
 // (each also consults skillfx_e.js (E), skillfx_space.js (Space), skillfx_ult.js (R) and skillfx_rmb.js (weapon abilities))
 // updateSkillEmitters (fx.js), onParry (combat.js). Each draw hook returns true when it handled the object.
 
@@ -27,10 +27,15 @@ function drawSkillProjectile(p) {
 
     // Dragonknight: Shield Throw
     if (p.type === 'shield_throw') {
-        const glow = upg === 'A' ? '#ff6d00' : upg === 'B' ? '#4fc3f7' : (p.returning ? '#ffffff' : null);
-        const spin = fxTime * 22;
+        const glow = p.batted ? '#ff6d00' : upg === 'A' ? '#ff6d00' : upg === 'B' ? '#4fc3f7' : (p.returning ? '#ffffff' : null); // combos.js Rebound: batted, it burns
+        const spin = fxTime * (p.batted ? 34 : 22);
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
+        if (p.batted) { // a ring of dragonfire round it
+            const g = ctx.createRadialGradient(p.x, p.y, 6, p.x, p.y, 30);
+            g.addColorStop(0, 'rgba(255, 171, 64, 0.7)'); g.addColorStop(1, 'rgba(255, 87, 34, 0)');
+            ctx.fillStyle = g; ctx.beginPath(); ctx.arc(p.x, p.y, 30, 0, Math.PI * 2); ctx.fill();
+        }
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)'; ctx.lineWidth = 2;
         for (let k = 0; k < 2; k++) { ctx.beginPath(); ctx.arc(p.x, p.y, 19, spin + k * Math.PI, spin + k * Math.PI + 1.2); ctx.stroke(); }
         ctx.restore();
@@ -60,38 +65,6 @@ function drawSkillProjectile(p) {
         });
         ctx.shadowBlur = 16; ctx.shadowColor = '#ffeb3b';
         sprEllipse(ctx, r * 0.15, 0, r * 0.45, r * 0.45, '#fffde7', false);
-        ctx.restore();
-        return true;
-    }
-
-    // Ranger: Ricochet Shot (its trail traces the bounce path)
-    if (p.type === 'ricochet') {
-        const trailColor = upg === 'B' ? '#ff5252' : '#ffee58';
-        p.trail = p.trail || [];
-        p.trail.push({ x: p.x, y: p.y });
-        if (p.trail.length > 14) p.trail.shift();
-        if (p.lastAng !== undefined && Math.abs(Math.atan2(Math.sin(ang - p.lastAng), Math.cos(ang - p.lastAng))) > 0.3) { // bounced
-            spawnParticle({ kind: 'ring', color: trailColor, x: p.x, y: p.y, vx: 0, vy: 0, size: 4, grow: 120, life: 0.2, drag: 0, spin: 0, rot: 0 });
-            burst(p.x, p.y, ang, 1.6, 6, { kind: 'spark', color: trailColor, size: 2, life: 0.2, speed: [150, 320] });
-        }
-        p.lastAng = ang;
-        ctx.save();
-        ctx.globalCompositeOperation = 'lighter'; ctx.lineCap = 'round'; ctx.strokeStyle = trailColor;
-        for (let i = 1; i < p.trail.length; i++) {
-            ctx.globalAlpha = (i / p.trail.length) * 0.85; ctx.lineWidth = 1.5 + 3 * (i / p.trail.length);
-            ctx.beginPath(); ctx.moveTo(p.trail[i - 1].x, p.trail[i - 1].y); ctx.lineTo(p.trail[i].x, p.trail[i].y); ctx.stroke();
-        }
-        ctx.restore();
-        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(ang);
-        ctx.strokeStyle = '#a1887f'; ctx.lineWidth = 1.8;
-        ctx.beginPath(); ctx.moveTo(-13, 0); ctx.lineTo(8, 0); ctx.stroke();
-        ctx.shadowBlur = 12; ctx.shadowColor = trailColor;
-        ctx.fillStyle = upg === 'B' ? '#ff8a80' : '#fff59d';
-        ctx.beginPath(); ctx.moveTo(15, 0); ctx.lineTo(6, -3.6); ctx.lineTo(6, 3.6); ctx.closePath(); ctx.fill();
-        if (upg === 'B') { ctx.beginPath(); for (const s of [-1, 1]) { ctx.moveTo(6, s * 1.5); ctx.lineTo(1, s * 4.5); ctx.lineTo(4, s * 1); } ctx.fill(); } // barbs
-        ctx.shadowBlur = 0;
-        ctx.fillStyle = '#ffca28';
-        ctx.beginPath(); ctx.moveTo(-7, 0); ctx.lineTo(-12, -3.5); ctx.lineTo(-15, -3.5); ctx.lineTo(-11, 0); ctx.lineTo(-15, 3.5); ctx.lineTo(-12, 3.5); ctx.closePath(); ctx.fill();
         ctx.restore();
         return true;
     }
@@ -126,7 +99,7 @@ function drawSkillProjectile(p) {
     // Machinist: Sentry Turret
     if (p.type === 'turret') { drawTurret(p); return true; }
 
-    // Druid: Bramble Core (a thorny seed)
+    // Druid: Bramble Snare (a thorny seed)
     if (p.type === 'bramble_core') {
         ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(fxTime * 6);
         ctx.fillStyle = '#33691e';
@@ -162,22 +135,6 @@ function drawDragonShield(x, y, rot, scale, glow) {
     ctx.restore();
 }
 
-// The Shield Throw lands where it returned to: a shield on the ground, pulsing to be picked up
-function drawShieldCatch(d) {
-    const aegis = d.skill && d.skill.selectedUpg === 'B';
-    const color = aegis ? '#4fc3f7' : '#cfd8dc';
-    const blink = d.life < 1.5 && Math.sin(fxTime * 20) < 0;
-    const pulse = 0.5 + 0.5 * Math.sin(fxTime * 5);
-    ctx.save();
-    ctx.globalAlpha = blink ? 0.35 : 1;
-    ctx.strokeStyle = color; ctx.lineWidth = 2;
-    ctx.globalAlpha *= 0.4 + 0.4 * pulse;
-    ctx.beginPath(); ctx.arc(d.x, d.y, 20 + pulse * 4, 0, Math.PI * 2); ctx.stroke();
-    ctx.globalAlpha = blink ? 0.35 : 1;
-    drawDragonShield(d.x, d.y + Math.sin(fxTime * 3) * 1.5, 0.3, 0.85, color);
-    ctx.restore();
-}
-
 // Machinist Sentry Turret: unfolds on deploy, tracks targets, flashes when it fires
 function drawTurret(p) {
     const age = fxAge(p), deploy = easeOut(age / 0.35);
@@ -193,6 +150,7 @@ function drawTurret(p) {
 
     ctx.save();
     ctx.translate(p.x, p.y);
+    if (p.scale > 1) ctx.scale(p.scale, p.scale); // Heavy / Siege Turret (Scrap)
     ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
     ctx.beginPath(); ctx.ellipse(2, 5, 17, 11, 0, 0, Math.PI * 2); ctx.fill();
     // Tripod legs
@@ -213,7 +171,7 @@ function drawTurret(p) {
     }
     // Remaining lifetime
     ctx.strokeStyle = 'rgba(255, 152, 0, 0.7)'; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.arc(0, 0, 13, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.max(0, p.life / 10)); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, 0, 13, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.max(0, p.life / (p.maxLife || 10))); ctx.stroke();
     // Rotating head
     ctx.rotate(p.angle);
     const recoil = sinceShot < 0.08 ? -3 * (1 - sinceShot / 0.08) : 0;
@@ -255,6 +213,7 @@ function drawSkillGround(ef) {
     if (drawSpaceGround(ef) || drawUltGround(ef)) return true; // skillfx_space.js, skillfx_ult.js
     if (ef.type === 'smoke_bomb') { drawSmokeBomb(ef); return true; }
     if (ef.type === 'fire_puddle') { // Scorched Earth: flickering flame tongues over a glowing patch
+        if (ef.scorch) return true; // combos.js Wyrmfall: drawn as Dragon Breath scorch marks instead, only its embers rise
         const k = clamp01(ef.life / ef.maxLife);
         if (!ef.tongues) ef.tongues = Array.from({ length: 10 }, () => { const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * ef.radius * 0.8; return { x: Math.cos(a) * r, y: Math.sin(a) * r, s: 0.7 + Math.random() * 0.6 }; });
         ctx.save();
@@ -273,7 +232,7 @@ function drawSkillGround(ef) {
         ctx.restore();
         return true;
     }
-    if (ef.type === 'thorn_patch') { // Bramble Core: thorny vines that grow in, then wither
+    if (ef.type === 'thorn_patch') { // Bramble Snare's Thicket: thorny vines that grow in, then wither
         if (!ef.vines) {
             ef.vines = Array.from({ length: ef.radius > 60 ? 7 : 5 }, () => {
                 const a0 = Math.random() * Math.PI * 2, a1 = a0 + (Math.random() < 0.5 ? -1 : 1) * (1 + Math.random() * 1.5);
@@ -320,6 +279,144 @@ function drawSkillEffect(ef) {
     const k = clamp01(ef.life / ef.maxLife), p = 1 - k;
     if (drawESkillEffect(ef, p, k) || drawSpaceEffect(ef, p, k) || drawUltEffect(ef, p, k) || drawRmbEffect(ef, p, k)) return true;
     switch (ef.type) {
+        case 'heavy_slam': { // Dragonknight full overhead slam: the blade bites in, dust and a shockwave roll out (skills.js 'sword')
+            const R = ef.radius, col = ef.fire ? '#ff7043' : '#ffe0b2';
+            if (!ef.burstDone) {
+                ef.burstDone = true;
+                burst(ef.x, ef.y, 0, Math.PI * 2, 12, { kind: 'debris', color: '#6d4c41', size: 4, life: 0.45, speed: [100, 280], drag: 5 });
+                burst(ef.x, ef.y, ef.angle, 1.6, 10, { kind: 'spark', color: ef.fire ? '#ffca28' : '#fff3e0', size: 2.5, life: 0.3, speed: [200, 460], drag: 5 });
+                dustPuff(ef.x, ef.y, 0, Math.PI * 2, 7);
+            }
+            ctx.save(); ctx.translate(ef.x, ef.y);
+            ctx.save(); ctx.rotate(ef.angle); // where the edge struck: a long scorch along the blow
+            ctx.fillStyle = `rgba(25, 10, 4, ${0.45 * k})`; ctx.beginPath(); ctx.ellipse(-10, 0, 46, 10, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.fillStyle = withAlpha(col, 0.8 * Math.max(0, 1 - p * 2.5)); ctx.beginPath(); ctx.ellipse(-10, 0, 42, 6, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+            ctx.globalCompositeOperation = 'lighter';
+            const SR = R * easeOut(Math.min(1, p * 1.8));
+            ctx.strokeStyle = withAlpha(col, k); ctx.lineWidth = 6 * k + 1; ctx.beginPath(); ctx.arc(0, 0, SR, 0, Math.PI * 2); ctx.stroke();
+            ctx.strokeStyle = `rgba(255, 255, 255, ${0.7 * k})`; ctx.lineWidth = 2 * k; ctx.beginPath(); ctx.arc(0, 0, SR * 0.9, 0, Math.PI * 2); ctx.stroke();
+            ctx.restore();
+            return true;
+        }
+        case 'radiant_burst': { // Cleric Phase Shift finisher (combos.js): a ring of light bursts out from the Cleric, rays between the rings
+            const R = ef.radius * easeOut(Math.min(1, p * 1.8)), col = ef.shadow ? '206, 147, 216' : '255, 224, 130', x = ef.x, y = ef.y;
+            if (!ef.burstDone) { ef.burstDone = true; burst(x, y, 0, Math.PI * 2, 16, { kind: 'dot', color: ef.shadow ? '#ce93d8' : '#fff59d', size: 2.5, life: 0.4, speed: [200, 420], drag: 4 }); }
+            ctx.save(); ctx.globalCompositeOperation = 'lighter';
+            ctx.fillStyle = `rgba(${col}, ${0.22 * k})`; ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = `rgba(${col}, ${k})`; ctx.lineWidth = 5 * k + 1; ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.stroke();
+            ctx.strokeStyle = `rgba(255, 255, 255, ${0.7 * k})`; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, R * 0.6, 0, Math.PI * 2); ctx.stroke();
+            ctx.beginPath(); // eight rays between the rings
+            for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4 + p; ctx.moveTo(x + Math.cos(a) * R * 0.6, y + Math.sin(a) * R * 0.6); ctx.lineTo(x + Math.cos(a) * R, y + Math.sin(a) * R); }
+            ctx.stroke();
+            ctx.restore();
+            return true;
+        }
+        case 'blink_lance': { // Spellweaver Blink finisher (combos.js): an arcane lance along the blink line, bright core in a violet sheath
+            const a = Math.atan2(ef.y2 - ef.y1, ef.x2 - ef.x1), L = Math.hypot(ef.x2 - ef.x1, ef.y2 - ef.y1), col = ef.charged ? '130, 177, 255' : '224, 64, 251';
+            if (!ef.burstDone) {
+                ef.burstDone = true;
+                for (let s = 0; s < L; s += 30) burst(ef.x1 + Math.cos(a) * s, ef.y1 + Math.sin(a) * s, a + Math.PI / 2 * (s % 60 ? 1 : -1), 0.8, 2, { kind: 'spark', color: ef.charged ? '#bbdefb' : '#ea80fc', size: 2, life: 0.3, speed: [80, 220], drag: 5 });
+            }
+            ctx.save(); ctx.translate(ef.x1, ef.y1); ctx.rotate(a); ctx.globalCompositeOperation = 'lighter';
+            const w = LANCE_WIDTH * (0.6 + 0.6 * k);
+            ctx.fillStyle = `rgba(${col}, ${0.35 * k})`; ctx.beginPath(); ctx.ellipse(L / 2, 0, L / 2 + 14, w, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = `rgba(255, 255, 255, ${0.9 * k})`; ctx.beginPath(); ctx.ellipse(L / 2, 0, L / 2 + 6, w * 0.22, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+            return true;
+        }
+        case 'overload_glow': { // Machinist Overload (combos.js): the grappled turret runs hot, sparks spitting off it
+            const t = ef.target;
+            if (!t || !projectiles.includes(t)) { ef.life = 0; return true; }
+            const R = 20 * (t.scale || 1), flick = 0.6 + 0.4 * Math.sin(fxTime * 40);
+            ctx.save(); ctx.globalCompositeOperation = 'lighter';
+            ctx.fillStyle = `rgba(255, 152, 0, ${0.3 * flick * Math.min(1, k * 3)})`; ctx.beginPath(); ctx.arc(t.x, t.y, R + 8, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = `rgba(255, 224, 178, ${0.8 * Math.min(1, k * 3)})`; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(t.x, t.y, R + 4, 0, Math.PI * 2); ctx.stroke();
+            ctx.restore();
+            if (Math.random() < 0.4) spawnParticle({ kind: 'spark', color: '#ffcc80', x: t.x + jitter(R), y: t.y + jitter(R), vx: jitter(160), vy: -60 - Math.random() * 120, size: 2, life: 0.3, drag: 3, grow: 0, spin: 0, rot: 0 });
+            return true;
+        }
+        case 'judgment_smash': { // Paladin Space finisher (paladin.js judgmentSmash): light falls on the impact and a holy sigil burns into the ground
+            const R = ef.radius, x = ef.x, y = ef.y;
+            if (!ef.burstDone) {
+                ef.burstDone = true;
+                burst(x, y, 0, Math.PI * 2, 16, { kind: 'spark', color: '#fff59d', size: 2.5, life: 0.4, speed: [200, 460], drag: 5 });
+                dustPuff(x, y, 0, Math.PI * 2, 10);
+            }
+            ctx.save(); ctx.translate(x, y);
+            ctx.globalCompositeOperation = 'lighter';
+            const fall = Math.max(0, 1 - p * 3); // the column of light, seen from above: a bright disc that shrinks to the impact
+            if (fall > 0) { ctx.fillStyle = `rgba(255, 248, 225, ${0.8 * fall})`; ctx.beginPath(); ctx.arc(0, 0, 26 + 30 * fall, 0, Math.PI * 2); ctx.fill(); }
+            const SR = R * easeOut(Math.min(1, p * 1.7));
+            ctx.strokeStyle = `rgba(255, 213, 79, ${k})`; ctx.lineWidth = 6 * k + 1; ctx.beginPath(); ctx.arc(0, 0, SR, 0, Math.PI * 2); ctx.stroke();
+            ctx.rotate(p * 0.6); // the sigil: a ring with a cross and four studs, turning slowly as it fades
+            ctx.strokeStyle = `rgba(255, 236, 179, ${0.8 * k})`; ctx.lineWidth = 2;
+            const S = R * 0.55;
+            ctx.beginPath(); ctx.arc(0, 0, S, 0, Math.PI * 2); ctx.moveTo(-S * 0.8, 0); ctx.lineTo(S * 0.8, 0); ctx.moveTo(0, -S * 0.8); ctx.lineTo(0, S * 0.8); ctx.stroke();
+            ctx.fillStyle = `rgba(255, 236, 179, ${0.8 * k})`;
+            for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + Math.PI / 4; ctx.beginPath(); ctx.arc(Math.cos(a) * S, Math.sin(a) * S, 4, 0, Math.PI * 2); ctx.fill(); }
+            ctx.restore();
+            return true;
+        }
+        case 'wyrm_whirl': { // Dragonknight Thunder Leap finisher (combos.js): a ring swept round the knight, in step with the blade
+            const x = player.x, y = player.y, R = ef.radius, q = clamp01((ef.maxLife - ef.life) / 0.32), s = weaponAnim.swing % 2 ? 1 : -1;
+            const a0 = ef.angle + s * 0.5, a1 = a0 - s * Math.PI * 2 * easeOut(q), col = ef.fire ? '255, 112, 67' : '255, 236, 179';
+            if (!ef.burstDone) {
+                ef.burstDone = true;
+                burst(x, y, 0, Math.PI * 2, 14, { kind: 'spark', color: ef.fire ? '#ffca28' : '#fff3e0', size: 2.5, life: 0.35, speed: [220, 460], drag: 5 });
+                if (ef.full) { dustPuff(x, y, 0, Math.PI * 2, 10); burst(x, y, 0, Math.PI * 2, 12, { kind: 'debris', color: '#6d4c41', size: 4, life: 0.45, speed: [120, 300], drag: 5 }); }
+            }
+            ctx.save(); ctx.globalCompositeOperation = 'lighter';
+            ctx.fillStyle = `rgba(${col}, ${0.28 * k})`; // the swept band
+            ctx.beginPath(); ctx.arc(x, y, R, a0, a1, s > 0); ctx.arc(x, y, 30, a1, a0, s < 0); ctx.closePath(); ctx.fill();
+            ctx.strokeStyle = `rgba(${col}, ${0.9 * k})`; ctx.lineWidth = 3 * k + 1; // the edge's path
+            ctx.beginPath(); ctx.arc(x, y, R - 4, a0, a1, s > 0); ctx.stroke();
+            if (ef.full) { ctx.strokeStyle = `rgba(255, 255, 255, ${0.7 * k})`; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, R * (0.7 + 0.4 * (1 - k)), 0, Math.PI * 2); ctx.stroke(); } // the slam's shockwave
+            ctx.restore();
+            return true;
+        }
+        case 'inferno_ring': { // Dragonknight Inferno Edge: a ring of fire bursts out around the knight
+            const R = ef.radius * easeOut(Math.min(1, p * 2)), x = player.x, y = player.y;
+            if (!ef.burstDone) { ef.burstDone = true; burst(x, y, 0, Math.PI * 2, 18, { kind: 'dot', color: '#ff7043', size: 3, life: 0.45, speed: [180, 380], drag: 4 }); }
+            ctx.save(); ctx.globalCompositeOperation = 'lighter';
+            const g = ctx.createRadialGradient(x, y, R * 0.6, x, y, R);
+            g.addColorStop(0, 'rgba(255, 87, 34, 0)'); g.addColorStop(0.75, `rgba(255, 112, 67, ${0.5 * k})`); g.addColorStop(1, `rgba(255, 202, 40, ${0.8 * k})`);
+            ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = `rgba(255, 202, 40, ${0.8 * k})`; // flame tongues along the rim
+            for (let i = 0; i < 14; i++) {
+                const a = i * Math.PI / 7 + fxTime * 2, L = 14 + 8 * Math.sin(fxTime * 20 + i * 1.7);
+                ctx.beginPath(); ctx.moveTo(x + Math.cos(a - 0.12) * R, y + Math.sin(a - 0.12) * R); ctx.lineTo(x + Math.cos(a) * (R + L), y + Math.sin(a) * (R + L)); ctx.lineTo(x + Math.cos(a + 0.12) * R, y + Math.sin(a + 0.12) * R); ctx.fill();
+            }
+            ctx.restore();
+            return true;
+        }
+        case 'turret_build': { // Machinist holding Q: the turret-to-be at the cursor grows as Scrap pours in
+            const c = player.charge; if (!c) return true;
+            const tier = turretTierFromHold(Math.min(1, c.t / c.max)), lvl = tier ? (tier.cost >= 10 ? 2 : 1) : 0; // skills.js
+            const goal = (player.scrap || 0) >= 10 ? 1 : HEAVY_HOLD / TURRET_BUILD_TIME, f = Math.min(1, (c.t / c.max) / goal);
+            if ((ef.lvl || 0) < lvl) { // a tier reached: the scrap snaps into place
+                ef.lvl = lvl;
+                burst(mouseX, mouseY, 0, Math.PI * 2, 10, { kind: 'spark', color: '#ffb74d', size: 2.2, life: 0.3, speed: [100, 240], drag: 5 });
+            }
+            const R = 16 * (tier ? tier.scale : 1);
+            ctx.save();
+            ctx.translate(mouseX, mouseY);
+            ctx.strokeStyle = 'rgba(255, 183, 77, 0.55)'; ctx.lineWidth = 2; ctx.setLineDash([5, 4]);
+            ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+            ctx.strokeStyle = 'rgba(255, 152, 0, 0.9)'; ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.arc(0, 0, R + 8, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * f); ctx.stroke();
+            if (goal === 1) { // the Heavy mark on the way to Siege
+                const a = -Math.PI / 2 + Math.PI * 2 * HEAVY_HOLD / TURRET_BUILD_TIME;
+                ctx.strokeStyle = '#fff3e0'; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.moveTo(Math.cos(a) * (R + 4), Math.sin(a) * (R + 4)); ctx.lineTo(Math.cos(a) * (R + 12), Math.sin(a) * (R + 12)); ctx.stroke();
+            }
+            ctx.fillStyle = '#ffb74d'; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center';
+            ctx.fillText(tier ? tier.name : 'TURRET', 0, -R - 16);
+            ctx.restore();
+            return true;
+        }
+
         case 'fiery_explosion': { // fireballs, Meteor, volatile turrets
             if (!ef.burstDone) {
                 ef.burstDone = true;
@@ -468,7 +565,6 @@ function drawSkillEffect(ef) {
             return true;
         }
         case 'divine_ray_channel': { drawDivineRay(ef); return true; }
-        case 'vine_whip': { drawVineWhip(ef, p, k); return true; }
         case 'holy_impact': { // Paladin hammer landing: flash, light rays and a shock ring
             if (!ef.burstDone) {
                 ef.burstDone = true;
@@ -561,47 +657,6 @@ function drawDivineRay(ef) {
     ctx.restore();
 }
 
-// Druid Vine Whip: a thorny vine lashes out, cracks at full reach, then recoils
-function drawVineWhip(ef, p, k) {
-    const extend = p < 0.45 ? easeOut(p / 0.45) : 1 - easeInOut((p - 0.45) / 0.55) * 0.9;
-    const len = ef.radius * extend;
-    const pts = [];
-    for (let x = 0; x <= len; x += 8) {
-        const t = x / Math.max(1, ef.radius);
-        pts.push([x, Math.sin(x * 0.045 - p * 14) * 12 * t * (1 - t * 0.4)]);
-    }
-    if (pts.length < 2) return;
-    ctx.save();
-    ctx.globalAlpha = 1;
-    ctx.translate(ef.x, ef.y); ctx.rotate(ef.angle);
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    for (let i = 1; i < pts.length; i++) { // tapering vine
-        const wdt = 6.5 - 4.5 * (i / pts.length);
-        ctx.strokeStyle = SPRITE_OUTLINE; ctx.lineWidth = wdt + 2;
-        ctx.beginPath(); ctx.moveTo(...pts[i - 1]); ctx.lineTo(...pts[i]); ctx.stroke();
-    }
-    for (let i = 1; i < pts.length; i++) {
-        ctx.strokeStyle = '#558b2f'; ctx.lineWidth = 6.5 - 4.5 * (i / pts.length);
-        ctx.beginPath(); ctx.moveTo(...pts[i - 1]); ctx.lineTo(...pts[i]); ctx.stroke();
-    }
-    ctx.fillStyle = '#c5e1a5';
-    for (let i = 2; i < pts.length - 1; i += 2) {
-        const [x, y] = pts[i], s = i % 4 ? 1 : -1;
-        ctx.beginPath(); ctx.moveTo(x - 2, y); ctx.lineTo(x, y + s * 6); ctx.lineTo(x + 2, y); ctx.fill();
-    }
-    [0.25, 0.5, 0.75].forEach((f, i) => { const pt = pts[Math.floor((pts.length - 1) * f)]; sprLeaf(ctx, pt[0], pt[1], (i % 2 ? 1 : -1) * 1.2, 7, '#7cb342'); });
-    // Crack at full extension
-    if (p > 0.3 && p < 0.6) {
-        const [tx, ty] = pts[pts.length - 1], f = 1 - Math.abs(p - 0.45) / 0.15;
-        ctx.globalCompositeOperation = 'lighter';
-        sprStar(ctx, tx, ty, 12 * f, '#ccff90');
-        ctx.fillStyle = `rgba(139, 195, 74, ${0.5 * f})`;
-        drawCrescent(0, 0, ef.radius, -0.5, 0.5, 12 * f);
-        ctx.fill();
-    }
-    ctx.restore();
-}
-
 // ==========================================
 // Swordsaint parry
 // ==========================================
@@ -642,6 +697,7 @@ function updateSkillEmitters(dt) {
         const upg = p.sourceSkill && p.sourceSkill.selectedUpg;
         if (p.type === 'shield_throw') {
             const col = upg === 'A' ? '#ff9e40' : upg === 'B' ? '#81d4fa' : '#eeeeee';
+            if (p.batted) emit(90, dt, () => spawnParticle({ kind: 'dot', color: Math.random() < 0.5 ? '#ff7043' : '#ffca28', x: p.x + jitter(12), y: p.y + jitter(12), vx: -p.vx * 0.12 + jitter(40), vy: -p.vy * 0.12 + jitter(40), size: 2, life: 0.4, drag: 3, grow: 0, spin: 0, rot: 0 })); // combos.js Rebound: a fire trail
             emit(upg ? 30 : 15, dt, () => spawnParticle({ kind: 'dot', color: col, x: p.x + jitter(16), y: p.y + jitter(16), vx: jitter(30), vy: jitter(30), size: 1.5, life: 0.35, drag: 2, grow: 0, spin: 0, rot: 0 }));
         } else if (p.type === 'fireball' && p.sourceSkill && selectedClassId === 'spellweaver') {
             emit(70, dt, () => spawnParticle({ kind: 'dot', color: Math.random() < 0.5 ? '#ff7043' : '#ffca28', x: p.x + jitter(10), y: p.y + jitter(10), vx: -p.vx * 0.15 + jitter(50), vy: -p.vy * 0.15 + jitter(50), size: 2, life: 0.4, drag: 3, grow: 0, spin: 0, rot: 0 }));

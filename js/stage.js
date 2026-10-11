@@ -53,6 +53,7 @@ const worldH = () => (mapDef() ? mapDef().h : canvas.height);
 
 // Which map a wave is fought on
 function mapTypeForWave(w) {
+    if (isTraining()) return 'training'; // training.js
     if (isEndlessMode) return 'open';
     if (activeDungeonId === 'bandit_bastion' && w >= 11) return 'bridge';
     if (activeDungeonId === 'slime_caves' && w <= 5) return 'clearing';
@@ -276,8 +277,10 @@ function onEnemySpawned(e) {
 
 // ---------- wave / stage flow ----------
 
-// The wave's last enemy died (or a level-up after that closed)
+// The wave's last enemy died (or a level-up after that closed). Regular waves roll on by themselves after a short
+// breather; only a boss stops the run: the stage exit opens, or (without a stage map) the boss-cleared screen and its shop.
 function onWaveCleared() {
+    if (isTraining()) return; // training.js: no waves to clear
     if (mapDef() && isBossWave && !isEndlessMode) {
         if (!currentMap.caveOpen) {
             if (currentMap.type === 'cavern') startSealBreak(); // map_cavern.js: the wall gives way first
@@ -286,7 +289,10 @@ function onWaveCleared() {
         gameState = STATE.PLAYING; lastTime = performance.now(); // walk out to finish the stage
         return;
     }
-    showWaveCleared();
+    if (isBossWave) { showWaveCleared(); return; }
+    if (waveBreak > 0) return; // already counting down (a level-up closed during the breather)
+    gameState = STATE.PLAYING; lastTime = performance.now();
+    waveBreak = WAVE_BREAK; // main.js update counts it down; the wave plaque shows it
 }
 
 function openStageExit(color) {

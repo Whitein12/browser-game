@@ -4,7 +4,7 @@
 // Dispatched from skillfx.js (drawSkillProjectile / drawSkillEffect / drawSkillGround / updateSkillEmitters),
 // plus drawPlayerShield, drawGroundProjectiles and drawEnemyStatus called from main.js draw.
 
-// Hexagon lattice clipped to a circle (shields, Bastion Dome). Caller sets strokeStyle/lineWidth.
+// Hexagon lattice clipped to a circle (shields). Caller sets strokeStyle/lineWidth.
 function strokeHoneycomb(cx, cy, R, size, rot) {
     ctx.save();
     ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.clip();
@@ -80,7 +80,7 @@ function drawBarkShell(x, y, R, strength) {
     ctx.restore();
 }
 
-// A ring of armor plates closing in from fromR to toR as q goes 0 → 1 (Iron Bulwark steel, Barkskin bark)
+// A ring of armor plates closing in from fromR to toR as q goes 0 → 1 (Barkskin bark)
 function drawConvergingPlates(cx, cy, fromR, toR, q, count, color, alpha) {
     const r = lerp(fromR, toR, easeOut(q)), span = Math.PI / count * 0.85;
     ctx.save();
@@ -101,38 +101,44 @@ function drawConvergingPlates(cx, cy, fromR, toR, q, count, color, alpha) {
 
 function drawESkillEffect(ef, p, k) {
     switch (ef.type) {
-        case 'iron_bulwark': { // Dragonknight: steel plates slam in around the knight, then lock with a flash
-            const x = player.x, y = player.y, R = player.radius + 14;
-            if (!ef.burstDone && p > 0.4) {
+        case 'dragonfire_ignite': { // Dragonknight Dragonfire Blade: fire roars up the greatsword and flares around the knight
+            const x = player.x, y = player.y, R = player.radius + 10 + 50 * easeOut(p);
+            if (!ef.burstDone) {
                 ef.burstDone = true;
-                burst(x, y, 0, Math.PI * 2, 10, { kind: 'spark', color: '#eceff1', size: 2, life: 0.25, speed: [150, 320], drag: 6 });
-                if (ef.upg === 'A') { addShake(2.5); burst(x, y, 0, Math.PI * 2, 12, { kind: 'spark', color: '#ff8a65', size: 2.5, life: 0.3, speed: [250, 450], drag: 5 }); }
-                if (ef.upg === 'B') burst(x, y, 0, Math.PI * 2, 14, { kind: 'dot', color: '#ff5722', size: 2, life: 0.5, speed: [60, 180], drag: 3 });
+                burst(x, y, 0, Math.PI * 2, 18, { kind: 'dot', color: '#ff7043', size: 2.5, life: 0.5, speed: [120, 300], drag: 4 });
+                burst(x, y, 0, Math.PI * 2, 10, { kind: 'spark', color: '#ffca28', size: 2, life: 0.3, speed: [200, 400], drag: 5 });
             }
-            ctx.save(); ctx.globalAlpha = 1;
-            drawConvergingPlates(x, y, ef.radius, R, Math.min(1, p / 0.4), 6, '#90a4ae', Math.min(1, k * 2.5));
-            if (p > 0.4) {
-                const q = (p - 0.4) / 0.6;
-                ctx.globalCompositeOperation = 'lighter';
-                ctx.strokeStyle = `rgba(255, 255, 255, ${1 - q})`; ctx.lineWidth = 3 * (1 - q) + 0.5;
-                ctx.beginPath(); ctx.arc(x, y, R + 20 * q, 0, Math.PI * 2); ctx.stroke();
-                if (ef.upg === 'A') { // Spiked Shield: spikes burst outward
-                    ctx.globalCompositeOperation = 'source-over';
-                    const len = 22 * Math.sin(Math.min(1, q * 1.5) * Math.PI);
-                    for (let i = 0; i < 12; i++) {
-                        const a = i * Math.PI / 6;
-                        ctx.beginPath();
-                        ctx.moveTo(x + Math.cos(a - 0.12) * R, y + Math.sin(a - 0.12) * R);
-                        ctx.lineTo(x + Math.cos(a) * (R + len), y + Math.sin(a) * (R + len));
-                        ctx.lineTo(x + Math.cos(a + 0.12) * R, y + Math.sin(a + 0.12) * R);
-                        ctx.closePath();
-                        sprFill(ctx, '#cfd8dc');
-                    }
-                }
-                if (ef.upg === 'B') { // Adrenaline Surge: a flare of red fire
-                    ctx.fillStyle = `rgba(255, 87, 34, ${0.5 * (1 - q)})`;
-                    ctx.beginPath(); ctx.arc(x, y, R + 30 * q + 6, 0, Math.PI * 2); ctx.arc(x, y, R + 30 * q - 4, 0, Math.PI * 2, true); ctx.fill();
-                }
+            ctx.save(); ctx.globalCompositeOperation = 'lighter';
+            const g = ctx.createRadialGradient(x, y, 0, x, y, R);
+            g.addColorStop(0, `rgba(255, 236, 179, ${0.6 * k})`); g.addColorStop(0.5, `rgba(255, 112, 67, ${0.45 * k})`); g.addColorStop(1, 'rgba(255, 87, 34, 0)');
+            ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = `rgba(255, 202, 40, ${k})`; ctx.lineWidth = 3 * k + 0.5; ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.stroke();
+            ctx.restore();
+            return true;
+        }
+        case 'ice_wall': { // Spellweaver Ice Wall (combos.js): faceted crystals along the beam's line, grown out from the staff
+            const el = ef.maxLife - ef.life, reach = Math.min(1, el / ICE_WALL_GROW), crack = ef.life < 0.3 ? ef.life / 0.3 : 1;
+            if (ef.life < 0.3 && !ef.burstDone) { // cracking apart
+                ef.burstDone = true;
+                for (const c of ef.crystals) if (Math.random() < 0.5) burst(lerp(ef.x1, ef.x2, c.t), lerp(ef.y1, ef.y2, c.t), 0, Math.PI * 2, 2, { kind: 'spark', color: '#e1f5fe', size: 2.5, life: 0.4, speed: [60, 180], drag: 4 });
+            }
+            const ang = Math.atan2(ef.y2 - ef.y1, ef.x2 - ef.x1), nx = -Math.sin(ang), ny = Math.cos(ang);
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter'; ctx.lineCap = 'round'; // a cold glow under it
+            ctx.strokeStyle = `rgba(129, 212, 250, ${0.3 * crack})`; ctx.lineWidth = ICE_WALL_THICK + 12;
+            ctx.beginPath(); ctx.moveTo(ef.x1, ef.y1); ctx.lineTo(lerp(ef.x1, ef.x2, reach), lerp(ef.y1, ef.y2, reach)); ctx.stroke();
+            ctx.globalCompositeOperation = 'source-over';
+            for (const c of ef.crystals) {
+                if (c.t > reach) continue;
+                const grow = Math.min(1, (reach - c.t) * 6 + 0.3) * (0.4 + 0.6 * crack), R = c.size * grow;
+                const cx = lerp(ef.x1, ef.x2, c.t) + nx * c.off, cy = lerp(ef.y1, ef.y2, c.t) + ny * c.off;
+                ctx.beginPath();
+                for (let i = 0; i < c.sides; i++) { const a = c.rot + i * Math.PI * 2 / c.sides, r = R * (i % 2 ? 0.8 : 1); if (i) ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r); else ctx.moveTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r); }
+                ctx.closePath();
+                ctx.fillStyle = `rgba(179, 229, 252, ${0.85 * crack})`; ctx.fill();
+                ctx.strokeStyle = `rgba(255, 255, 255, ${0.9 * crack})`; ctx.lineWidth = 1.5; ctx.stroke();
+                ctx.strokeStyle = `rgba(2, 136, 209, ${0.5 * crack})`; ctx.lineWidth = 1; // a facet line
+                ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(c.rot) * R, cy + Math.sin(c.rot) * R); ctx.stroke();
             }
             ctx.restore();
             return true;
@@ -206,7 +212,7 @@ function drawESkillEffect(ef, p, k) {
             if (!ef.burstDone) {
                 ef.burstDone = true;
                 burst(ef.x, ef.y, 0, Math.PI * 2, 10, { kind: 'spark', color: '#84ffff', size: 2, life: 0.3, speed: [150, 320], drag: 6 });
-                if (ef.flow) for (let i = 0; i < 12; i++) { // Instant Flow: motes rush inward
+                if (ef.flow) for (let i = 0; i < 12; i++) { // Early Deploy: motes rush inward
                     const a = i * Math.PI / 6;
                     spawnParticle({ kind: 'dot', color: '#00e5ff', x: ef.x + Math.cos(a) * 60, y: ef.y + Math.sin(a) * 60, vx: -Math.cos(a) * 200, vy: -Math.sin(a) * 200, size: 2, life: 0.3, drag: 0, grow: 0, spin: 0, rot: 0 });
                 }
@@ -235,7 +241,7 @@ function drawESkillEffect(ef, p, k) {
             ctx.restore();
             return true;
         }
-        case 'bark_form': { // Druid Barkskin cast: bark plates close in around the druid
+        case 'bark_form': { // Druid Feral Surge: bark plates close in around the druid
             if (!ef.burstDone) {
                 ef.burstDone = true;
                 burst(player.x, player.y, 0, Math.PI * 2, 6, { kind: 'leaf', color: '#7cb342', size: 6, life: 0.6, speed: [80, 160], drag: 3 });
@@ -245,21 +251,7 @@ function drawESkillEffect(ef, p, k) {
             ctx.restore();
             return true;
         }
-        case 'bark_burst': { // Druid Splintering Shell: the bark armor explodes into splinters
-            if (!ef.burstDone) {
-                ef.burstDone = true;
-                burst(ef.x, ef.y, 0, Math.PI * 2, 22, { kind: 'debris', color: '#8d6e63', size: 4, life: 0.6, speed: [200, 480], drag: 4 });
-                burst(ef.x, ef.y, 0, Math.PI * 2, 10, { kind: 'debris', color: '#d7ccc8', size: 2.5, life: 0.5, speed: [250, 520], drag: 4 });
-                burst(ef.x, ef.y, 0, Math.PI * 2, 6, { kind: 'leaf', color: '#7cb342', size: 6, life: 0.8, speed: [100, 220], drag: 3 });
-                addShake(3);
-            }
-            ctx.save(); ctx.globalAlpha = 1;
-            ctx.strokeStyle = `rgba(161, 136, 127, ${k})`; ctx.lineWidth = 6 * k + 1;
-            ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.radius * easeOut(p), 0, Math.PI * 2); ctx.stroke();
-            ctx.restore();
-            return true;
-        }
-        case 'dome_ripple': { // Paladin Bastion Dome: a projectile breaking on the dome wall
+        case 'dome_ripple': { // Paladin Chain of Retribution: a projectile breaking on the chain
             const r = 10 + 22 * easeOut(p);
             ctx.save();
             ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 1;
@@ -424,19 +416,6 @@ function drawRetributionBolt(p) {
     ctx.restore();
 }
 
-// Paladin Bastion Dome surface: a honeycomb lattice with a highlight sweeping around it
-function drawDomeLattice(d, alpha) {
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.strokeStyle = 'rgba(255, 213, 79, 0.16)'; ctx.lineWidth = 1;
-    strokeHoneycomb(d.x, d.y, d.radius, 18, 0);
-    const sweep = fxTime * 1.2;
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.strokeStyle = 'rgba(255, 248, 225, 0.35)'; ctx.lineWidth = 6;
-    ctx.beginPath(); ctx.arc(d.x, d.y, d.radius - 3, sweep, sweep + 0.6); ctx.stroke();
-    ctx.restore();
-}
-
 // ==========================================
 // Enemy status overlays
 // ==========================================
@@ -485,8 +464,8 @@ function drawEnemyStatus(e) {
 
 function updateESkillEmitters(dt) {
     // Speed boosts (Nature's Stride, Adrenaline Surge, ...) leave wind streaks behind the moving player
-    if ((buffs.msBoost > 0 || buffs.sporeSurgeTimer > 0) && Math.hypot(spriteAnim.vx, spriteAnim.vy) > 60) {
-        const col = selectedClassId === 'ranger' ? '#c5e1a5' : selectedClassId === 'dragonknight' ? '#ff8a65' : selectedClassId === 'druid' ? '#b2ff59' : '#e0f7fa';
+    if (buffs.msBoost > 0 && Math.hypot(spriteAnim.vx, spriteAnim.vy) > 60) {
+        const col = selectedClassId === 'ranger' ? '#c5e1a5' : selectedClassId === 'dragonknight' ? '#ff8a65' : '#e0f7fa';
         emit(30, dt, () => spawnParticle({ kind: 'spark', color: col, x: player.x + jitter(24), y: player.y + jitter(24), vx: -spriteAnim.vx * 0.9, vy: -spriteAnim.vy * 0.9, size: 1.5, life: 0.25, drag: 4, grow: 0, spin: 0, rot: 0 }));
     }
     for (const ef of effects) {
@@ -499,13 +478,8 @@ function updateESkillEmitters(dt) {
         const shadow = p.isShadow;
         emit(p.radius / 12, dt, () => { const a = Math.random() * Math.PI * 2, r = Math.random() * p.radius; spawnParticle({ kind: shadow ? 'smoke' : 'dot', color: shadow ? '#7b1fa2' : '#fff9c4', x: p.x + Math.cos(a) * r, y: p.y + Math.sin(a) * r, vx: jitter(10), vy: -25, size: shadow ? 3 : 1.5, grow: shadow ? 6 : 0, life: 0.8, drag: 0.5, spin: 0, rot: 0 }); });
     }
-    // Druid Accelerated Decay: spores swirl around the bark shell
-    if (selectedClassId === 'druid' && buffs.barkskin && activeClass.skills[2].selectedUpg === 'A') {
-        emit(8, dt, () => { const a = Math.random() * Math.PI * 2; spawnParticle({ kind: 'dot', color: '#b2ff59', x: player.x + Math.cos(a) * 34, y: player.y + Math.sin(a) * 34, vx: Math.cos(a + 1.6) * 60, vy: Math.sin(a + 1.6) * 60, size: 1.5, life: 0.5, drag: 1, grow: 0, spin: 0, rot: 0 }); });
-    }
-    // Paladin Holy Sanctuary: healing light rising around the Paladin inside the dome
-    const d = player.dome;
-    if (d && d.upg === 'A' && Math.hypot(player.x - d.x, player.y - d.y) <= d.radius) {
-        emit(10, dt, () => spawnParticle({ kind: 'dot', color: '#c8e6c9', x: player.x + jitter(30), y: player.y + jitter(20), vx: 0, vy: -40, size: 1.6, life: 0.6, drag: 0.5, grow: 0, spin: 0, rot: 0 }));
+    // Paladin Divine Tether: healing light rising around the Paladin while the chain holds something
+    if (player.tether && player.tether.healing) {
+        emit(6, dt, () => spawnParticle({ kind: 'dot', color: '#c8e6c9', x: player.x + jitter(30), y: player.y + jitter(20), vx: 0, vy: -40, size: 1.6, life: 0.6, drag: 0.5, grow: 0, spin: 0, rot: 0 }));
     }
 }

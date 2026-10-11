@@ -44,14 +44,19 @@ function setSlot(s, cd, maxCd, locked, level) {
 function hudChips() {
     const c = [], n = activeClass.name;
     // Class stacks (Frenzy, Momentum, Flow...) live in the gauge orb; chips are for extra buffs and dangers
-    if (player.bonusDmg > 0) c.push(['#ffb74d', 'Power orbs', `+${Math.round(player.bonusDmg * 100)}% damage`]);
+    if (player.orbDmg > 0) c.push(['#ffb74d', 'Power orbs', `+${Math.round(player.orbDmg * 100)} Power${player.orbDmg >= ORB_DMG_CAP ? ' (max)' : ''}`]);
     if (n === 'Paladin' && player.hammer) {
         const st = player.hammer.state;
-        if (st === 'deployed') c.push(['#b0bec5', 'Light Shield', '+15% Armor']);
-        if (player.dome) c.push(['#ffd54f', 'Dome', `${player.dome.life.toFixed(1)}s`]);
+        if (st !== 'equipped') c.push(['#b0bec5', 'Light Shield', '+15% Armor']); // paladin.js paladinArmorMult: on while the hammer is anywhere but in hand
+        if (player.tether) c.push(['#ffd54f', player.tether.mode === 'hammer' ? 'Tether' : 'Shackled', `${player.tether.life.toFixed(1)}s`]); // paladin.js Divine Tether
         if (gildedPlateReduction() > 0) c.push(['#ffd54f', 'Bastion DR', `${Math.round(gildedPlateReduction() * 100)}%`]);
     }
-    if (n === 'Druid' && buffs.sporeSurgeTimer > 0) c.push(['#cddc39', 'Spore Surge', `+${Math.round(buffs.sporeSurgeBonus * 100)}% MS`]);
+    if (buffs.dragonfire > 0) c.push(['#ff7043', 'Dragonfire Blade', `+${Math.round(dragonfireBonus() * 100)}% basics · ${Math.ceil(buffs.dragonfire)}s`]); // skills.js
+    if (n === 'Machinist' && activeClass.skills[1].level > 0) c.push(['#ffb74d', 'Turrets', `${projectiles.filter(p => p.type === 'turret').length} / ${turretCap()}`]); // skills.js
+    if (n === 'Machinist' && buffs.overclockTimer > 0) c.push(['#ffb74d', 'Overclock', `${buffs.overclockTimer.toFixed(1)}s`]); // the gauge orb shows Scrap now
+    if (n === 'Druid' && buffs.feralSurge > 0) c.push(['#b2ff59', 'Feral Surge', `${buffs.feralSurge.toFixed(1)}s`]);
+    if (n === 'Druid' && buffs.direWolf > 0) c.push(['#ffab40', companion().big, `${buffs.direWolf.toFixed(1)}s`]);
+    if (n === 'Druid' && player.wolves && player.wolves.length > 1) c.push(['#76ff03', companion().spirits, `${player.wolves.length - 1} · ${Math.max(...player.wolves.slice(1).map(w => w.life)).toFixed(1)}s`]); // druid.js; the gauge orb shows Bond
     let html = c.map(([col, label, val]) => `<span class="chip" style="--cc:${col}">${label} <b>${val}</b></span>`).join('');
     if (buffs.weakened > 0) html += '<span class="chip warn">Weakened</span>';
     if (player.wading) html += '<span class="chip" style="--cc:#69f0ae">Wading <b>Slowed · Poisoned</b></span>'; // map_cavern.js
@@ -90,9 +95,9 @@ function updateHUD() {
     // Wave plaque: progress against the most enemies this wave has had left at once
     const left = enemiesToSpawn + activeEnemies;
     waveStats.peak = Math.max(waveStats.peak || 0, left);
-    el('wave-display').textContent = wave > 0 ? `Wave ${wave}` : 'Prepare';
-    el('wave-subtext').textContent = wave === 0 ? 'Choose your first skill' : currentMap.caveOpen ? (currentMap.type === 'hive' ? 'Claim the crown' : 'The way is open') : left === 1 ? '1 enemy left' : `${left} enemies left`;
-    el('wave-prog').style.width = (waveStats.peak ? (1 - left / waveStats.peak) * 100 : 0) + '%';
+    el('wave-display').textContent = isTraining() ? 'Training' : wave > 0 ? `Wave ${wave}` : 'Prepare';
+    el('wave-subtext').textContent = isTraining() ? `${enemies.filter(e => e.dummy && !e.dead).length} dummies · T: panel` : wave === 0 ? 'Choose your first skill' : waveBreak > 0 ? `Next wave in ${Math.ceil(waveBreak)}` : currentMap.caveOpen ? (currentMap.type === 'hive' ? 'Claim the crown' : 'The way is open') : left === 1 ? '1 enemy left' : `${left} enemies left`;
+    el('wave-prog').style.width = (waveBreak > 0 ? 100 : waveStats.peak ? (1 - left / waveStats.peak) * 100 : 0) + '%';
     if (player.gold !== hud.lastGold) {
         el('gold-display').textContent = player.gold;
         if (player.gold > hud.lastGold) { const g = el('gold-display'); g.classList.remove('bump'); void g.offsetWidth; g.classList.add('bump'); }
@@ -113,22 +118,38 @@ function updateHUD() {
 // Each entry returns { name, f (0..1 fill), big, small, light, dark, glow?, warn? }
 const GAUGES = {
     Swordsaint: () => ({ name: 'Flow', f: player.flow / player.maxFlow, big: Math.floor(player.flow), small: player.stance === 'airborne' ? 'Airborne' : 'Handheld', light: '#4dd0e1', dark: '#003640' }),
-    Cleric: () => { const z = player.zeal || 0; return { name: 'Zeal', f: z / (player.maxZeal || 100), big: Math.floor(z), small: z > 0 ? 'fuels spells' : 'empty: half power', warn: z <= 0, light: '#ffd54f', dark: '#4d3200' }; },
-    Dragonknight: () => { const s = player.frenzyStacks || 0; return { name: 'Frenzy', f: s / 10, big: s, small: `+${s * 2}% dmg/spd`, light: '#ffa040', dark: '#5a1e00', glow: s >= 10 }; },
-    Spellweaver: () => { const s = buffs.powerSurgeStacks || 0; return { name: 'Power Surge', f: s / 5, big: s, small: player.arcaneResonance ? 'resonance ready' : `+${s * 10}% dmg`, light: '#64b5f6', dark: '#0b2350', glow: !!player.arcaneResonance }; },
-    Ranger: () => ({ name: 'Momentum', f: (player.momentum || 0) / 0.2, big: `+${Math.round((player.momentum || 0) * 100)}%`, small: 'dmg, keep moving', light: '#aed581', dark: '#1e3a0b', glow: player.momentum >= 0.2 }),
-    Nightblade: () => { const m = enemies.filter(e => !e.dead && e.markAngle !== undefined).length; return { name: 'Expose', f: 1 - Math.max(0, player.markTimer || 0) / 3, big: m, small: m === 1 ? 'enemy marked' : 'enemies marked', light: '#ce93d8', dark: '#2b0a3a', glow: m > 0 }; },
-    Machinist: () => {
-        if (buffs.overclockTimer > 0) return { name: 'Overclock', f: buffs.overclockTimer / (buffs.overclockMax || 1), big: buffs.overclockTimer.toFixed(1), small: 'overclocked', light: '#ffb74d', dark: '#4a1f00', glow: true };
-        const sk = activeClass.skills[4], cd = Math.max(0, cooldowns.s4 || 0), max = cooldownMax.s4 || sk.maxCd || 1;
-        return { name: 'Overclock', f: sk.level ? 1 - cd / max : 0, big: !sk.level ? '-' : cd > 0 ? Math.ceil(cd) : 'Ready', small: !sk.level ? 'R not learned' : cd > 0 ? 'recharging' : 'press R', light: '#ffb74d', dark: '#4a1f00' };
+    Cleric: () => { // the small line is what the next Divine Ray would hit for (skills.js RAY_ZEAL_MULT)
+        const z = buffs.zealLocked && buffs.aspectOfReaper <= 0 ? 100 : (player.zeal || 0);
+        let tier = z >= 100 ? 3 : z >= 50 ? 2 : z >= 10 ? 1 : 0, blood = false;
+        if (!tier && activeClass.skills[1].selectedUpg === 'B') { tier = buffs.aspectOfReaper > 0 ? 2 : 3; blood = true; } // Void Spike: a blood ray
+        if (!tier && buffs.aspectOfReaper > 0) tier = 1;
+        return { name: 'Zeal', f: z / (player.maxZeal || 100), big: Math.floor(z), small: tier ? `${blood ? 'blood ' : ''}ray x${RAY_ZEAL_MULT[tier]}` : 'empty: half power', warn: !tier, glow: tier === 3, light: '#ffd54f', dark: '#4d3200' };
     },
-    Druid: () => { const s = buffs.pounceStacks || 0, wild = buffs.wildFormTimer > 0; return { name: wild ? 'Wild Form' : 'Pounce', f: s / 5, big: s, small: `+${s * 10}% next Pounce`, light: '#9ccc65', dark: '#1a3a0a', glow: wild }; },
-    Paladin: () => {
-        const st = player.hammer ? player.hammer.state : 'equipped';
-        return st === 'equipped' ? { name: 'Hammer', f: 1, big: 'In Hand', small: '', light: '#ffe082', dark: '#4a3a00' }
-            : st === 'deployed' ? { name: 'Hammer', f: 0.5, big: 'Planted', small: 'light shield up', light: '#ffe082', dark: '#4a3a00', glow: true }
-            : { name: 'Hammer', f: 0.2, big: 'Flying', small: 'catch it!', light: '#ffe082', dark: '#4a3a00' };
+    Dragonknight: () => { const s = player.frenzyStacks || 0, max = frenzyMax(); return { name: 'Frenzy', f: s / max, big: s, small: `+${s * 2} Power/+${s * 2}% spd`, light: '#ffa040', dark: '#5a1e00', glow: s >= max }; },
+    Spellweaver: () => { const r = player.arcaneResonance || 0; return { name: 'Resonance', f: r / resonanceMax(), big: r, small: r ? `next bolt x${RESONANCE_MULT}` : 'cast a spell', light: '#64b5f6', dark: '#0b2350', glow: r >= resonanceMax() }; },
+    Ranger: () => ({ name: 'Momentum', f: (player.momentum || 0) / 0.2, big: `+${Math.round((player.momentum || 0) * 100)}%`, small: 'dmg & speed', light: '#aed581', dark: '#1e3a0b', glow: player.momentum >= 0.2 }),
+    Nightblade: () => { const m = enemies.filter(e => !e.dead && e.markAngle !== undefined).length; return { name: 'Expose', f: 1 - Math.max(0, player.markTimer || 0) / 3, big: m, small: m === 1 ? 'enemy marked' : 'enemies marked', light: '#ce93d8', dark: '#2b0a3a', glow: m > 0 }; },
+    Machinist: () => { // Scrap: holding Q spends 5 for a Heavy Turret, 10 for a Siege Turret (skills.js TURRET_TIERS)
+        const sc = player.scrap || 0, next = TURRET_TIERS.find(t => sc >= t.cost);
+        return { name: 'Scrap', f: sc / SCRAP_MAX, big: sc, small: next ? `hold Q: ${next.name.toLowerCase()}` : `${5 - sc} to heavy turret`, light: '#ffb74d', dark: '#4a1f00', glow: sc >= 10 };
+    },
+    Druid: () => { // Bond (druid.js): the wolf's bites on prey you've hit fill it; when full, its next bite is a Maul
+        const b = player.bond || 0, full = b >= BOND_MAX;
+        return full ? { name: 'Bond', f: 1, big: 'Maul', small: 'next bite', light: '#ffab40', dark: '#4a1f00', glow: true }
+            : { name: 'Bond', f: b / BOND_MAX, big: Math.floor(b), small: 'hit its prey', light: '#9ccc65', dark: '#1a3a0a' };
+    },
+    Paladin: () => { // follows the hammer's trip (paladin.js): the fill tracks the flight, the pulse, or the way home
+        const h = player.hammer, st = h ? h.state : 'equipped', g = { name: 'Hammer', light: '#ffe082', dark: '#4a3a00' };
+        if (st === 'equipped') return { ...g, f: 1, big: 'In Hand', small: 'Q: throw' };
+        if (st === 'outbound') {
+            const total = Math.hypot(h.tx - h.startX, h.ty - h.startY) || 1;
+            return { ...g, f: Math.hypot(h.x - h.startX, h.y - h.startY) / total, big: 'Flying', small: 'Q: recall' };
+        }
+        if (st === 'deployed') return { ...g, f: 1 - Math.max(0, h.pulseTimer), big: 'Planted', small: 'Q: recall', glow: h.pulseTimer < 0.15 };
+        if (h.returnMode === 'chase') return { ...g, f: 0.15, big: 'Missed', small: 'no Q reset', warn: true };
+        const near = 1 - Math.min(1, Math.hypot(player.x - h.x, player.y - h.y) / HAMMER_THROW_RANGE);
+        return h.returnMode === 'straight' ? { ...g, f: near, big: 'Catch!', small: 'stay on its line', glow: true }
+            : { ...g, f: near, big: 'Returning', small: 'catch it!' };
     },
 };
 const classGauge = () => (GAUGES[activeClass.name] || (() => ({ name: activeClass.name, f: 0, big: '', small: '', light: '#999', dark: '#222' })))();
@@ -249,28 +270,20 @@ function renderTabSheet() {
     const row = (k, v, cls = '') => `<div class="r ${cls}"><span>${k}</span><b>${v}</b></div>`;
     let h = `<div class="ts-head"><b>${n}</b><span>Level ${player.level} &middot; ${Math.floor(player.xp)} / ${player.maxXp} XP</span></div>`;
 
-    // Offense: every damage source, so "+x%" always says where it comes from
-    const total = calcDmg(100) / 100;
-    h += `<h4>Offense</h4>` + row('Damage', `${Math.round(total * 100)}%`);
-    h += row('Class base', `${Math.round(activeClass.dmgMult * 100)}%`, 'sub');
-    if (W) h += row(W.name, pct(W.val), 'sub');
-    const temp = [];
-    if (n === 'Dragonknight' && player.frenzyStacks > 0) temp.push([`Frenzy &times;${player.frenzyStacks}`, player.frenzyStacks * 0.02]);
-    if (n === 'Ranger' && player.momentum > 0) temp.push(['Momentum', player.momentum]);
-    if (buffs.powerSurgeStacks > 0) temp.push([`Power Surge &times;${buffs.powerSurgeStacks}`, buffs.powerSurgeStacks * 0.1]);
-    if (n === 'Cleric' && buffs.aspectOfReaper > 0) temp.push(['Aspect of the Reaper', 0.5]);
-    if (n === 'Cleric' && buffs.ascension > 0) temp.push(['Ascension', 0.25]);
-    for (const [k, v] of temp) h += row(k, pct(v), 'sub temp');
-    if (player.bonusDmg > 0) h += row('Power orbs <i>(multiplies all)</i>', `&times;${(1 + player.bonusDmg).toFixed(2)}`, 'sub');
-    if (buffs.weakened > 0) h += row('Weakened', '-30%', 'sub bad');
-    const glove = n === 'Swordsaint' && equipment.gloves && equipment.gloves.name === 'Aether Grips' ? 0.3 : (equipment.gloves ? equipment.gloves.val : 0);
+    // Offense: Power and every part of it (combat.js powerParts), so it always says where it comes from
+    h += `<h4>Offense</h4>` + row('Power', playerPower()) + `<div class="note">every hit deals its base &times; Power / 100</div>`;
+    for (const [k, v, temp] of powerParts()) h += row(k, k === 'Class base' ? Math.round(v * 100) : `+${Math.round(v * 100)}`, temp ? 'sub temp' : 'sub');
+    if (buffs.weakened > 0) h += row('Weakened', '-30% damage', 'sub bad');
+    const glove = equipment.gloves ? equipment.gloves.val : 0;
     const stance = n === 'Swordsaint' && player.stance === 'airborne' ? (player.flow / player.maxFlow) * 0.5 : 0;
-    const interval = 0.15 + activeClass.basicAttackCD * getCDR() / (1 + glove + stance);
-    h += row('Basic attack', `${Math.round(calcDmg(activeClass.basicDmg))} dmg &middot; ${(1 / interval).toFixed(1)}/s`);
+    const frenzy = n === 'Dragonknight' ? player.frenzyStacks * 0.02 : 0;
+    const interval = 0.15 + activeClass.basicAttackCD / (1 + attackSpeedBonus()); // skills.js
+    h += row('Basic attack', `${Math.round(hitDmg(activeClass.basicDmg))} dmg &middot; ${(1 / interval).toFixed(1)}/s`);
     if (glove) h += row(equipment.gloves.name, `${pct(glove)} speed`, 'sub');
     if (stance) h += row('Airborne stance', `${pct(stance)} speed`, 'sub temp');
+    if (frenzy) h += row(`Frenzy &times;${player.frenzyStacks}`, `${pct(frenzy)} speed`, 'sub temp');
     h += row('Cooldown reduction', `${Math.round((1 - getCDR()) * 100)}%`);
-    if (equipment.amulet) h += row(equipment.amulet.name, equipment.amulet.rarity === 'rare' ? 'special' : pct(equipment.amulet.val), 'sub');
+    if (equipment.amulet) h += row(equipment.amulet.name, pct(equipment.amulet.val), 'sub');
 
     // Defense
     const gearHp = equipment.armor ? equipment.armor.val : 0;
@@ -278,17 +291,19 @@ function renderTabSheet() {
     h += row('Class base', activeClass.baseMaxHp, 'sub');
     if (gearHp) h += row(equipment.armor.name, `+${Math.round(gearHp)}`, 'sub');
     if (player.bonusMaxHp) h += row('Blessings', `+${player.bonusMaxHp}`, 'sub');
-    h += row('Armor', player.armor) + `<div class="note">blocks ${player.armor} damage from every hit</div>`;
+    const armorNow = player.armor * (typeof paladinArmorMult === 'function' && n === 'Paladin' ? paladinArmorMult() : 1);
+    h += row('Armor', Math.round(armorNow * 10) / 10) + `<div class="note">blocks ${Math.round(armorReduction(armorNow) * 100)}% of every hit</div>`;
     if (player.shield > 0) h += row('Shield', Math.ceil(player.shield), 'sub temp');
     h += row('Move speed', Math.round(player.speed));
     if (equipment.boots) h += row(equipment.boots.name, `+${Math.round(equipment.boots.val)}`, 'sub');
+    if (n === 'Ranger' && player.momentum > 0) h += row('Momentum', `${pct(player.momentum)} speed`, 'sub temp');
 
     // Skills: rank, evolution and what they do now
     h += `<h4>Skills</h4>`;
     const cid = activeClassId();
     for (let i = 1; i <= 4; i++) {
         const sk = activeClass.skills[i], evo = sk.selectedUpg ? sk['upg' + sk.selectedUpg].name : null;
-        const v = sk.level ? [sk.baseDmg > 0 ? `${Math.round(calcDmg(sk.baseDmg, sk.level))} dmg` : '', sk.maxCd ? `${(calcCooldown(sk.maxCd, sk.level) * getCDR()).toFixed(1)}s cd` : ''].filter(Boolean).join('<br>') : 'locked';
+        const v = sk.level ? [sk.baseDmg > 0 ? `${Math.round(hitDmg(sk.baseDmg, sk.level))} dmg` : '', sk.maxCd ? `${(skillBaseCd(i, sk.level) * getCDR()).toFixed(1)}s cd` : ''].filter(Boolean).join('<br>') : 'locked';
         h += `<div class="sk"><img class="${sk.level ? '' : 'off'}" src="${skillIcon(cid, i)}"><div class="n">${SLOT_KEYS[i]} &middot; ${sk.name}<i>${sk.level ? `Rank ${sk.level}` : 'Not learned'}${evo ? ` &middot; ${evo}` : ''}</i></div><div class="v">${v}</div></div>`;
     }
     h += `<h4>Passive</h4><div class="passive">${activeClass.passive || ''}</div>`;

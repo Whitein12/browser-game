@@ -41,9 +41,7 @@ function fmtStat(type, v) {
 }
 function itemTier(item) { const m = /^T(\d+)/.exec(item.name); return m ? +m[1] : null; }
 function itemTypeLine(item) { return item.rarity === 'rare' ? `Rare ${SLOT_NAMES[item.type]}` : `Tier ${itemTier(item) || 1} ${SLOT_NAMES[item.type]}`; }
-// Rare amulets work by name rather than by value, so they can't be compared as a number
-function comparable(a, b) { return !(a.type === 'amulet' && (a.rarity === 'rare' || (b && b.rarity === 'rare'))); }
-function itemDelta(item) { const eq = equipment[item.type]; if (!eq || eq === item || !comparable(item, eq)) return null; return item.val - eq.val; }
+function itemDelta(item) { const eq = equipment[item.type]; if (!eq || eq === item) return null; return item.val - eq.val; }
 function isUpgrade(item) { const eq = equipment[item.type]; if (!eq) return true; const d = itemDelta(item); return d !== null && d > 0; }
 
 function itemTooltip(item, foot) {
@@ -51,7 +49,6 @@ function itemTooltip(item, foot) {
     let cmp = '';
     if (!worn) {
         if (!eq) cmp = `<div class="tt-cmp up">Empty slot: a straight upgrade</div>`;
-        else if (!comparable(item, eq)) cmp = `<div class="tt-cmp same">Unique effect: compare with ${eq.name}</div>`;
         else {
             const d = item.val - eq.val, cls = d > 0 ? 'up' : d < 0 ? 'down' : 'same';
             cmp = `<div class="tt-cmp ${cls}">${d > 0 ? '▲' : d < 0 ? '▼' : '='} ${d === 0 ? 'Same as worn' : fmtStat(item.type, Math.abs(d)).replace(/^\+?/, d > 0 ? '+' : '-')} vs. ${eq.name}</div>`;
@@ -85,8 +82,9 @@ function fillBackpack(list, opts) {
 // Inventory
 // ==========================================
 
-let dollAnim = 0;
+let dollAnim = 0, invFromFight = false; // opened mid-fight (I): the game pauses, and closing goes straight back to it
 window.openInventory = () => {
+    invFromFight = gameState === STATE.PLAYING;
     gameState = STATE.INVENTORY; uiOpenedAt = performance.now();
     el('intermission-screen').classList.add('hidden'); el('inventory-screen').classList.remove('hidden');
     renderInventory();
@@ -98,7 +96,11 @@ window.openInventory = () => {
         drawPortrait(cv, cid, (now - t0) / 1000, 0.4); requestAnimationFrame(frame);
     })(t0);
 };
-window.closeInventory = () => { hideTooltip(); el('inventory-screen').classList.add('hidden'); el('intermission-screen').classList.remove('hidden'); gameState = STATE.INTERMISSION; };
+window.closeInventory = () => {
+    hideTooltip(); el('inventory-screen').classList.add('hidden');
+    if (invFromFight) { gameState = STATE.PLAYING; lastTime = performance.now(); return; }
+    el('intermission-screen').classList.remove('hidden'); gameState = STATE.INTERMISSION;
+};
 
 function equipItem(itemIndex) {
     const item = inventory[itemIndex]; if (equipment[item.type]) inventory.push(equipment[item.type]);
@@ -119,9 +121,8 @@ function renderInventory() {
         g.appendChild(itemCell(equipment[t], { slot: t, tip: () => 'Click to take it off', click: () => unequipItem(t) }));
         doll.appendChild(g);
     }
-    const dmg = (activeClass.dmgMult + (equipment.weapon ? equipment.weapon.val : 0)) * (1 + player.bonusDmg);
     const rows = [
-        ['Max Health', Math.round(player.maxHp)], ['Armor', player.armor], ['Damage', `${Math.round(dmg * 100)}%`],
+        ['Max Health', Math.round(player.maxHp)], ['Armor', `${player.armor} (${Math.round(armorReduction(player.armor) * 100)}%)`], ['Power', playerPower()], // combat.js
         ['Attack Speed', `+${Math.round((equipment.gloves ? equipment.gloves.val : 0) * 100)}%`],
         ['Cooldown Reduction', `${Math.round((1 - getCDR()) * 100)}%`], ['Move Speed', Math.round(player.speed)],
         ['Gold', player.gold],
@@ -153,13 +154,16 @@ window.closeShop = () => {
 
 function generateShop() {
     shopItems = []; for (let i = 0; i < 3; i++) shopItems.push(generateItem(wave + 2));
-    shopItems.push({ id: 'rare_wep', name: activeClass.rareWeapon.name, type: 'weapon', val: 1.0, desc: activeClass.rareWeapon.desc, price: 250, rarity: 'rare' });
-    shopItems.push({ id: 'rare_arm', name: activeClass.rareArmor.name, type: 'armor', val: 240, desc: activeClass.rareArmor.desc, price: 200, rarity: 'rare' });
-    shopItems.push({ id: 'rare_amu', name: activeClass.rareAmulet.name, type: 'amulet', val: 0.20, desc: activeClass.rareAmulet.desc, price: 200, rarity: 'rare' });
-    shopItems.push({ id: 'rare_bot', name: activeClass.rareBoots.name, type: 'boots', val: 50, desc: activeClass.rareBoots.desc, price: 150, rarity: 'rare' });
-    shopItems.push({ id: 'rare_glv', name: activeClass.rareGloves.name, type: 'gloves', val: 0.25, desc: activeClass.rareGloves.desc, price: 150, rarity: 'rare' });
+    shopItems.push(rareWeaponItem()); // items.js: +50 Power, awakens with every wave cleared
+    const armorHp = Math.round(240 * armorHpMult()); // combat.js: scaled to the class's base HP, 240 at most
+    shopItems.push({ id: 'rare_arm', name: activeClass.rareArmor.name, type: 'armor', val: armorHp, desc: activeClass.rareArmor.desc.replace(/^\+240 Max HP/, `+${armorHp} Max HP`), price: 250, rarity: 'rare' });
+    shopItems.push({ id: 'rare_amu', name: activeClass.rareAmulet.name, type: 'amulet', val: activeClass.rareAmulet.val || 0.20, desc: activeClass.rareAmulet.desc, price: 250, rarity: 'rare' });
+    shopItems.push({ id: 'rare_bot', name: activeClass.rareBoots.name, type: 'boots', val: activeClass.rareBoots.val || 50, desc: activeClass.rareBoots.desc, price: 200, rarity: 'rare' }); // a class rare can override the stat (classes.json "val")
+    shopItems.push({ id: 'rare_glv', name: activeClass.rareGloves.name, type: 'gloves', val: activeClass.rareGloves.val || 0.25, desc: activeClass.rareGloves.desc, price: 200, rarity: 'rare' });
 }
 
+const SELL_RATE = 0.2; // items sell for a fifth of their price, so selling every drop no longer buys the whole shop
+function sellPrice(item) { return Math.floor(item.price * SELL_RATE); }
 function renderShop() {
     el('shop-gold-display').textContent = player.gold;
     const buy = el('shop-buy-list'); buy.innerHTML = '';
@@ -177,8 +181,8 @@ function renderShop() {
     });
     if (!shopItems.length) buy.innerHTML = '<div class="ui-hint" style="grid-column:1/-1">Sold out. The merchant looks pleased.</div>';
     fillBackpack(el('shop-sell-list'), {
-        tip: item => `Click to sell for ${Math.floor(item.price * 0.5)} gold`,
-        click: item => { player.gold += Math.floor(item.price * 0.5); inventory.splice(inventory.indexOf(item), 1); renderShop(); updateHUD(); },
+        tip: item => `Click to sell for ${sellPrice(item)} gold`,
+        click: item => { player.gold += sellPrice(item); inventory.splice(inventory.indexOf(item), 1); renderShop(); updateHUD(); },
     });
 }
 
@@ -186,10 +190,79 @@ function renderShop() {
 // Level up & evolution
 // ==========================================
 
-function skillStats(sk, from, to) {
-    const L = [];
-    if (sk.baseDmg > 0) L.push(from ? `DMG ${Math.round(calcUtility(sk.baseDmg, from))} → <b>${Math.round(calcUtility(sk.baseDmg, to))}</b>` : `DMG <b>${sk.baseDmg}</b>`);
-    if (sk.maxCd) L.push(from ? `CD ${calcCooldown(sk.maxCd, from).toFixed(1)}s → <b>${calcCooldown(sk.maxCd, to).toFixed(1)}s</b>` : `CD <b>${sk.maxCd}s</b>`);
+// What each rank changes, per skill: RANK_STATS[class][slot](rank, sk) → [[label, value], ...], real numbers at your current Power
+// (hitDmg is the real hit, from the skill's own baseDmg). A skill without an entry shows its hit; the cooldown line is added below when the rank shortens it.
+// Keep these in step with the skills: anything that reads sk.level or calcUtility(…, level) belongs here.
+const RH = (base, r, m = 1) => { const v = hitDmg(base, r) * m; return v < 10 ? +v.toFixed(1) : Math.round(v); }, // small hits keep a decimal, or a rank-up would show no change
+     RU = (x, r) => calcUtility(x, r), RS = v => `${(+v).toFixed(1)}s`, RP = v => `${Math.round(v)} px`;
+const RANK_STATS = {
+    Dragonknight: {
+        1: (r, sk) => [['Hit', RH(sk.baseDmg, r)], ['Shield', Math.round(RU(sk.selectedUpg === 'B' ? 100 : 50, r))], ['Shield time', RS(RU(5, r))]],
+        2: (r, sk) => [['Basic damage', `+${Math.round(RU(0.5, r) * 100)}%`], ['Burn per second', RH(sk.baseDmg, r, 0.3)]],
+        3: (r, sk) => [['Landing hit', RH(sk.baseDmg, r)]],
+        4: (r, sk) => [['Per flame', RH(sk.baseDmg, r, 0.25)], ['Burn per second', RH(sk.baseDmg, r, 0.2)]],
+    },
+    Spellweaver: {
+        1: (r, sk) => [['Hit', RH(sk.baseDmg, r)]],
+        2: (r, sk) => [['Hit', RH(sk.baseDmg, r)], ...(sk.selectedUpg === 'B' ? [['Ice shield', Math.round(RU(60, r))], ['Shield time', RS(RU(5, r))]] : [])],
+        3: (r, sk) => [['Range', RP(blinkReach(r))], ...(sk.selectedUpg ? [[sk.selectedUpg === 'A' ? 'Missile' : 'Frost burst', RH(sk.baseDmg, r)]] : [])],
+        4: (r, sk) => [['Hit', RH(sk.baseDmg, r)]],
+    },
+    Ranger: {
+        1: (r, sk) => [['Full draw', RH(sk.baseDmg, r)]],
+        2: (r, sk) => [['Heal', Math.round(RU(sk.selectedUpg === 'A' ? 30 : 15, r))], ['Speed time', RS(RU(sk.selectedUpg === 'B' ? 4 : 2, r))]],
+        3: (r, sk) => [['Distance', RP(vaultReach({ selectedUpg: sk.selectedUpg, level: r }))], ...(sk.selectedUpg === 'A' ? [['Parting Shot', RH(sk.baseDmg, r)]] : [])],
+        4: (r, sk) => [['Per arrow', RH(sk.baseDmg, r)]],
+    },
+    Nightblade: {
+        1: (r, sk) => [['Per knife', RH(sk.baseDmg, r)]],
+        2: (r, sk) => [['Smoke time', RS(RU(5, r))], ...(sk.selectedUpg === 'A' ? [['Toxic per second', RH(sk.baseDmg, r)]] : [])],
+        3: (r, sk) => [['Hit', RH(sk.baseDmg, r)]],
+        4: (r, sk) => [['Per clone strike', RH(sk.baseDmg, r, MFD_MULT)], ['Mark time', RS(RU(5, r))]],
+    },
+    Machinist: {
+        1: (r, sk) => [['Per shot', RH(sk.baseDmg, r)], ['Turrets', 1 + Math.ceil(Math.max(1, r) / 2)]],
+        2: (r, sk) => [['Per pulse', RH(sk.baseDmg, r)]],
+        3: (r, sk) => [['Open-ground penalty', `+${grappleMissPenalty(r).toFixed(1)}s`], ...(sk.selectedUpg === 'A' ? [['Shield', Math.round(RU(100, r))], ['Shield time', RS(RU(4, r))]] : [])],
+        4: (r, sk) => [['Duration', RS(RU(6, r))]],
+    },
+    Swordsaint: {
+        1: (r, sk) => [['Parry Thrust', RH(sk.baseDmg, r, 1.5)], ['Blade Surge', RH(sk.baseDmg, r, 1.8)]],
+        2: (r, sk) => [['Airborne flight', RS(100 / (15 * airborneDrain(r)))]],
+        3: (r, sk) => [['Step distance', RP(shadowStepReach(r))], ['Guardian Orbit', RS(RU(ORBIT_TIME, r))], ...(sk.selectedUpg === 'A' ? [['Path of Blades', RH(sk.baseDmg, r, 2)]] : [])],
+        4: (r, sk) => [['Whirlwind', RH(sk.baseDmg, r, 1.5)]],
+    },
+    Cleric: {
+        1: (r, sk) => [['Per tick', RH(sk.baseDmg, r, 0.35)]],
+        2: (r, sk) => [['Heal per tick', Math.round(RU(5 + player.maxHp * (sk.selectedUpg === 'A' ? 0.05 : 0.02), r))]],
+        3: (r, sk) => [['At 100 Zeal', RH(sk.baseDmg, r)]],
+        4: (r, sk) => [['Duration', RS(RU(sk.selectedUpg ? 8 : 6, r))]],
+    },
+    Druid: {
+        1: (r, sk) => [['Hit', RH(sk.baseDmg, r)]],
+        2: (r, sk) => [['Bark shell', 100 + 20 * r], ['Surge time', RS(RU(SURGE_TIME, r))]],
+        3: (r, sk) => [['Landing', RH(sk.baseDmg, r)]],
+        4: (r, sk) => [['Howl', RH(sk.baseDmg, r)], ['Spirit bites', `${Math.round(SPIRIT_DMG * RU(1, r) * 100)}%`]],
+    },
+    Paladin: {
+        1: (r, sk) => [['Throw', RH(sk.baseDmg, r)], ['Pulse', RH(sk.baseDmg, r, 0.25)]],
+        2: (r, sk) => [['Chain tick', RH(sk.baseDmg, r, TETHER_TICK_MULT)]],
+        3: (r, sk) => [['Hit', RH(sk.baseDmg, r)]],
+        4: (r, sk) => [['Per second', RH(sk.baseDmg, r)]],
+    },
+};
+function skillStats(slot, sk, from, to) {
+    const L = [], rs = (RANK_STATS[activeClass.name] || {})[slot];
+    if (rs) { // every value the rank sets: on a rank-up only the ones that change, as "before → after"
+        const a = from ? rs(from, sk) : null, b = rs(to, sk);
+        b.forEach(([label, v], i) => {
+            if (!a) L.push(`${label} <b>${v}</b>`);
+            else if (String(a[i][1]) !== String(v)) L.push(`${label} ${a[i][1]} → <b>${v}</b>`);
+        });
+    } else if (sk.baseDmg > 0) L.push(from ? `Hit ${Math.round(hitDmg(sk.baseDmg, from))} → <b>${Math.round(hitDmg(sk.baseDmg, to))}</b>` : `Hit <b>${Math.round(hitDmg(sk.baseDmg, to))}</b>`); // the real hit at your current Power
+    // A rank-up only lists the cooldown when it actually changes (combat.js rankScalesCooldown)
+    if (sk.maxCd && !from) L.push(`CD <b>${sk.maxCd}s</b>`);
+    else if (sk.maxCd && rankScalesCooldown(slot)) L.push(`CD ${skillBaseCd(slot, from).toFixed(1)}s → <b>${skillBaseCd(slot, to).toFixed(1)}s</b>`);
     return L.join('<br>');
 }
 
@@ -208,13 +281,13 @@ function triggerLevelUp(customTitle = null) {
         const sk = activeClass.skills[i], card = document.createElement('div');
         card.className = 'skill-card'; card.style.setProperty('--cc', classColor()); card.dataset.slot = i;
         let action, stats = '', pick = null;
-        if (i === 4 && player.level < 5 && sk.level === 0 && !customTitle) { action = 'Unlocks at Lv. 5'; card.classList.add('disabled'); }
+        if (i === 4 && player.level < 5 && sk.level === 0) { action = 'Unlocks at Lv. 5'; card.classList.add('disabled'); } // the starting pick too (the Training Room is for testing it)
         else if (sk.level >= 4) { action = `Mastered · ${sk.selectedUpg === 'B' ? sk.upgB.name : sk.upgA.name}`; card.classList.add('disabled'); }
         else {
             allMaxed = false;
-            if (sk.level === 0) { action = 'Unlock'; stats = skillStats(sk, 0, 1); }
-            else if (sk.level === 3) { action = 'Evolve'; card.classList.add('evolve'); stats = `<span style="color:#b39ddb">${sk.upgA.name}</span><br>or <span style="color:#ffab91">${sk.upgB.name}</span>`; }
-            else { action = `Rank ${sk.level} → ${sk.level + 1}`; stats = skillStats(sk, sk.level, sk.level + 1); }
+            if (sk.level === 0) { action = 'Unlock'; stats = skillStats(i, sk, 0, 1); }
+            else if (sk.level === 3) { action = 'Evolve'; card.classList.add('evolve'); stats = `<span style="color:#b39ddb">${sk.upgA.name}</span><br>or <span style="color:#ffab91">${sk.upgB.name}</span>` + (skillStats(i, sk, 3, 4) ? '<br>' + skillStats(i, sk, 3, 4) : ''); }
+            else { action = `Rank ${sk.level} → ${sk.level + 1}`; stats = skillStats(i, sk, sk.level, sk.level + 1); }
             pick = () => {
                 if (isProcessingClick) return; isProcessingClick = true;
                 if (sk.level === 3) triggerEvolution(i); else { sk.level++; finishLevelUp(); }
@@ -229,7 +302,7 @@ function triggerLevelUp(customTitle = null) {
 
     if (allMaxed && !customTitle) {
         const card = document.createElement('div'); card.className = 'skill-card bonus'; card.dataset.slot = 'bonus';
-        card.innerHTML = `<div class="sc-name">All skills mastered</div><div class="sc-action">Take a blessing</div><div class="sc-stats">Max HP <b>+20</b><br>Damage <b>+5%</b></div>`;
+        card.innerHTML = `<div class="sc-name">All skills mastered</div><div class="sc-action">Take a blessing</div><div class="sc-stats">Max HP <b>+20</b><br>Power <b>+5</b></div>`;
         card.onclick = () => {
             if (isProcessingClick) return; isProcessingClick = true;
             player.bonusMaxHp += 20; recalcStats(); player.hp += 20; player.bonusDmg += 0.05; finishLevelUp();
@@ -331,6 +404,8 @@ window.addEventListener('keydown', e => {
     } else if (gameState === STATE.INTERMISSION && open('intermission-screen')) {
         if (k === 'enter') startNextWave();
         else if (k === 'i') openInventory();
+    } else if (gameState === STATE.PLAYING && k === 'i') {
+        if (player.hp > 0 && !(stageEvent && stageEvent.blocking)) openInventory(); // any time in a fight: it pauses the game
     } else if (k === 'escape' || (k === 'i' && open('inventory-screen'))) {
         if (open('inventory-screen')) closeInventory();
         else if (open('shop-screen')) closeShop();

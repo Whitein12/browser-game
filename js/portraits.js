@@ -437,7 +437,7 @@ const PORTRAITS = {
 
     druid: {
         color: '#4caf50',
-        bg(c, t) { // the spirit of Wild Form watching from behind
+        bg(c, t) { // the wolf spirit watching over the druid
             c.save(); c.fillStyle = 'rgba(139, 195, 74, 0.07)'; c.strokeStyle = 'rgba(156, 204, 101, 0.22)'; c.lineWidth = 2;
             c.beginPath(); c.moveTo(150, 176); c.lineTo(108, 146); c.lineTo(66, 104); c.lineTo(72, 58); c.lineTo(62, 2); c.lineTo(112, 36); c.quadraticCurveTo(150, 24, 188, 36);
             c.lineTo(238, 2); c.lineTo(228, 58); c.lineTo(234, 104); c.lineTo(192, 146); c.closePath(); c.fill(); c.stroke();

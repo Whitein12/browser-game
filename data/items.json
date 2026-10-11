@@ -1,15 +1,15 @@
 {
   "dropChances": {
-    "item": 0.18,
+    "item": 0.08,
     "orb": 0.20,
     "gold": 0.30
   },
   "slots": ["weapon", "armor", "amulet", "boots", "gloves"],
   "slotData": {
-    "weapon": { "namePrefix": "Weapon", "valMult": 0.2, "descTemplate": "+{VAL}% DMG" },
-    "armor": { "namePrefix": "Armor", "valMult": 40, "descTemplate": "+{VAL} Max HP" },
-    "amulet": { "namePrefix": "Amulet", "valMult": 0.05, "descTemplate": "{VAL}% Cooldown Reduction" },
-    "boots": { "namePrefix": "Boots", "valMult": 20, "descTemplate": "+{VAL} Move Speed" },
-    "gloves": { "namePrefix": "Gloves", "valMult": 0.1, "descTemplate": "+{VAL}% Attack Speed" }
+    "weapon": { "namePrefix": "Weapon", "valBase": 0.05, "valMult": 0.10, "descTemplate": "+{VAL} Power" },
+    "armor": { "namePrefix": "Armor", "valBase": 20, "valMult": 25, "descTemplate": "+{VAL} Max HP" },
+    "amulet": { "namePrefix": "Amulet", "valBase": 0.04, "valMult": 0.02, "descTemplate": "{VAL}% Cooldown Reduction" },
+    "boots": { "namePrefix": "Boots", "valBase": 10, "valMult": 5, "descTemplate": "+{VAL} Move Speed" },
+    "gloves": { "namePrefix": "Gloves", "valBase": 0.05, "valMult": 0.025, "descTemplate": "+{VAL}% Attack Speed" }
   }
 }

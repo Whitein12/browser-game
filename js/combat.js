@@ -2,150 +2,208 @@
 // combat.js - Damage, XP, and Loot Logic
 // ==========================================
 
+// Core balance knobs (see BALANCE.md)
+const RANK_SCALE = 0.2;                  // each skill rank past 1 adds 20% of the base (rank 4 = x1.6)
+const ORB_DMG = 0.04, ORB_DMG_CAP = 0.8; // power orbs: +4 Power each, +80 at most (Power adds up, so they're worth twice the old multiplier)
+const MAX_CDR = 0.6;                     // cooldowns never drop below 40%
+const ARMOR_K = 20;                      // armor blocks armor / (armor + 20) of every hit
+const BOSS_CC_RATE = 3;                  // bosses shake off stun, root, freeze and blind 3x as fast
+const BOSS_WEAK_MULT = 1.5;              // Nightblade weak points on a boss deal x1.5 (an assassin's specialty is the big target)
+const WARDEN_ORB_GAP = 0.25, WARDEN_ORB_REGROW = 6; // Slime Warden: one orb pops per 0.25 s; a lost orb regrows every 6 s
+
+function armorReduction(armor) { return armor > 0 ? armor / (armor + ARMOR_K) : 0; }
+
+// Power: one additive number for everything that raises damage (100 Power = x1). Every hit deals base x rank x Power / 100.
+// The parts, so the Tab sheet can list where it comes from: [label, amount as a fraction, temporary?]
+function powerParts() {
+    const n = activeClass.name, P = [['Class base', activeClass.dmgMult]];
+    if (equipment.weapon) P.push([equipment.weapon.name, equipment.weapon.val]);
+    if (n === 'Dragonknight' && player.frenzyStacks > 0) P.push([`Frenzy &times;${player.frenzyStacks}`, player.frenzyStacks * 0.02, true]);
+    if (n === 'Ranger' && player.momentum > 0) P.push(['Momentum', player.momentum, true]);
+    if (n === 'Cleric' && buffs.aspectOfReaper > 0) P.push(['Aspect of the Reaper', 0.50, true]);
+    if (n === 'Cleric' && buffs.ascension > 0) P.push(['Ascension', 0.25, true]);
+    if (player.orbDmg > 0) P.push([`Power orbs${player.orbDmg >= ORB_DMG_CAP ? ' (max)' : ''}`, player.orbDmg]);
+    if (player.bonusDmg > 0) P.push(['Blessings', player.bonusDmg]);
+    return P;
+}
+function powerMult() { return powerParts().reduce((s, p) => s + p[1], 0); }
+function playerPower() { return Math.round(powerMult() * 100); }
+
 function calcDmg(baseAmount, skillLevel = 1) {
-    let scaledBase = baseAmount + (skillLevel > 1 ? (skillLevel - 1) * (baseAmount * 0.3) : 0);
-    let mult = activeClass.dmgMult + (equipment.weapon ? equipment.weapon.val : 0);
-    if (activeClass && activeClass.name === 'Dragonknight') mult += (player.frenzyStacks * 0.02);
-    if (activeClass && activeClass.name === 'Ranger') mult += player.momentum;
-    if (activeClass && activeClass.name === 'Cleric' && buffs.aspectOfReaper > 0) mult += 0.50; // Aspect of the Reaper +50% DMG
-    if (activeClass && activeClass.name === 'Cleric' && buffs.ascension > 0) mult += 0.25; // Base Ascension +25% DMG
-    mult += (buffs.powerSurgeStacks * 0.1); 
-    
-    let finalDmg = scaledBase * mult * (1.0 + player.bonusDmg);
-    if (buffs.weakened > 0) finalDmg *= 0.7; 
+    let finalDmg = calcUtility(baseAmount, skillLevel) * powerMult();
+    if (buffs.weakened > 0) finalDmg *= 0.7;
     return finalDmg;
 }
+// What a hit really deals (applyDamage scales every player hit by HIT_SCALE): for tooltips, cards and the Tab sheet
+const HIT_SCALE = 0.6;
+function hitDmg(baseAmount, skillLevel = 1) { return calcDmg(baseAmount, skillLevel) * HIT_SCALE; }
 
 function calcUtility(baseAmount, skillLevel = 1) {
-    return baseAmount + (skillLevel > 1 ? (skillLevel - 1) * (baseAmount * 0.3) : 0);
+    return baseAmount + (skillLevel > 1 ? (skillLevel - 1) * (baseAmount * RANK_SCALE) : 0);
 }
+
+// Shield breakers (Shatter Breath, Desecration): break a Bandit frontal shield, or pop every Slime Warden orb at once
+// (it's stunned as if the last orb popped; the orbs regrow as usual)
+function shatterShields(e) {
+    let broke = false;
+    if (e.shieldHp > 0) { e.shieldHp = 0; broke = true; }
+    if (e.type === 'slime_warden' && e.orbs > 0) { e.orbs = 0; e.orbRegrow = 0; e.invulnTimer = 0; e.stunTimer = Math.max(e.stunTimer || 0, 2.0); broke = true; }
+    if (broke) effects.push({ type: 'text', text: 'SHIELD BROKEN', x: e.x, y: e.y - 30, color: '#9c27b0', life: 1.0, maxLife: 1.0 });
+    return broke;
+}
+
+// Every shield goes through here: stacked shields stop at half the max HP (one big shield still lands whole)
+const SHIELD_CAP = 0.5;
+function addShield(amount, time) {
+    const cap = Math.max(player.maxHp * SHIELD_CAP, amount);
+    if (player.shield < cap) player.shield = Math.min(cap, player.shield + amount);
+    player.shieldTimer = Math.max(player.shieldTimer, time);
+}
+
+function pickUpDmgOrb() { player.orbDmg = Math.min(ORB_DMG_CAP, (player.orbDmg || 0) + ORB_DMG); }
 
 function calcCooldown(baseCd, skillLevel = 1) {
     // Reduces cooldowns by 15% to 30% dynamically based on skill level.
     return baseCd * Math.max(0.4, (1 - ((skillLevel > 1 ? skillLevel - 1 : 0) * 0.15)));
 }
 
-function getCDR() {
-    let cdr = 1.0;
-    if (equipment.amulet && equipment.amulet.type === 'amulet' && equipment.amulet.rarity !== 'rare') cdr -= equipment.amulet.val;
-    if (equipment.amulet && equipment.amulet.name === 'Amulet of Power') cdr -= 0.20;
-    if (equipment.amulet && equipment.amulet.name === 'Prismatic Core') cdr -= 0.15;
-    if (activeClass && activeClass.name === 'Cleric' && buffs.aspectOfReaper > 0) cdr -= 0.50; // Aspect of the Reaper -50% CD
-    return Math.max(0.2, cdr); 
+// Only dashes (Space) and the Swordsaint's stance toggle get shorter with rank; every other skill keeps its base cooldown
+function rankScalesCooldown(slot) { return slot === 3 || (activeClass.name === 'Swordsaint' && slot === 2); }
+function skillBaseCd(slot, level) {
+    const sk = activeClass.skills[slot];
+    return rankScalesCooldown(slot) ? calcCooldown(sk.maxCd, level) : sk.maxCd;
 }
 
+function getCDR() {
+    let cdr = 1.0;
+    if (equipment.amulet) cdr -= equipment.amulet.val; // every amulet's val is its CDR (class rares: 20%)
+    if (activeClass && activeClass.name === 'Cleric' && buffs.aspectOfReaper > 0) cdr -= 0.50; // Aspect of the Reaper -50% CD
+    return Math.max(1 - MAX_CDR, cdr);
+}
+
+// Armor HP scales with the class's own base HP, so fragile classes stay fragile when geared; the tanks' 240 is the cap
+// (Nightblade x0.62, Spellweaver/Swordsaint x0.77, Ranger/Cleric/Druid x0.92, Machinist/Paladin/Dragonknight x1)
+const ARMOR_HP_REF = 130;
+function armorHpMult() { return Math.min(1, activeClass.baseMaxHp / ARMOR_HP_REF); }
+
 function generateItem(tierLevel) {
-    const types = itemDataConfig.slots; 
+    const types = itemDataConfig.slots;
     const type = types[Math.floor(Math.random() * types.length)];
     const tier = Math.max(1, Math.ceil(tierLevel / 2));
-    const slotData = itemDataConfig.slotData[type]; 
-    const val = tier * slotData.valMult;
+    const slotData = itemDataConfig.slotData[type];
+    let val = (slotData.valBase || 0) + tier * slotData.valMult; // T8 roughly matches the class rare's stat
+    if (type === 'armor') val = Math.round(val * armorHpMult());
     let displayVal = (type === 'weapon' || type === 'gloves' || type === 'amulet') ? Math.round(val * 100) : Math.round(val);
     return { id: Math.random().toString(36).substr(2, 9), name: `T${tier} ${slotData.namePrefix}`, type, val, desc: slotData.descTemplate.replace('{VAL}', displayVal), price: tier * 25, rarity: 'common' };
 }
 
 function applyDamage(enemy, amount, source = 'player', projAngle = null) {
-    if (enemy.dead) return;
-    amount *= 0.6; // Global player damage reduction
-    
+    if (enemy.dead || enemy.submerged) return; // the Amalgam's Undertow: nothing reaches it under the floor (no IMMUNE spam)
+    amount *= HIT_SCALE; // Global player damage reduction
+
     if (source === 'melee_basic') hitStopTimer = 0.04;
-    if (enemy.isStaggered) amount *= 2.0; 
+    if (enemy.isStaggered) amount *= 2.0;
+    if (player.tether && player.tether.target === enemy) amount *= SHACKLE_VULN; // paladin.js Divine Tether: a shackled enemy takes +20% from you
 
-    if (enemy.type === 'boss_slime_queen' && enemy.hp - amount <= 0 && enemy.state !== 'death_throes') {
-        enemy.hp = 1; enemy.state = 'death_throes'; enemy.stateTimer = 5.0; enemy.invulnerable = true;
-        enemy.originalSize = enemy.size; enemy.bulletAngle = 0;
-        enemy.airborne = false; enemy.leapK = undefined; enemy.throesT = 0;
-        if (currentMap.type === 'hive') startQueenThroes(enemy); // map_hive.js: she leaps back onto her throne for her last stand
-        else { enemy.x = canvas.width / 2; enemy.y = canvas.height / 2; effects.push({ type: 'text', text: 'CORE COLLAPSE!', x: enemy.x, y: enemy.y - 60, color: '#ff5252', life: 2.0, maxLife: 2.0 }); }
-        return; 
-    }
-
-    if (enemy.type === 'slime_warden' && enemy.orbs > 0) {
-        enemy.orbs--; enemy.invulnTimer = 0.2; 
-        effects.push({ type: 'text', text: 'SHIELDED', x: enemy.x, y: enemy.y - 20, color: '#ffca28', life: 0.6, maxLife: 0.6 });
-        if (enemy.orbs === 0) {
-            enemy.stunTimer = 2.0; 
-            effects.push({ type: 'text', text: 'STUNNED', x: enemy.x, y: enemy.y - 30, color: '#ffeb3b', life: 1.0, maxLife: 1.0 });
-        }
-        return;
-    }
-
-    if (enemy.invulnerable) {
+    if (enemy.invulnerable) { // immune phases stop everything, weak points included (and the mark isn't wasted)
         effects.push({ type: 'text', text: 'IMMUNE', x: enemy.x, y: enemy.y - 20, color: '#03a9f4', life: 0.6, maxLife: 0.6 });
         return;
     }
 
+    const weak = weakPointDamage(enemy, source, projAngle); // Nightblade: true damage on top, and the hit goes through blocks
+    if (queenLastStand(enemy, amount + weak)) return;
+
+    if (!weak) {
+        if (enemy.type === 'slime_warden' && enemy.orbs > 0) {
+            if (enemy.invulnTimer > 0) return; // an orb just popped: the rest still shield, so a multi-hit can't strip them all at once
+            enemy.orbs--; enemy.invulnTimer = WARDEN_ORB_GAP; enemy.orbRegrow = 0;
+            effects.push({ type: 'text', text: 'SHIELDED', x: enemy.x, y: enemy.y - 20, color: '#ffca28', life: 0.6, maxLife: 0.6 });
+            if (enemy.orbs === 0) {
+                enemy.stunTimer = 2.0;
+                effects.push({ type: 'text', text: 'STUNNED', x: enemy.x, y: enemy.y - 30, color: '#ffeb3b', life: 1.0, maxLife: 1.0 });
+            }
+            return;
+        }
+
+        if (enemy.type === 'thief' && Math.random() < 0.20) {
+            effects.push({ type: 'text', text: 'Evaded!', x: enemy.x, y: enemy.y - 20, color: '#fff', life: 0.6, maxLife: 0.6 }); return;
+        }
+
+        if ((enemy.type === 'shield' || enemy.type === 'boss_valerius') && enemy.shieldHp > 0) {
+            const angleToPlayer = Math.atan2(player.y - enemy.y, player.x - enemy.x);
+            let diff = enemy.facingAngle - angleToPlayer;
+            while(diff < -Math.PI) diff += Math.PI*2;
+            while(diff > Math.PI) diff -= Math.PI*2;
+            if (Math.abs(diff) < Math.PI / 2.5) {
+                enemy.shieldHp -= amount;
+                effects.push({ type: 'text', text: 'Blocked', x: enemy.x, y: enemy.y - 20, color: '#78909c', life: 0.6, maxLife: 0.6 });
+                if (enemy.shieldHp <= 0) effects.push({ type: 'text', text: 'SHIELD BROKEN', x: enemy.x, y: enemy.y - 30, color: '#ffeb3b', life: 1.0, maxLife: 1.0 });
+                return;
+            }
+        }
+    }
+
     if (enemy.reflective) takeDamage(amount * 0.5);
 
-    if (enemy.type === 'thief' && Math.random() < 0.20) {
-        effects.push({ type: 'text', text: 'Evaded!', x: enemy.x, y: enemy.y - 20, color: '#fff', life: 0.6, maxLife: 0.6 }); return;
-    }
-    
-    if ((enemy.type === 'shield' || enemy.type === 'boss_valerius') && enemy.shieldHp > 0) {
-        const angleToPlayer = Math.atan2(player.y - enemy.y, player.x - enemy.x);
-        let diff = enemy.facingAngle - angleToPlayer; 
-        while(diff < -Math.PI) diff += Math.PI*2; 
-        while(diff > Math.PI) diff -= Math.PI*2;
-        if (Math.abs(diff) < Math.PI / 2.5) { 
-            enemy.shieldHp -= amount;
-            effects.push({ type: 'text', text: 'Blocked', x: enemy.x, y: enemy.y - 20, color: '#78909c', life: 0.6, maxLife: 0.6 });
-            if (enemy.shieldHp <= 0) effects.push({ type: 'text', text: 'SHIELD BROKEN', x: enemy.x, y: enemy.y - 30, color: '#ffeb3b', life: 1.0, maxLife: 1.0 });
-            return; 
-        }
-    }
-    
-    let isNightblade = activeClass.name === 'Nightblade';
-    if (enemy.markAngle !== undefined && (source === 'melee_basic' || source === 'phantom_dash' || source === 'assassin_skill' || source === 'execute')) {
-        let hitAngle = projAngle !== null ? projAngle + Math.PI : Math.atan2(player.y - enemy.y, player.x - enemy.x); 
-        
-        let diff = enemy.markAngle - hitAngle;
-        while(diff < -Math.PI) diff += Math.PI*2;
-        while(diff > Math.PI) diff -= Math.PI*2;
-
-        if (Math.abs(diff) <= Math.PI / 3) { 
-            enemy.markAngle = undefined;
-            let trueDmg = activeClass.basicDmg * 5; 
-            if (isNightblade && activeClass.skills[3].selectedUpg === 'A' && source === 'phantom_dash') trueDmg *= 3;
-            
-            enemy.hp -= trueDmg;
-            buffs.msBoost = 1.0;
-            addShake(4);
-            burst(enemy.x, enemy.y, hitAngle + Math.PI, 2.2, 14, { kind: 'spark', color: '#ea80fc', size: 3, life: 0.35, speed: [200, 520], drag: 5 });
-            effects.push({ type: 'text', text: 'WEAKPOINT!', x: enemy.x, y: enemy.y - 40, color: '#e1bee7', life: 0.8, maxLife: 0.8 });
-            
-            if (isNightblade && activeClass.skills[3].level > 0 && source === 'phantom_dash') {
-                cooldowns.s3 = Math.max(0, cooldowns.s3 - (activeClass.skills[3].maxCd * getCDR() * 0.5));
-            }
-            
-            if (buffs.deathMarkActive > 0) {
-                if (isNightblade && activeClass.skills[4].selectedUpg === 'A') player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.1);
-                effects.push({ type: 'holy_nova', x: enemy.x, y: enemy.y, radius: 100, color: '#ce93d8', life: 0.35, maxLife: 0.35 }); // skillfx_space.js
-                
-                for(let k=enemies.length-1; k>=0; k--) {
-                    let et = enemies[k];
-                    if (et !== enemy && Math.hypot(enemy.x - et.x, enemy.y - et.y) <= 100 + et.size/2) {
-                        et.aoeResistStacks = (et.aoeResistStacks || 0) + 1;
-                        et.aoeResistTimer = 2.0; 
-                        let splashDmg = (trueDmg * 0.5) / et.aoeResistStacks; 
-                        et.hp -= splashDmg; 
-                        checkEnemyDeath(et);
-                    }
-                }
-            }
-        }
-    }
-
-    if (activeClass.name === 'Ranger' && activeClass.skills[1].selectedUpg === 'B' && source !== 'magic' && source !== 'dot') enemy.hp -= (amount * 1.2); 
-    else enemy.hp -= amount;
+    enemy.hp -= amount + weak;
     spawnHitFx(enemy, source, projAngle);
+    if (activeClass.name === 'Druid') druidOnHit(enemy, source); // druid.js: what you hit carries your Scent
+    itemsOnHit(enemy, source); // items.js
 
-    if (equipment.gloves && equipment.gloves.name === 'Vampiric Grips') player.hp = Math.min(player.maxHp, player.hp + amount * 0.02);
 
     if (activeClass.name === 'Dragonknight' && (source === 'melee' || source === 'melee_basic')) {
-        player.frenzyStacks = Math.min(10, player.frenzyStacks + 1); player.frenzyTimer = 3.0;
+        addFrenzy(1); // items.js
     }
 
     checkEnemyDeath(enemy);
+}
+
+// The Hive Queen can't be killed outright: the hit that would finish her starts her last stand instead
+function queenLastStand(enemy, dmg) {
+    if (enemy.type !== 'boss_slime_queen' || enemy.hp - dmg > 0 || enemy.state === 'death_throes') return false;
+    enemy.hp = 1; enemy.state = 'death_throes'; enemy.stateTimer = 5.0; enemy.invulnerable = true;
+    enemy.originalSize = enemy.size; enemy.bulletAngle = 0;
+    enemy.airborne = false; enemy.leapK = undefined; enemy.throesT = 0;
+    if (currentMap.type === 'hive') startQueenThroes(enemy); // map_hive.js: she leaps back onto her throne for her last stand
+    else { enemy.x = canvas.width / 2; enemy.y = canvas.height / 2; effects.push({ type: 'text', text: 'CORE COLLAPSE!', x: enemy.x, y: enemy.y - 60, color: '#ff5252', life: 2.0, maxLife: 2.0 }); }
+    return true;
+}
+
+// Nightblade weak point: a hit from the marked side consumes the mark for true damage (no x0.6), and that hit
+// ignores blocks (Warden orbs, frontal shields, dodges). Returns the true damage, or 0 if this wasn't a weak-point hit.
+function weakPointDamage(enemy, source, projAngle) {
+    if (enemy.markAngle === undefined || !(source === 'melee_basic' || source === 'phantom_dash' || source === 'assassin_skill' || source === 'death_mark')) return 0;
+    const hitAngle = projAngle !== null ? projAngle + Math.PI : Math.atan2(player.y - enemy.y, player.x - enemy.x);
+    if (Math.abs(Math.atan2(Math.sin(enemy.markAngle - hitAngle), Math.cos(enemy.markAngle - hitAngle))) > Math.PI / 3) return 0;
+    const isNightblade = activeClass.name === 'Nightblade';
+    enemy.markAngle = undefined;
+    let trueDmg = calcDmg(activeClass.basicDmg * 3) * (hasItem('Sigil of the Hunt') ? 1.25 : 1); // grows with gear and orbs; the Sigil sharpens it
+    if (isNightblade && activeClass.skills[3].selectedUpg === 'A' && source === 'phantom_dash') trueDmg *= 3;
+    if (isNightblade && enemy.type.startsWith('boss')) trueDmg *= BOSS_WEAK_MULT; // the assassin's specialty is the big target
+    buffs.msBoost = 1.0;
+    addShake(4);
+    burst(enemy.x, enemy.y, hitAngle + Math.PI, 2.2, 14, { kind: 'spark', color: '#ea80fc', size: 3, life: 0.35, speed: [200, 520], drag: 5 });
+    effects.push({ type: 'text', text: 'WEAKPOINT!', x: enemy.x, y: enemy.y - 40, color: '#e1bee7', life: 0.8, maxLife: 0.8 });
+
+    if (isNightblade && activeClass.skills[3].level > 0 && source === 'phantom_dash') {
+        cooldowns.s3 = Math.max(0, cooldowns.s3 - (activeClass.skills[3].maxCd * getCDR() * 0.5));
+    }
+
+    if (buffs.deathMarkActive > 0) {
+        if (isNightblade && activeClass.skills[4].selectedUpg === 'A' && source !== 'death_mark') player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.1); // Bloodlust: your own pops (the clones heal 2% each, skills.js)
+        effects.push({ type: 'holy_nova', x: enemy.x, y: enemy.y, radius: 100, color: '#ce93d8', life: 0.35, maxLife: 0.35 }); // skillfx_space.js
+        for (let k = enemies.length - 1; k >= 0; k--) {
+            const et = enemies[k];
+            if (et === enemy || et.dead || et.invulnerable || Math.hypot(enemy.x - et.x, enemy.y - et.y) > 100 + et.size/2) continue;
+            et.aoeResistStacks = (et.aoeResistStacks || 0) + 1;
+            et.aoeResistTimer = 2.0;
+            const splashDmg = (trueDmg * 0.5) / et.aoeResistStacks;
+            if (queenLastStand(et, splashDmg)) continue;
+            et.hp -= splashDmg;
+            checkEnemyDeath(et);
+        }
+    }
+    return trueDmg;
 }
 
 function takeDamage(amount, isContinuous = false, sourceObj = null) {
@@ -154,6 +212,7 @@ function takeDamage(amount, isContinuous = false, sourceObj = null) {
     if (player.parryTimer > 0 && !isContinuous) {
         effects.push({ type: 'text', text: 'Parried!', x: player.x, y: player.y - 30, color: '#00e5ff', life: 0.6, maxLife: 0.6 });
         onParry(sourceObj);
+        counterParry(); // combos.js Counter Step: Shadow Step is ready at once
         
         let flowGain = player.maxFlow * 0.2; // Base parry flow gain
         
@@ -179,9 +238,9 @@ function takeDamage(amount, isContinuous = false, sourceObj = null) {
         return;
     }
 
-    if (buffs.ironBulwark > 0) amount *= 0.5;
-    if (equipment.boots && equipment.boots.name === 'Ethereal Treads' && player.isMoving) amount *= 0.5;
     if (equipment.armor && equipment.armor.name === 'Hazard Suit' && (isContinuous || amount < 5)) return;
+    amount = itemsDamageTaken(amount, isContinuous); // items.js: class armors (0 = dodged)
+    if (amount <= 0) return;
     
     // Cleric Vestments of the Fractured Soul interaction
     if (activeClass && activeClass.name === 'Cleric' && equipment.armor && equipment.armor.name === 'Vestments of the Fractured Soul') {
@@ -191,7 +250,7 @@ function takeDamage(amount, isContinuous = false, sourceObj = null) {
         if (isShadow && player.hp / player.maxHp < 0.25) { // Free Desecration < 25% HP
             // Ensure no infinity loop by adding a small tiny cooldown check on `cowlCooldown`
             if ((player.vestmentCD || 0) <= 0) {
-                window.SkillRegistry['Cleric'][2]({ selectedUpg: 'B' }, calcDmg(activeClass.skills[2].baseDmg || 15));
+                window.SkillRegistry['Cleric'][2]({ selectedUpg: 'B', level: activeClass.skills[2].level }, calcDmg(activeClass.skills[2].baseDmg, activeClass.skills[2].level));
                 player.vestmentCD = 2.0; // max once every 2 seconds
             }
         }
@@ -207,27 +266,27 @@ function takeDamage(amount, isContinuous = false, sourceObj = null) {
 
     let armor = player.armor;
     if (activeClass && activeClass.name === 'Paladin') {
-        amount *= paladinDamageTakenMult(); // Bastion Dome, Plate of the Gilded Bastion
+        amount *= paladinDamageTakenMult(); // Plate of the Gilded Bastion
         armor *= paladinArmorMult();       // light shield while the hammer is away
     }
-    if (!isContinuous) amount = Math.max(1, amount - armor);
+    if (!isContinuous) amount = Math.max(1, amount * (1 - armorReduction(armor)));
     
     if (player.shield > 0) {
         if (player.shield >= amount) { player.shield -= amount; return; }
         else { amount -= player.shield; player.shield = 0; player.shieldTimer = 0; }
     }
     
-    // Saint's Silk Shroud override
-    if (activeClass && activeClass.name === 'Swordsaint' && equipment.armor && equipment.armor.name === "Saint's Silk Shroud") {
-        if (player.stance === 'handheld') {
-            player.flow = Math.min(player.maxFlow, player.flow + player.maxFlow * 0.05);
-            player.flowGainTimer = 0;
-        } else {
-            player.flow = Math.min(player.maxFlow, player.flow + player.maxFlow * 0.025);
-            if (Math.random() < 0.10) {
-                if (!isContinuous) effects.push({ type: 'text', text: 'Evaded!', x: player.x, y: player.y - 30, color: '#e1bee7', life: 0.6, maxLife: 0.6 });
-                return;
-            }
+    // Swordsaint, Razor's Edge (skills.js): a hit that gets through costs Flow. The Saint's Silk Shroud softens it, and Airborne
+    // it dodges 10% of hits outright. Continuous damage (puddles, wading) doesn't cost Flow.
+    if (activeClass && activeClass.name === 'Swordsaint' && !isContinuous) {
+        const shroud = equipment.armor && equipment.armor.name === "Saint's Silk Shroud";
+        if (shroud && player.stance === 'airborne' && Math.random() < 0.10) {
+            effects.push({ type: 'text', text: 'Evaded!', x: player.x, y: player.y - 30, color: '#e1bee7', life: 0.6, maxLife: 0.6 });
+            return;
+        }
+        if (player.flow > 0) {
+            player.flow = Math.max(0, player.flow - (shroud ? EDGE_SHROUD_LOSS : EDGE_FLOW_LOSS));
+            effects.push({ type: 'text', text: `-${shroud ? EDGE_SHROUD_LOSS : EDGE_FLOW_LOSS} Flow`, x: player.x, y: player.y - 44, color: '#4dd0e1', life: 0.6, maxLife: 0.6 });
         }
     }
 
@@ -240,6 +299,7 @@ function takeDamage(amount, isContinuous = false, sourceObj = null) {
         effects.push({ type: 'text', text: 'ELUSIVE!', x: player.x, y: player.y - 50, color: '#e1bee7', life: 1.0, maxLife: 1.0 });
     }
 
+    if (player.hp <= 0 && trainingGod()) player.hp = 1; // training.js: god mode
     if (player.hp <= 0) { player.hp = 0; gameState = STATE.DEAD; el('death-wave').innerText = wave; el('death-screen').classList.remove('hidden'); }
     updateHUD();
 }
@@ -256,11 +316,12 @@ function checkEnemyDeath(e) {
     if (e.hp <= 0 && !e.dead) {
         e.dead = true;
         enemyDeathFx(e); // enemysprites.js
+        if (e.dummy) { trainingDummyDied(e); return; } // training.js: no loot, no XP, no wave; it's back on its post soon
 
         if (e.markAngle !== undefined && activeClass.name === 'Nightblade' && activeClass.skills[4].selectedUpg === 'B') {
             effects.push({ type: 'circle', x: e.x, y: e.y, radius: 150, color: 'rgba(156, 39, 176, 0.3)', life: 0.3, maxLife: 0.3 });
             for(let k=enemies.length-1; k>=0; k--) {
-                if (Math.hypot(e.x - enemies[k].x, e.y - enemies[k].y) <= 150 + enemies[k].size/2) applyDamage(enemies[k], 50, 'magic');
+                if (Math.hypot(e.x - enemies[k].x, e.y - enemies[k].y) <= 150 + enemies[k].size/2) applyDamage(enemies[k], calcDmg(50, activeClass.skills[4].level), 'magic');
             }
             let nearest = getNearestEnemyFromPoint(e.x, e.y, 300, [e]);
             if (nearest) nearest.markAngle = Math.random() * Math.PI * 2;
@@ -280,7 +341,6 @@ function checkEnemyDeath(e) {
             effects.push({ type: 'text', text: '+HP', x: player.x, y: player.y - 30, color: '#69f0ae', life: 0.8, maxLife: 0.8 });
         }
 
-        if (activeClass.name === 'Dragonknight' && equipment.armor && equipment.armor.name === 'Dragon Scale Plate') player.hp = Math.min(player.maxHp, player.hp + 5);
 
         const rates = itemDataConfig.dropChances;
         if (e.type.startsWith('boss')) {
@@ -310,9 +370,9 @@ function checkEnemyDeath(e) {
 function collectAllDrops() {
     for (const d of drops) {
         if (d.type === 'hp') { player.hp = Math.min(player.maxHp, player.hp + (player.maxHp * 0.25)); } 
-        else if (d.type === 'dmg') { player.bonusDmg += 0.05; } 
+        else if (d.type === 'dmg') { pickUpDmgOrb(); }
         else if (d.type === 'gold') { player.gold += d.val; } 
         else if (d.type === 'item') { inventory.push(d.itemData); }
-        else if (d.type === 'scrap') { player.hp = Math.min(player.maxHp, player.hp + 5); for(let i=1; i<=4; i++) cooldowns[`s${i}`] = Math.max(0, cooldowns[`s${i}`] - 0.5); }
+        else if (d.type === 'scrap') { pickUpScrap(); }
     } drops.length = 0; updateHUD();
 }

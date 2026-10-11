@@ -9,7 +9,7 @@
 // ==========================================
 
 function drawRmbProjectile(p) {
-    if (p.shape === 'storm_arrow') { // Ranger Lightning Volley: an arrow wrapped in lightning, dragging a jagged bolt
+    if (p.shape === 'storm_arrow') { // Ranger Chain Lightning: an arrow wrapped in lightning, dragging a jagged bolt
         const ang = Math.atan2(p.vy, p.vx);
         ctx.save();
         ctx.globalCompositeOperation = 'lighter'; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
@@ -193,7 +193,72 @@ function drawRmbEffect(ef, p, k) {
             return true;
         }
 
-        case 'thunderclap': { // Ranger Lightning Volley: a thunderclap flash at the bow
+        case 'storm_charge': { // Ranger Storm Arrow (Q), held: the lane it will cover brightens and the bow crackles as it draws
+            const c = player.charge; if (!c) return true;
+            const q = Math.min(1, c.t / c.max), ang = Math.atan2(mouseY - player.y, mouseX - player.x);
+            const x1 = player.x + Math.cos(ang) * 20, y1 = player.y + Math.sin(ang) * 20;
+            let x2 = player.x + Math.cos(ang) * STORM_RANGE, y2 = player.y + Math.sin(ang) * STORM_RANGE;
+            const wall = clipToWalls(x1, y1, x2, y2, 0, true); if (wall) [x2, y2] = wall;
+            const len = Math.hypot(x2 - x1, y2 - y1), w = 14 + 16 * q;
+            if (q >= 1 && !ef.fullDone) { // fully drawn: a flash at the bow says "release now"
+                ef.fullDone = true;
+                burst(x1, y1, 0, Math.PI * 2, 10, { kind: 'spark', color: '#e1f5fe', size: 2, life: 0.3, speed: [120, 260], drag: 5 });
+                spawnParticle({ kind: 'ring', color: '#80d8ff', x: x1, y: y1, vx: 0, vy: 0, size: 6, grow: 90, life: 0.25, drag: 0, spin: 0, rot: 0 });
+            }
+            ctx.save();
+            ctx.translate(x1, y1); ctx.rotate(ang);
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.fillStyle = `rgba(64, 196, 255, ${0.05 + 0.1 * q})`; ctx.fillRect(0, -w / 2, len, w);
+            ctx.setLineDash([10, 10]); ctx.lineDashOffset = -fxTime * 80;
+            ctx.strokeStyle = `rgba(128, 216, 255, ${0.25 + 0.5 * q})`; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(len, 0); ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.strokeStyle = `rgba(225, 245, 254, ${0.4 + 0.6 * q})`; ctx.lineWidth = 1.2; // crackle at the bow, more forks the longer it's held
+            for (let i = 0, n = 1 + Math.floor(q * 4); i < n; i++) {
+                let a = Math.random() * Math.PI * 2, x = 0, y = 0;
+                ctx.beginPath(); ctx.moveTo(0, 0);
+                for (let s = 0; s < 3; s++) { a += jitter(1.2); const r = 4 + 6 * q; x += Math.cos(a) * r; y += Math.sin(a) * r; ctx.lineTo(x, y); }
+                ctx.stroke();
+            }
+            ctx.restore();
+            return true;
+        }
+
+        case 'storm_shot': { // Ranger Storm Arrow (Q), released: the arrow streaks down the line, leaving a jagged bolt behind it
+            const dx = ef.x2 - ef.x1, dy = ef.y2 - ef.y1, len = Math.hypot(dx, dy), ang = Math.atan2(dy, dx), w = ef.width;
+            const head = Math.min(1, el / 0.1) * len;
+            if (!ef.bolt) { ef.bolt = [[0, 0]]; for (let x = 30; x < len; x += 30) ef.bolt.push([x, jitter(w * 0.6)]); ef.bolt.push([len, 0]); }
+            if (head >= len && !ef.endDone) { ef.endDone = true; burst(ef.x2, ef.y2, ang, 1.8, 10, { kind: 'spark', color: '#80d8ff', size: 2.2, life: 0.3, speed: [150, 360], drag: 5 }); }
+            ctx.save();
+            ctx.translate(ef.x1, ef.y1); ctx.rotate(ang);
+            ctx.globalCompositeOperation = 'lighter'; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+            ctx.fillStyle = `rgba(41, 121, 255, ${0.25 * k})`; ctx.fillRect(0, -w / 2, head, w);
+            const path = () => { ctx.beginPath(); for (const [x, y] of ef.bolt) { if (x > head) { ctx.lineTo(head, 0); break; } ctx.lineTo(x, y); } };
+            ctx.strokeStyle = `rgba(64, 196, 255, ${0.6 * k})`; ctx.lineWidth = 4 + 4 * ef.charge; path(); ctx.stroke();
+            ctx.strokeStyle = `rgba(255, 255, 255, ${0.9 * k})`; ctx.lineWidth = 1.5; path(); ctx.stroke();
+            ctx.restore();
+            if (head < len) drawArrowShape(ef.x1 + Math.cos(ang) * head, ef.y1 + Math.sin(ang) * head, ang, 22 + 10 * ef.charge, false, 1); // skillfx_ult.js
+            return true;
+        }
+
+        case 'storm_strike': { // Ranger Storm Arrow: the streak it left strikes the whole line again
+            const dx = ef.x2 - ef.x1, dy = ef.y2 - ef.y1, len = Math.hypot(dx, dy), w = ef.width;
+            if (!ef.burstDone) {
+                ef.burstDone = true; addShake(1.5 + ef.charge);
+                for (let i = 0; i < 5; i++) { const t = Math.random(); burst(lerp(ef.x1, ef.x2, t), lerp(ef.y1, ef.y2, t), 0, Math.PI * 2, 4, { kind: 'spark', color: '#80d8ff', size: 2, life: 0.25, speed: [100, 260], drag: 5 }); }
+            }
+            ctx.save();
+            ctx.translate(ef.x1, ef.y1); ctx.rotate(Math.atan2(dy, dx));
+            ctx.globalCompositeOperation = 'lighter'; ctx.lineJoin = 'round';
+            ctx.fillStyle = `rgba(225, 245, 254, ${0.35 * k})`; ctx.fillRect(0, -w * 0.4, len, w * 0.8);
+            const path = () => { ctx.beginPath(); ctx.moveTo(0, 0); for (let x = 26; x < len; x += 26) ctx.lineTo(x, jitter(w)); ctx.lineTo(len, 0); };
+            ctx.strokeStyle = `rgba(64, 196, 255, ${0.5 * k})`; ctx.lineWidth = 6; path(); ctx.stroke();
+            ctx.strokeStyle = `rgba(255, 255, 255, ${k})`; ctx.lineWidth = 2; path(); ctx.stroke();
+            ctx.restore();
+            return true;
+        }
+
+        case 'thunderclap': { // Ranger Storm Arrow / Chain Lightning: a thunderclap flash at the bow
             if (!ef.burstDone) {
                 ef.burstDone = true;
                 burst(ef.x, ef.y, ef.angle, 1.4, 10, { kind: 'spark', color: '#80d8ff', size: 2, life: 0.25, speed: [200, 450], drag: 5 });
@@ -212,8 +277,16 @@ function drawRmbEffect(ef, p, k) {
             return true;
         }
 
-        case 'dagger_flash': { // Nightblade Execute: one fast, thin violet streak
-            drawStreak(ef.x1, ef.y1, ef.x2, ef.y2, 6 * k, '#ce93d8', k);
+        case 'expose_wave': { // Nightblade Expose: a sweep of shadow sight across the cone
+            const r = ef.radius * easeOut(Math.min(1, el / 0.18));
+            ctx.save();
+            ctx.translate(ef.x, ef.y); ctx.rotate(ef.angle);
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.fillStyle = `rgba(156, 39, 176, ${0.22 * k})`;
+            ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, r, -ef.half, ef.half); ctx.closePath(); ctx.fill();
+            ctx.strokeStyle = `rgba(234, 128, 252, ${0.9 * k})`; ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.arc(0, 0, r, -ef.half, ef.half); ctx.stroke();
+            ctx.restore();
             return true;
         }
 
@@ -338,5 +411,5 @@ function updateRmbEmitters(dt) {
             p.seenHits = p.hitList.length;
         }
     }
-    for (const e of enemies) if (e.netTimer > 0) e.netTimer -= dt;
+    for (const e of enemies) if (e.netTimer > 0) e.netTimer -= e.type.startsWith('boss') ? dt * BOSS_CC_RATE : dt; // keeps pace with the root (main.js)
 }

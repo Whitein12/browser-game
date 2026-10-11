@@ -94,7 +94,7 @@
             <div id="hud-center">
                 <div id="hud-chips"></div>
                 <div id="skill-bar"></div>
-                <div id="xp-bar"><div id="xp-level"></div><div class="xp-track"><div id="xp-fill"></div></div><div id="xp-text"></div><div class="xp-hint"><kbd>Tab</kbd> stats</div></div>
+                <div id="xp-bar"><div id="xp-level"></div><div class="xp-track"><div id="xp-fill"></div></div><div id="xp-text"></div><div class="xp-hint"><kbd>Tab</kbd> stats &middot; <kbd>I</kbd> items</div></div>
             </div>
             <div class="orb-wrap" id="gauge-wrap">
                 <canvas id="orb-gauge"></canvas>
@@ -130,7 +130,7 @@
                         <div class="class-card" data-class="dragonknight" style="--cc:#e53935;">
                             <canvas class="class-portrait" data-class="dragonknight"></canvas>
                             <div class="class-title">Dragonknight</div>
-                            <div class="diff-tag" style="--dc:#4caf50;">Difficulty: Low</div>
+                            <div class="diff-tag" style="--dc:#4caf50;">Difficulty: Easy</div>
                             <p class="card-desc">A heavy melee bruiser who builds Frenzy stacks in combat to increase damage and attack speed.</p>
                             <p class="card-meta">Weapon: Sword | High HP | Low Mobility</p>
                             <div class="card-details"></div>
@@ -138,7 +138,7 @@
                         <div class="class-card" data-class="ranger" style="--cc:#81c784;">
                             <canvas class="class-portrait" data-class="ranger"></canvas>
                             <div class="class-title">Ranger</div>
-                            <div class="diff-tag" style="--dc:#4caf50;">Difficulty: Low</div>
+                            <div class="diff-tag" style="--dc:#4caf50;">Difficulty: Easy</div>
                             <p class="card-desc">A highly mobile archer. Continuous movement builds momentum, increasing overall damage.</p>
                             <p class="card-meta">Weapon: Bow | Med HP | High Mobility</p>
                             <div class="card-details"></div>
@@ -170,31 +170,31 @@
                         <div class="class-card" data-class="cleric" style="--cc:#fbc02d;">
                             <canvas class="class-portrait" data-class="cleric"></canvas>
                             <div class="class-title">Cleric</div>
-                            <div class="diff-tag" style="--dc:#ff9800;">Difficulty: Medium</div>
+                            <div class="diff-tag" style="--dc:#ffca28;">Difficulty: Medium</div>
                             <p class="card-desc">A duality caster. Basic attacks generate Zeal. Empty Zeal casts are halved. Rank 4 evolves spells into Holy or Shadow.</p>
                             <p class="card-meta">Weapon: Censer | Mid HP | Sustain</p>
-                            <div class="card-details"></div>
-                        </div>
-                        <div class="class-card" data-class="nightblade" style="--cc:#9c27b0;">
-                            <canvas class="class-portrait" data-class="nightblade"></canvas>
-                            <div class="class-title">Nightblade</div>
-                            <div class="diff-tag" style="--dc:#f44336;">Difficulty: Hard</div>
-                            <p class="card-desc">A lethal assassin. Passively exposes weak points on enemies for massive true damage triggers.</p>
-                            <p class="card-meta">Weapon: Daggers | Very Low HP | Extreme Single Target</p>
                             <div class="card-details"></div>
                         </div>
                         <div class="class-card" data-class="druid" style="--cc:#4caf50;">
                             <canvas class="class-portrait" data-class="druid"></canvas>
                             <div class="class-title">Druid</div>
-                            <div class="diff-tag" style="--dc:#f44336;">Difficulty: Hard</div>
-                            <p class="card-desc">A shape-shifter. Plant ticking Spores in Caster form, then transform into a beast to detonate them for burst physical damage. Every 3rd beast attack is a lunging Bite.</p>
-                            <p class="card-meta">Weapon: Totem/Claws | High HP | Transform Bruiser</p>
+                            <div class="diff-tag" style="--dc:#ffca28;">Difficulty: Medium</div>
+                            <p class="card-desc">A wild caller. A wolf or a black jaguar hunts at your side and goes after whatever you hit: snare enemies with brambles, pour nature magic into your wolf, and build Bond until its bite becomes a Maul.</p>
+                            <p class="card-meta">Weapon: Totem | Mid HP | Companion</p>
+                            <div class="card-details"></div>
+                        </div>
+                        <div class="class-card" data-class="nightblade" style="--cc:#9c27b0;">
+                            <canvas class="class-portrait" data-class="nightblade"></canvas>
+                            <div class="class-title">Nightblade</div>
+                            <div class="diff-tag" style="--dc:#ff7043;">Difficulty: Hard</div>
+                            <p class="card-desc">A lethal assassin. Passively exposes weak points on enemies for massive true damage triggers.</p>
+                            <p class="card-meta">Weapon: Daggers | Very Low HP | Extreme Single Target</p>
                             <div class="card-details"></div>
                         </div>
                         <div class="class-card" data-class="swordsaint" style="--cc:#00bcd4;">
                             <canvas class="class-portrait" data-class="swordsaint"></canvas>
                             <div class="class-title">Swordsaint</div>
-                            <div class="diff-tag" style="--dc:#f44336;">Difficulty: Expert</div>
+                            <div class="diff-tag" style="--dc:#e53935;">Difficulty: Expert</div>
                             <p class="card-desc">High-skill tactician and glass cannon. Swap between melee parry and autonomous Airborne Blade to control space.</p>
                             <p class="card-meta">Weapon: Phantom Blade | Stance Dancer | Low HP</p>
                             <div class="card-details"></div>
@@ -218,6 +218,16 @@
                 <div class="ui-divider"><span></span></div>
                 <div class="skill-cards" id="skill-buttons"></div>
                 <div class="ui-hint">Click a skill or press <kbd>1</kbd>&ndash;<kbd>4</kbd></div>
+            </div>
+        </div>
+
+        <div id="companion-screen" class="modal-overlay hidden">
+            <div class="panel">
+                <h1 class="ui-title">Choose Your Companion</h1>
+                <div class="ui-sub">The beast that hunts at your side this run</div>
+                <div class="ui-divider"><span></span></div>
+                <div class="skill-cards" id="companion-cards"></div>
+                <div class="ui-hint">Click a companion or press <kbd>1</kbd> / <kbd>2</kbd> &middot; <span class="cc-back" onclick="closeCompanionChoice()"><kbd>Esc</kbd> back</span></div>
             </div>
         </div>
 
@@ -304,6 +314,8 @@
     <script src="js/combat.js"></script>
     <script src="js/ui.js"></script>
     <script src="js/paladin.js"></script>
+    <script src="js/druid.js"></script>
+    <script src="js/items.js"></script>
     <script src="js/sprites.js"></script>
     <script src="js/portraits.js"></script>
     <script src="js/icons.js"></script>
@@ -321,6 +333,8 @@
     <script src="js/skillfx_ult.js"></script>
     <script src="js/skillfx_rmb.js"></script>
     <script src="js/menu.js"></script>
+    <script src="js/combos.js"></script>
+    <script src="js/training.js"></script>
     <script src="js/main.js"></script>
 </body>
 </html>
