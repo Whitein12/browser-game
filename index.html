@@ -250,6 +250,21 @@
             <div class="panel" id="intermission-panel"></div>
         </div>
 
+        <div id="letter-screen" class="modal-overlay hidden">
+            <div class="letter-panel">
+                <h2 class="letter-title">A Sealed Letter</h2>
+                <div class="letter-text">
+                    <p>Captain &mdash;</p>
+                    <p>Burn the village to the ground. Take the grain, the coin and every strong back; leave nothing standing that could feed a rising.</p>
+                    <p>Bring the spoils up the old hunters' trail through the forest. The Beastmaster holds the river crossing; show him this seal and he will let you onto the bridge.</p>
+                    <p>Do not keep me waiting at the Bastion.</p>
+                    <p>&mdash; V.</p>
+                </div>
+                <canvas id="letter-map" width="520" height="300"></canvas>
+                <button class="btn btn-primary letter-btn" onclick="closeLetter()">Follow the map</button>
+            </div>
+        </div>
+
         <div id="inventory-screen" class="modal-overlay hidden">
             <div class="panel inv-panel">
                 <h1 class="ui-title">Equipment</h1>
@@ -324,7 +339,10 @@
     <script src="js/map_clearing.js"></script>
     <script src="js/map_cavern.js"></script>
     <script src="js/map_hive.js"></script>
+    <script src="js/map_village.js"></script>
+    <script src="js/map_trail.js"></script>
     <script src="js/enemysprites.js"></script>
+    <script src="js/bandits.js"></script>
     <script src="js/fx.js"></script>
     <script src="js/weapons.js"></script>
     <script src="js/skillfx.js"></script>

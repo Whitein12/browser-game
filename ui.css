@@ -181,6 +181,9 @@ kbd { display: inline-block; min-width: 14px; padding: 1px 5px; border: 1px soli
 #stage-prompt.pink { color: #ffe0ec; background: rgba(26, 8, 16, 0.85); border-color: #ff4081; box-shadow: 0 0 18px -4px #ff4081; animation-name: promptPulsePink; }
 #stage-prompt.pink .sp-arrow { color: #ff80ab; }
 @keyframes promptPulsePink { to { box-shadow: 0 0 26px 0 #ff4081; } }
+#stage-prompt.ember { color: #fff0dc; background: rgba(28, 12, 4, 0.86); border-color: #ff9100; box-shadow: 0 0 18px -4px #ff9100; animation-name: promptPulseEmber; }
+#stage-prompt.ember .sp-arrow { color: #ffab40; }
+@keyframes promptPulseEmber { to { box-shadow: 0 0 26px 0 #ff9100; } }
 
 /* Wave announcement */
 #wave-banner { position: absolute; top: 26%; left: 0; right: 0; text-align: center; pointer-events: none; opacity: 0; z-index: 15; }
@@ -330,3 +333,11 @@ kbd { display: inline-block; min-width: 14px; padding: 1px 5px; border: 1px soli
 #training-panel .tr-key { display: inline-block; min-width: 26px; color: var(--gold-hi); font-weight: bold; }
 #training-panel .tr-name { color: var(--text); }
 #training-panel .tr-exit { width: 100%; color: var(--bad); }
+
+/* the Warchief's letter (map_village.js): an aged parchment sheet */
+.letter-panel { width: calc(100% - 32px); max-width: 600px; max-height: calc(100vh - 40px); overflow: auto; box-sizing: border-box; padding: 26px 32px; text-align: center; color: #3b2a17; background: linear-gradient(170deg, #e9dcb8, #d6c08f); border: 1px solid #8a6d3b; border-radius: 3px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6); transform: rotate(-0.6deg); }
+.letter-title { margin: 0 0 10px; font: bold 22px var(--serif); letter-spacing: 3px; text-transform: uppercase; color: #3b2a17; }
+.letter-text { font: italic 15px/1.5 var(--serif); color: #3b2a17; text-align: left; }
+.letter-text p { margin: 6px 0; }
+#letter-map { display: block; margin: 12px auto; max-width: 100%; height: auto; }
+.letter-btn { margin: 4px 0 0; }

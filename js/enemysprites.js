@@ -133,6 +133,7 @@ function drawCrown(c, x, y, r, tilt) {
 
 function drawEnemySprite(e) {
     if (e.dummy) return drawTrainingDummy(e); // training.js
+    if (BANDIT_TYPES[e.type]) return drawBandit(e); // bandits.js
     if (!SLIME_TYPES[e.type]) return false;
     if (e.flyUntil > fxTime) return true; // still in the air as a goo_arc (flung minions, the Queen's eggs)
     if (e.type === 'slime_melee') {
@@ -580,11 +581,12 @@ function drawQueen(e, o = {}) {
 // Drawn above everything in the world: the Queen's lightning coming down out of the dark
 function drawEnemyOverlay() {
     const c = ctx;
+    drawBanditOverlay(); // bandits.js: torches in flight, keg blasts
     for (const ef of effects) {
         if (ef.type !== 'queen_bolt') continue;
         const k = 1 - ef.life / ef.maxLife, a = k < 0.15 ? 1 : Math.max(0, 1 - (k - 0.15) / 0.85), fr = Math.floor(fxTime * 25) + ef.seed;
         c.save(); c.globalCompositeOperation = 'lighter';
-        if (k < 0.12) { c.fillStyle = `rgba(200, 170, 255, ${0.18 * (1 - k / 0.12)})`; c.fillRect(camera.x - 50, camera.y - 50, canvas.width + 100, canvas.height + 100); } // the flash lights up the whole hall
+        if (k < 0.12) { c.fillStyle = `rgba(200, 170, 255, ${0.18 * (1 - k / 0.12)})`; c.fillRect(camera.x - 50, camera.y - 50, viewW() + 100, viewH() + 100); } // the flash lights up the whole hall
         ptGlow(c, ef.x, ef.y, 170, '#d1b3ff', 0.7 * a);
         const pts = [[ef.x + (cavHash(fr) - 0.5) * 80, ef.y - 760]]; // a jagged bolt from far overhead down to the mark
         for (let i = 1; i < 14; i++) { const q = i / 14; pts.push([ef.x + (cavHash(fr + i * 3.1) - 0.5) * 70 * (1 - q * 0.6), ef.y - 760 * (1 - q)]); }
@@ -610,6 +612,7 @@ function slimeKingLand(e) {
 
 // Death: a splat on the ground and flying droplets; the king drops his crown
 function enemyDeathFx(e) {
+    if (BANDIT_TYPES[e.type]) { banditDeathFx(e); return; } // bandits.js
     if (!SLIME_TYPES[e.type]) return;
     hiveOnKill(e); // map_hive.js: the sleeping Queen stirs
     const boss = e.type.startsWith('boss'), col = e.type === 'boss_amalgam' ? '#00897b' : e.color;
@@ -668,12 +671,14 @@ function drawEnemyGround(ef) {
         const k = 1 - ef.life / ef.maxLife;
         c.save(); c.globalCompositeOperation = 'lighter'; ptGlow(c, ef.x, ef.y, 80 + k * 260, ef.color || '#b2ff59', 0.6 * (1 - k)); c.restore(); return true;
     }
+    if (drawBanditGround(ef)) return true; // bandits.js: fire, scorch marks, the fallen
     return drawCaveGround(ef);
 }
 
 // Enemy projectiles: spit globs, the king's molten slime, the Amalgam's toxic balls
 function drawEnemyProjectile(p) {
     const c = ctx;
+    if (drawBanditProjectile(p)) return true; // bandits.js: arrows, knives, a rolling keg
     const queen = p.owner && p.owner.type === 'boss_slime_queen';
     if (p.type === 'spore') { // a fuzzy ball of spores lobbed at where you stood
         const t = fxTime;

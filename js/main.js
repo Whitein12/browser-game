@@ -57,7 +57,9 @@ window.startNextWave = function() {
     enemiesToSpawn = isBossWave ? 4 : 3 + Math.floor(wave * 2.5); 
     
     if (activeDungeonId === 'bandit_bastion' && wave === 11 && !isEndlessMode) { isBossWave = true; enemiesToSpawn = 0; }
+    if (activeDungeonId === 'bandit_bastion' && wave === 10 && !isEndlessMode) enemiesToSpawn = 1; // the Beastmaster comes straight away (map_trail.js)
     setStageMap(mapTypeForWave(wave)); // stage.js
+    if (currentMap.type === 'trail') trailEnter(wave); // map_trail.js: a jump to wave 8 / 10 starts in the right section with the logjams open
     player.exitFade = 0; player.fadeOut = 0;
     if (fresh) { player.dash = null; player.z = 0; player.grappleTarget = null; player.charge = null; player.heavy = null; } // never carry a dash or a charge across a map change
 
@@ -139,6 +141,7 @@ function spawnEnemy() {
     let minionList = activeDungeon[`stage${stage}_minions`];
     // Slime Caves mixes every stage in Endless; any stage without minions (Bandit Bastion stage 3) falls back to the full pool
     if (!minionList || minionList.length === 0 || (isEndlessMode && activeDungeonId === 'slime_caves')) minionList = allMinions;
+    if (currentMap.type === 'trail') minionList = trailMinions(minionList); // map_trail.js: the section's mix, riders and hounds capped
 
     if (isBossWave && !bossSpawned && enemiesToSpawn === 0) {
         bossSpawned = true; 
@@ -160,12 +163,19 @@ function spawnEnemy() {
     for (const minion of minionList) { cumulative += minion.weight; if (roll <= cumulative) { m = minion; break; } }
     
     const speed = m.baseSpeed + Math.random() * m.speedVar + (wave * 2.5); 
-    enemies.push({ x: ex, y: ey, size: m.size, color: m.color, speed: speed, hp: m.baseHp + (wave * m.hpScale), maxHp: m.baseHp + (wave * m.hpScale), type: m.type, dmg: m.baseDmg + (wave * m.dmgScale), xp: m.baseXp + (wave * m.xpScale), attackTimer: m.attackTimer || 0, meleeTimer: 0, ammo: m.ammo || 0, frozenTimer: 0, facingAngle: 0, shieldHp: m.shieldHp, shieldMax: m.shieldMax, puddleTimer: m.puddleTimer || 0, bleedTimer: 0, bleedDmg: 0, orbs: m.orbs || 0, maxOrbs: m.orbs || 0, spawnFrom });
-    onEnemySpawned(enemies[enemies.length - 1]); // stage.js
+    const pushMinion = (x, y) => { // a hound's pack mates are pushed the same way
+        enemies.push({ x: x, y: y, size: m.size, color: m.color, speed: speed, hp: m.baseHp + (wave * m.hpScale), maxHp: m.baseHp + (wave * m.hpScale), type: m.type, dmg: m.baseDmg + (wave * m.dmgScale), xp: m.baseXp + (wave * m.xpScale), attackTimer: m.attackTimer || 0, meleeTimer: 0, ammo: m.ammo || 0, frozenTimer: 0, facingAngle: 0, shieldHp: m.shieldHp, shieldMax: m.shieldMax, puddleTimer: m.puddleTimer || 0, bleedTimer: 0, bleedDmg: 0, orbs: m.orbs || 0, maxOrbs: m.orbs || 0, spawnFrom });
+        onEnemySpawned(enemies[enemies.length - 1]); // stage.js
+    };
+    pushMinion(ex, ey);
+    const packMax = currentMap.type === 'trail' ? Math.min(1, trailRoom('hound')) : 2; // map_trail.js: packs of 2 at most there, never past the cap
+    if (m.type === 'hound') for (let k = 0; k < packMax && enemiesToSpawn > (isBossWave ? 1 : 0); k++) { // a pack: up to two more, each one a wave enemy
+        enemiesToSpawn--; activeEnemies++; pushMinion(ex, ey + (k ? 30 : -30));
+    }
     updateHUD();
 }
 
-window.addEventListener('mousemove', e => { mouseScreenX = e.clientX; mouseScreenY = e.clientY; mouseX = e.clientX + camera.x; mouseY = e.clientY + camera.y; }); // world coordinates
+window.addEventListener('mousemove', e => { mouseScreenX = e.clientX; mouseScreenY = e.clientY; mouseX = e.clientX / camZoom() + camera.x; mouseY = e.clientY / camZoom() + camera.y; }); // world coordinates (stage.js zoom)
 window.addEventListener('mousedown', e => { 
     if (e.button === 0) { isMouseDown = true; lmbClicked = gameState === STATE.PLAYING; lmbPressedAt = fxTime; } // skills.js: a Dragonknight click mid-cooldown still swings (not a menu click); combos.js: fresh-press gates
     if (e.button === 2 && equipment.weapon && equipment.weapon.rarity === 'rare' && activeClass.rareWeapon.rmbSkill && (cooldowns.rmb <= 0 || devNoCooldowns) && gameState === STATE.PLAYING && !(stageEvent && stageEvent.blocking) && !player.charge) {
@@ -306,6 +316,7 @@ function update(dt) {
     updateFx(dt);
     updatePaladin(dt);
     updateDruid(dt); // druid.js: the wolves
+    updateBanditFx(dt); // bandits.js: fire on the ground, lit powder kegs
     if (enemiesToSpawn > 0) { enemySpawnTimer -= dt; if (enemySpawnTimer <= 0) { spawnEnemy(); enemySpawnTimer = Math.max(0.5, 2.0 - (wave * 0.1)); } }
     if (cooldowns.basic > 0) cooldowns.basic -= dt;
     if (cooldowns.rmb > 0) cooldowns.rmb -= dt;
@@ -698,8 +709,9 @@ function update(dt) {
         } else if (effects[i].type === 'puddle') {
             if (Math.hypot(player.x - effects[i].x, player.y - effects[i].y) < player.radius + effects[i].radius) takeDamage(15 * dt, true);
         } else if (effects[i].type === 'bear_trap') {
-            if (Math.hypot(player.x - effects[i].x, player.y - effects[i].y) < player.radius + effects[i].radius) {
-                buffs.rooted = 1.5; takeDamage(effects[i].dmg); effects.splice(i, 1); continue;
+            // no snap while dashing, leaping or invulnerable, nor within 2.5 s of the last one (the trap stays armed); the root is short so a dash can still be a dodge
+            if (Math.hypot(player.x - effects[i].x, player.y - effects[i].y) < player.radius + effects[i].radius && !player.dash && player.z <= 4 && !(player.iFrames > 0) && fxTime >= (player.trapImmuneUntil || 0)) {
+                buffs.rooted = 0.8; player.trapImmuneUntil = fxTime + 2.5; takeDamage(effects[i].dmg); effects[i] = { type: 'trap_snapped', x: effects[i].x, y: effects[i].y, life: 1.5, maxLife: 1.5 }; continue; // the jaws snap shut on them (bandits.js)
             }
         } else if (effects[i].type === 'spore_cloud') { // a Spore Slime's haze: standing in it weakens you
             if (Math.hypot(player.x - effects[i].x, player.y - effects[i].y) < player.radius + effects[i].radius) buffs.weakened = 0.5;
@@ -732,18 +744,10 @@ function update(dt) {
             p.vx = (rx/rd)*1200; p.vy = (ry/rd)*1200; p.life = 0.5;
         }
         
-        if (p.type === 'hound') {
-            if (p.trackTimer > 0) {
-                p.trackTimer -= dt;
-                const [tx, ty, tdist] = getVector(p.x, p.y, player.x, player.y);
-                let targetAngle = Math.atan2(ty, tx); let currentAngle = Math.atan2(p.vy, p.vx); let diff = targetAngle - currentAngle;
-                while(diff < -Math.PI) diff += Math.PI*2; while(diff > Math.PI) diff -= Math.PI*2;
-                currentAngle += diff * 2.5 * dt; p.vx = Math.cos(currentAngle) * p.speed; p.vy = Math.sin(currentAngle) * p.speed;
-            }
-            p.x += p.vx * dt; p.y += p.vy * dt; 
-        } else if (p.type === 'trap_throw' || p.type === 'spore') {
+        if (p.type === 'trap_throw' || p.type === 'spore' || p.type === 'sling_stone') {
             const [tx, ty, td] = getVector(p.x, p.y, p.targetX, p.targetY); const spd = p.speed || 400;
             if (td > 10) { p.x += (tx/td)*spd*dt; p.y += (ty/td)*spd*dt; }
+            else if (p.type === 'sling_stone') p.life = 0; // it has landed
         } else if (p.type !== 'turret' && p.type !== 'tesla_coil_trap') {
             p.x += p.vx * dt; p.y += p.vy * dt; 
         }
@@ -757,7 +761,11 @@ function update(dt) {
         if (p.life <= 0 || p.x < currentMap.left - 50 || p.x > currentMap.right + 50 || p.y < currentMap.top - 50 || p.y > currentMap.bottom + 50) { 
             if (p.type === 'bramble_core') snareBurst(p.x, p.y, p.damage, p.sourceSkill); // druid.js: Bramble Snare bursts where it lands
             if (p.type === 'boss_slimeball') { effects.push({ type: 'puddle', x: p.x, y: p.y, radius: 30, color: '#009688', life: 1.5, maxLife: 1.5 }); }
-            if (p.type === 'trap_throw') { effects.push({ type: 'bear_trap', x: p.x, y: p.y, radius: 15, color: '#5d4037', life: 8.0, maxLife: 8.0, dmg: p.damage }); }
+            if (p.type === 'trap_throw') { effects.push({ type: 'bear_trap', x: p.x, y: p.y, radius: 15, color: '#5d4037', life: 8.0, maxLife: 8.0, dmg: p.damage, owner: p.owner }); } // owner: ai.js caps each trapper's traps
+            if (p.type === 'sling_stone') { // a slinger's stone comes down on where the hero stood: dodge out of the marker
+                if (Math.hypot(p.x - player.x, p.y - player.y) < 26 + player.radius) takeDamage(p.owner.dmg);
+                burst(p.x, p.y, 0, Math.PI * 2, 6, { kind: 'debris', color: '#9e9e9e', size: 3, speed: [60, 180], life: 0.45, drag: 3 });
+            }
             if (p.type === 'spore') { effects.push({ type: 'spore_cloud', x: p.x, y: p.y, radius: 100, color: 'rgba(205, 220, 57, 0.4)', life: 3.0, maxLife: 3.0 }); }
             if (p.type === 'chain_hook' && p.sourceBoss) { 
                 p.sourceBoss.state = 'hook_pull'; 
@@ -779,7 +787,7 @@ function update(dt) {
                 continue;
             }
 
-            if (p.type !== 'trap_throw' && p.type !== 'spore' && Math.hypot(p.x - player.x, p.y - player.y) < player.radius + p.radius) { 
+            if (p.type !== 'trap_throw' && p.type !== 'spore' && p.type !== 'sling_stone' && Math.hypot(p.x - player.x, p.y - player.y) < player.radius + p.radius) { 
                 takeDamage(p.damage, false, { isProjectile: true, proj: p }); 
                 if (p.type === 'chain_hook') {
                     buffs.rooted = 1.0;
@@ -789,7 +797,7 @@ function update(dt) {
                 }
                 if (p.type === 'boss_slimeball') { effects.push({ type: 'puddle', x: p.x, y: p.y, radius: 30, color: '#009688', life: 1.5, maxLife: 1.5 }); }
                 if (p.type === 'bolas') { 
-                    buffs.rooted = 1.0; const boss = enemies.find(e => e.type === 'boss_beastmaster');
+                    buffs.rooted = 0.6; const boss = enemies.find(e => e.type === 'boss_beastmaster');
                     if (boss) { const [bx, by, bdist] = getVector(player.x, player.y, boss.x, boss.y); player.x += (bx/bdist)*100; player.y += (by/bdist)*100; clampToBounds(player, player.radius); }
                 }
                 projectiles.splice(i, 1); 
@@ -878,7 +886,7 @@ function update(dt) {
         }
     }
 
-    let hasCasterAura = false;
+    const bannermen = enemies.filter(o => o.type === 'bannerman' && !o.dead), RALLY_R2 = RALLY_RADIUS * RALLY_RADIUS; // once a frame, not per enemy
     for (let i = enemies.length - 1; i >= 0; i--) {
         const e = enemies[i];
         if (e.dead) continue;
@@ -915,9 +923,19 @@ function update(dt) {
         if (e.shockTimer > 0) curSpd *= 0.5;
         if (e.slowTimer > 0) { e.slowTimer -= dt; curSpd *= 1 - (e.slowAmount !== undefined ? e.slowAmount : 0.4); }
         
-        hasCasterAura = false;
-        for(let j=0; j<enemies.length; j++) { if (enemies[j].type === 'caster' && Math.hypot(e.x - enemies[j].x, e.y - enemies[j].y) < 400) hasCasterAura = true; }
-        if (hasCasterAura) curSpd *= 2.0;
+        // the bannerman's rally (ai.js RALLY_*): allies near a living bannerman run faster and hit harder; bosses and props never
+        if (!e.type.startsWith('boss') && !e.prop && (bannermen.length || e.rallyT > 0)) {
+            let rallied = false;
+            for (const o of bannermen) if (o !== e && (e.x - o.x) ** 2 + (e.y - o.y) ** 2 < RALLY_R2) { rallied = true; break; }
+            if (rallied) {
+                curSpd *= RALLY_SPEED;
+                if (!(e.rallyT > 0)) { if (e.baseDmg === undefined) e.baseDmg = e.dmg; e.dmg = e.baseDmg * RALLY_DMG; } // remember the normal hit once
+                e.rallyT = 0.3;
+            } else if (e.rallyT > 0) {
+                e.rallyT -= dt;
+                if (e.rallyT <= 0) { e.dmg = e.baseDmg; delete e.baseDmg; }
+            }
+        }
 
         let [edx, edy, edist] = getVector(e.x, e.y, player.x, player.y);
         if (currentMap.grid) { const s = navSteer(e, edx, edy, edist); if (s) [edx, edy] = s; } // stage.js: walk around cave walls
@@ -969,6 +987,7 @@ function draw() {
     ctx.fillStyle = '#111'; ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.save();
     if (gameState === STATE.PLAYING) ctx.translate(shakeX, shakeY); // fx.js camera shake
+    ctx.scale(camZoom(), camZoom()); // stage.js: some maps are drawn closer in
     ctx.translate(-Math.round(camera.x), -Math.round(camera.y)); // stage.js camera; 0,0 on screen-sized maps
     
     if (currentMap.type === 'clearing') {
@@ -977,6 +996,10 @@ function draw() {
         drawCavernGround(); // map_cavern.js: terrain, lakes, darkness and lights
     } else if (currentMap.type === 'hive') {
         drawHiveGround(); // map_hive.js: throne hall, pool, opened pods, the sleeping Queen
+    } else if (currentMap.type === 'village') {
+        drawVillageGround(); // map_village.js: the burned village at dusk, its fires and the barricade
+    } else if (currentMap.type === 'trail') {
+        drawTrailGround(); // map_trail.js: the road, the river, the camp, the logjams and the gate
     } else if (currentMap.type === 'training') {
         drawTrainingGround(); // training.js: the sand yard
     } else if (currentMap.type === 'bridge') {
@@ -1037,7 +1060,7 @@ function draw() {
     }
 
     for (const ef of effects) {
-        if (ef.type === 'puddle' || ef.type === 'fire_puddle' || ef.type === 'thorn_patch' || ef.type === 'spore_cloud' || ef.type === 'consecrated_ground' || ef.type === 'smoke_bomb') continue; 
+        if (ef.type === 'puddle' || ef.type === 'fire_puddle' || ef.type === 'thorn_patch' || ef.type === 'spore_cloud' || ef.type === 'consecrated_ground' || ef.type === 'smoke_bomb' || ef.type === 'bear_trap' || ef.type === 'trap_snapped') continue; // bandits.js draws traps on the ground pass 
         
         ctx.globalAlpha = ef.isWarning ? 1.0 : ef.life / ef.maxLife; 
         if (drawSkillEffect(ef)) { ctx.globalAlpha = 1.0; continue; } // skillfx.js
@@ -1427,7 +1450,6 @@ function draw() {
             ctx.stroke();
             ctx.restore();
         }
-        else if (ef.type === 'bear_trap') { ctx.fillStyle = ef.color; ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.radius, 0, Math.PI*2); ctx.fill(); ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.radius/2, 0, Math.PI*2); ctx.fill(); }
         else if (ef.type === 'claw_swipe') {
             // Three tapered claw rakes
             ctx.fillStyle = ef.color || '#c62828';
@@ -1706,6 +1728,8 @@ function draw() {
     if (currentMap.type === 'clearing') drawClearingCanopy(); // map_clearing.js: trees overhang the fight
     if (currentMap.type === 'cavern') drawCavernAbove(); // map_cavern.js: falling stalactites, drips
     if (currentMap.type === 'hive') drawHiveAbove(); // map_hive.js: drifting spores
+    if (currentMap.type === 'village') drawVillageAbove(); // map_village.js: roof fires, smoke, the canopy, ash
+    if (currentMap.type === 'trail') drawTrailAbove(); // map_trail.js: the canopy, the campfire's smoke, pollen
     drawEnemyOverlay(); // enemysprites.js: lightning coming down from above
     drawFx(); // fx.js particles
     drawUltOverlay(); // skillfx_ult.js: things in the air above everything

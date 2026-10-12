@@ -25,9 +25,11 @@
     ],
     "stage1_boss": { "id": "bandit_warlord", "size": 50, "color": "#d84315", "baseSpeed": 85, "speedVar": 0, "baseHp": 1200, "hpScale": 240, "baseDmg": 18, "dmgScale": 2.5, "baseXp": 250, "xpScale": 0, "type": "boss_warlord", "attackTimer": 2.0 },
     "stage2_minions": [
-      { "id": "bandit_horse", "size": 36, "color": "#795548", "baseSpeed": 110, "speedVar": 20, "baseHp": 40, "hpScale": 15, "baseDmg": 15, "dmgScale": 2.5, "baseXp": 15, "xpScale": 3, "type": "horse", "weight": 0.65 },
-      { "id": "bandit_trapper", "size": 26, "color": "#5d4037", "baseSpeed": 80, "speedVar": 10, "baseHp": 25, "hpScale": 8, "baseDmg": 10, "dmgScale": 1.5, "baseXp": 14, "xpScale": 3, "type": "trapper", "attackTimer": 2.0, "weight": 0.25 },
-      { "id": "bandit_caster", "size": 28, "color": "#ffeb3b", "baseSpeed": 60, "speedVar": 5, "baseHp": 30, "hpScale": 10, "baseDmg": 5, "dmgScale": 1.0, "baseXp": 16, "xpScale": 3, "type": "caster", "weight": 0.10 }
+      { "id": "bandit_horse", "size": 36, "color": "#795548", "baseSpeed": 110, "speedVar": 20, "baseHp": 40, "hpScale": 15, "baseDmg": 15, "dmgScale": 2.5, "baseXp": 15, "xpScale": 3, "type": "horse", "weight": 0.30 },
+      { "id": "bandit_trapper", "size": 26, "color": "#5d4037", "baseSpeed": 80, "speedVar": 10, "baseHp": 25, "hpScale": 8, "baseDmg": 10, "dmgScale": 1.5, "baseXp": 14, "xpScale": 3, "type": "trapper", "attackTimer": 2.0, "weight": 0.22 },
+      { "id": "bandit_bannerman", "size": 28, "color": "#b71c1c", "baseSpeed": 70, "speedVar": 5, "baseHp": 45, "hpScale": 12, "baseDmg": 6, "dmgScale": 1.0, "baseXp": 20, "xpScale": 3, "type": "bannerman", "weight": 0.12 },
+      { "id": "bandit_hound", "size": 22, "color": "#3b2f2a", "baseSpeed": 210, "speedVar": 20, "baseHp": 14, "hpScale": 6, "baseDmg": 6, "dmgScale": 1.2, "baseXp": 6, "xpScale": 1.5, "type": "hound", "weight": 0.16 },
+      { "id": "bandit_slinger", "size": 24, "color": "#a1887f", "baseSpeed": 90, "speedVar": 10, "baseHp": 22, "hpScale": 7, "baseDmg": 9, "dmgScale": 1.4, "baseXp": 12, "xpScale": 2.5, "type": "slinger", "attackTimer": 1.5, "weight": 0.20 }
     ],
     "stage2_boss": { "id": "beastmaster", "size": 60, "color": "#3e2723", "baseSpeed": 90, "speedVar": 0, "baseHp": 3500, "hpScale": 510, "baseDmg": 22, "dmgScale": 3, "baseXp": 450, "xpScale": 0, "type": "boss_beastmaster", "stateTimer": 3.0 },
     "stage3_minions": [],

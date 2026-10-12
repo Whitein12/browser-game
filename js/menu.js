@@ -10,7 +10,7 @@ const MAP_SITES = [
     { id: 'slime_caves', name: 'Slime Caves', levels: 'Lv. 1-10', color: '#558b2f', x: 250, y: 360, icon: 'cave', numeral: 'I',
       desc: 'A damp cave filled with highly regenerative oozes and toxic sludges.', bosses: 'The Slime King, The Hive Queen' },
     { id: 'bandit_bastion', name: 'Bandit Bastion', levels: 'Lv. 5-15', color: '#9c3d1e', x: 690, y: 378, icon: 'fort', numeral: 'II',
-      desc: 'A fortified encampment. Enemies use shields, traps, and tactical formations.', bosses: 'The Beastmaster, Valerius the Vanguard' },
+      desc: 'Your village lies in ashes. Follow the raiders\' trail to their stronghold and make them pay.', bosses: 'The Warchief, the Beastmaster, Valerius the Vanguard' },
     { id: 'frostpeak', name: 'Frostpeak Hollow', x: 505, y: 172, icon: 'spire', locked: true },
     { id: 'ember_forge', name: 'Ember Forge', x: 822, y: 262, icon: 'volcano', locked: true },
     { id: 'sunken_crypt', name: 'Sunken Crypt', x: 420, y: 498, icon: 'crypt', locked: true },

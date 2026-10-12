@@ -55,7 +55,7 @@ function getNearestEnemyFromPoint(x, y, range, excludeList = []) {
     let nearest = null;
     let minDist = range;
     for(const e of enemies) {
-        if (e.dead || e.submerged || excludeList.includes(e)) continue; // submerged: the Amalgam's Undertow
+        if (e.dead || e.submerged || e.prop || excludeList.includes(e)) continue; // submerged: the Amalgam's Undertow; props: powder kegs (nothing aims at them)
         const dist = Math.hypot(e.x - x, e.y - y); 
         if(dist < minDist) { minDist = dist; nearest = e; } 
     }

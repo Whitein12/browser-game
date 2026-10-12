@@ -6,7 +6,7 @@
 
 const BOSS_NAMES = {
     boss_slime: 'The Slime King', boss_amalgam: 'The Amalgam', boss_slime_queen: 'The Hive Queen',
-    boss_warlord: 'The Bandit Warlord', boss_beastmaster: 'The Beastmaster', boss_valerius: 'Valerius the Vanguard',
+    boss_warlord: 'The Bandit Warchief', boss_beastmaster: 'The Beastmaster', boss_valerius: 'Valerius the Vanguard',
 };
 const SLOT_KEYS = { 1: 'Q', 2: 'E', 3: 'SPC', 4: 'R', rmb: 'RMB' };
 const hud = { sig: null, slots: {}, chipSig: '', hpGhost: 1, lastFx: 0, lastGold: 0, gaugeF: 0, gaugeSig: '', tab: false, tabAt: 0, rects: null, rectsAt: 0 };
@@ -237,7 +237,7 @@ function updateHudCover() {
     for (const e of enemies) if (!e.dead && !e.pod) pts.push([e.x, e.y, e.size * 0.7]); // pods line the walls; they'd keep the HUD faded
     for (const h of hud.rects) {
         let cov = false;
-        if (h.on) for (const [x, y, r] of pts) { const sx = x - camera.x, sy = y - camera.y; if (sx + r > h.r.left && sx - r < h.r.right && sy + r > h.r.top && sy - r < h.r.bottom) { cov = true; break; } }
+        if (h.on) for (const [x, y, r] of pts) { const sx = (x - camera.x) * camZoom(), sy = (y - camera.y) * camZoom(); if (sx + r > h.r.left && sx - r < h.r.right && sy + r > h.r.top && sy - r < h.r.bottom) { cov = true; break; } }
         if (cov !== h.cov) { h.cov = cov; h.e.classList.toggle('hud-covered', cov); }
     }
 }

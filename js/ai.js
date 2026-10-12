@@ -25,10 +25,341 @@ var RangedAI = (e, dt, curSpd, edx, edy, edist, i) => {
     }
 };
 
+// Bandit melee (the thief and the shieldbearer attack on purpose now instead of hurting on touch). The wind-ups are the
+// warning: the thief draws its daggers back, the shieldbearer pulls its shield in while a wedge marks the bash (bandits.js).
+const THIEF_WINDUP = 0.3, THIEF_LUNGE = 620, THIEF_THRUST = 1.3;  // the thrust hits for x1.3
+const BASH_WINDUP = 0.5, BASH_DMG = 2.0, BASH_KNOCK = 70;         // the bash hits for x2 and shoves you back
+const TRAP_THROW = 2, TRAP_CD = 6, TRAP_CAP = 3; // trappers: traps per throw, seconds between throws, most of one trapper's traps down at once
+const CHARGE_WINDUP = 0.7, CHARGE_SPEED = 1150, CHARGE_MAX = 560; // the Warchief's Bull Rush
+const RIDER_AIM = 0.75, RIDER_LOCK = 0.2, RIDER_SPEED = 640, RIDER_RANGE = 520, RIDER_DMG = 2.0; // the horse rider's lance: aim, lock, ride-by
+const RIDER_LOCK_TIME = 0.35; // the horse rider's lane locks this long before the charge (the Beastmaster keeps RIDER_LOCK)
+const SLING_CD = 2.6, SLING_WINDUP = 0.6, SLING_SPEED = 420, SLING_NEAR = 260, SLING_FAR = 380; // the slinger: seconds between stones, wind-up, stone speed, the range it keeps
+const RALLY_RADIUS = 300, RALLY_SPEED = 1.3, RALLY_DMG = 1.25; // the bannerman's banner: allies within RALLY_RADIUS run faster and hit harder (main.js)
+const HOUND_RING = 130, HOUND_DART = 520, HOUND_DART_T = 0.35, HOUND_RETREAT_T = 0.5, HOUND_DRIFT = 0.9, HOUND_SPACING = 0.9; // the pack hound's ring, lunge and spacing
+
+var ThiefAI = (e, dt, curSpd, edx, edy, edist, i) => {
+    const [rx, ry, rd] = getVector(e.x, e.y, player.x, player.y);
+    e.stateTimer = (e.stateTimer || 0) - dt;
+    if (e.frozenTimer > 0) e.state = null;
+    if (!e.state || e.state === 'idle') {
+        if (rd > 70 && edist > 0 && edist !== Infinity) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
+        if (rd < 105 && e.stateTimer <= 0 && curSpd > 0 && (!currentMap.grid || walkClear(e.x, e.y, player.x, player.y))) { e.state = 'windup'; e.stateTimer = THIEF_WINDUP; }
+    } else if (e.state === 'windup') {
+        if (e.stateTimer <= 0) { e.state = 'lunge'; e.stateTimer = 0.14; e.lungeA = Math.atan2(ry, rx); e.hitDone = false; }
+    } else if (e.state === 'lunge') { // a quick step through with both daggers
+        const sp = curSpd > 0 ? THIEF_LUNGE : 0; e.x += Math.cos(e.lungeA) * sp * dt; e.y += Math.sin(e.lungeA) * sp * dt;
+        if (!e.hitDone && rd < player.radius + e.size / 2 + 16) { e.hitDone = true; takeDamage(e.dmg * THIEF_THRUST); }
+        if (e.stateTimer <= 0) { e.state = 'recover'; e.stateTimer = 0.35; }
+    } else if (e.stateTimer <= 0) { e.state = null; e.stateTimer = 0.6 + Math.random() * 0.5; } // recovering: open to a counter
+};
+
+var ShieldAI = (e, dt, curSpd, edx, edy, edist, i) => {
+    const [rx, ry, rd] = getVector(e.x, e.y, player.x, player.y);
+    e.stateTimer = (e.stateTimer || 0) - dt;
+    if (e.frozenTimer > 0) e.state = null;
+    if (!e.state || e.state === 'idle') {
+        if (rd > 60 && edist > 0 && edist !== Infinity) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
+        if (rd < 95 && e.stateTimer <= 0 && curSpd > 0 && (!currentMap.grid || walkClear(e.x, e.y, player.x, player.y))) { e.state = 'bash_windup'; e.stateTimer = BASH_WINDUP; }
+    } else if (e.state === 'bash_windup') {
+        const fa = e.facingAngle !== undefined ? e.facingAngle : Math.atan2(ry, rx); // the shield swings round onto the hero
+        let turn = Math.atan2(ry, rx) - fa; while (turn > Math.PI) turn -= Math.PI * 2; while (turn < -Math.PI) turn += Math.PI * 2;
+        e.facingAngle = fa + Math.sign(turn) * Math.min(Math.abs(turn), 7 * dt);
+        if (e.stateTimer <= 0) { e.state = 'bash'; e.stateTimer = 0.18; e.bashA = e.facingAngle !== undefined ? e.facingAngle : Math.atan2(ry, rx); e.hitDone = false; }
+    } else if (e.state === 'bash') { // a lurch forward behind the shield (or the axe, once the shield is gone)
+        const sp = curSpd > 0 ? 560 : 0; e.x += Math.cos(e.bashA) * sp * dt; e.y += Math.sin(e.bashA) * sp * dt;
+        let off = Math.atan2(ry, rx) - e.bashA; while (off > Math.PI) off -= Math.PI * 2; while (off < -Math.PI) off += Math.PI * 2;
+        if (!e.hitDone && rd < player.radius + e.size / 2 + 30 && Math.abs(off) < 1.35) {
+            e.hitDone = true;
+            takeDamage(e.dmg * BASH_DMG);
+            if (!player.dash && !player.grappleTarget) { // shoved back and staggered
+                buffs.slowed = Math.max(buffs.slowed, 0.6);
+                player.x += Math.cos(e.bashA) * BASH_KNOCK; player.y += Math.sin(e.bashA) * BASH_KNOCK; clampToBounds(player, player.radius);
+            }
+            addShake(3); burst(player.x, player.y, e.bashA, 1.4, 8, { kind: 'spark', color: '#ffe0b2', size: 2.4, speed: [120, 300], life: 0.25, drag: 5 });
+        }
+        if (e.stateTimer <= 0) { e.state = 'bash_recover'; e.stateTimer = 0.5; }
+    } else if (e.stateTimer <= 0) { e.state = null; e.stateTimer = 1.0 + Math.random() * 0.5; }
+};
+
+// The horse rider: it circles the hero at 300 px, then sets its lance on a lane (lance_aim: slowed, turning, the lane
+// locked for the last RIDER_LOCK s) and charges down it, hitting once. A horse can't stop on a coin, so after a charge it
+// wheels away in a wide turn. The lane is drawn in bandits.js (lance_lane); the horse's pose reads 'charge' and 'wheel'.
+const riderTurn = (h, target, max) => { let d = target - h; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return h + Math.sign(d) * Math.min(Math.abs(d), max); };
+const riderBlocked = (e, nx, ny) => (currentMap.grid && solidCell(terrainAt(nx, ny), false)) || (currentMap.obstacles || []).some(o => o.kind !== 'keg' && Math.hypot(nx - o.x, ny - o.y) < o.r + e.size / 2);
+var RiderAI = (e, dt, curSpd, edx, edy, edist, i) => {
+    const [rx, ry, rd0] = getVector(e.x, e.y, player.x, player.y), rd = rd0 || 1, ux = rx / rd, uy = ry / rd;
+    e.stateTimer = (e.stateTimer === undefined ? 1.5 : e.stateTimer) - dt;
+    if (e.heading === undefined) e.heading = Math.atan2(ry, rx);
+    if (!e.state || e.state === 'idle' || e.state === 'ride') {
+        e.state = 'ride';
+        if (curSpd > 0) {
+            let mx = -uy + ux * 0.25, my = ux + uy * 0.25; // round the hero at its distance, a little pull in
+            if (rd > 300 && edist > 0 && edist !== Infinity) { mx = edx / edist; my = edy / edist; } // closing in first
+            const ml = Math.hypot(mx, my) || 1; e.x += mx / ml * curSpd * dt; e.y += my / ml * curSpd * dt; e.heading = Math.atan2(my, mx);
+        }
+        if (rd < player.radius + e.size / 2 + 5 && e.meleeTimer <= 0) { takeDamage(e.dmg); e.meleeTimer = 1.0; }
+        if (e.stateTimer <= 0 && curSpd > 0 && rd < 460 && (!currentMap.grid || walkClear(e.x, e.y, player.x, player.y))) {
+            e.state = 'lance_aim'; e.stateTimer = RIDER_AIM; e.laneA = Math.atan2(ry, rx);
+            effects.push({ type: 'lance_lane', e, w: 26, lockAt: RIDER_AIM - RIDER_LOCK_TIME, life: RIDER_AIM, maxLife: RIDER_AIM }); // bandits.js draws the lane
+        }
+    } else if (e.state === 'lance_aim') { // slowed to a walk; the lance follows the hero until the lane locks
+        if (e.stateTimer > RIDER_LOCK_TIME) e.laneA = Math.atan2(ry, rx);
+        e.heading = riderTurn(e.heading, e.laneA, 4 * dt);
+        if (curSpd > 0) { e.x += ux * curSpd * 0.2 * dt; e.y += uy * curSpd * 0.2 * dt; }
+        if (e.stateTimer <= 0) {
+            if (curSpd > 0) { e.state = 'charge'; e.chargeLeft = RIDER_RANGE; e.hitDone = false; }
+            else { e.state = 'ride'; e.stateTimer = 1.0; }
+        }
+    } else if (e.state === 'charge') { // straight down the lane; rock, a building or a rooting ends it early
+        const step = RIDER_SPEED * dt, nx = e.x + Math.cos(e.laneA) * step, ny = e.y + Math.sin(e.laneA) * step;
+        e.heading = e.laneA;
+        if (curSpd <= 0 || riderBlocked(e, nx, ny)) { e.state = 'wheel'; e.stateTimer = 1.0; }
+        else {
+            e.x = nx; e.y = ny; e.chargeLeft -= step;
+            if (!e.hitDone && Math.hypot(e.x - player.x, e.y - player.y) < e.size / 2 + player.radius + 6) { // the lance: once per charge
+                e.hitDone = true; takeDamage(e.dmg * RIDER_DMG); buffs.slowed = Math.max(buffs.slowed, 1.0); addShake(3);
+                burst(player.x, player.y, e.laneA, 1.4, 8, { kind: 'spark', color: '#ffe0b2', size: 2.4, speed: [120, 300], life: 0.25, drag: 5 });
+            }
+            if (e.chargeLeft <= 0) { e.state = 'wheel'; e.stateTimer = 1.0; }
+        }
+    } else if (e.state === 'wheel') { // a wide turn, still moving: swings round toward the hero at 2.6 rad/s
+        e.heading = riderTurn(e.heading, Math.atan2(ry, rx), 2.6 * dt);
+        const nx = e.x + Math.cos(e.heading) * 300 * dt, ny = e.y + Math.sin(e.heading) * 300 * dt;
+        if (curSpd > 0 && !riderBlocked(e, nx, ny)) { e.x = nx; e.y = ny; }
+        if (e.stateTimer <= 0) { e.state = 'ride'; e.stateTimer = 2.2 + Math.random() * 0.8; }
+    }
+    e.facingAngle = e.heading; // a horse faces where it goes (main.js points it at the hero before the AI runs)
+};
+
+// The bannerman never fights. It hangs back 120 px behind its nearest bandit ally, on the side away from the hero, or keeps
+// 300-380 px off the hero when it has no one to hide behind. Every 3 s it raises the banner: a red ring pulses out and
+// bandits near it are rallied (main.js). The banner's pose is bandits.js (p.raise).
+// Is the straight line from the bannerman to its target clear of rock? Cached for 0.25 s (walkClear walks the cells)
+const bannermanSees = (e, tx, ty) => { if (e.bmLosAt === undefined || fxTime >= e.bmLosAt) { e.bmLos = walkClear(e.x, e.y, tx, ty); e.bmLosAt = fxTime + 0.25; } return e.bmLos; };
+var BannermanAI = (e, dt, curSpd, edx, edy, edist, i) => {
+    e.allyCd = (e.allyCd || 0) - dt;
+    if (e.allyCd <= 0) { // the nearest-ally search only every 0.3 s
+        e.allyCd = 0.3; e.allyRef = null; let ad = 600;
+        for (const o of enemies) {
+            if (o === e || o.dead || o.prop || o.spawnT > 0 || !BANDIT_TYPES[o.type]) continue;
+            const d = Math.hypot(o.x - e.x, o.y - e.y); if (d < ad) { ad = d; e.allyRef = o; }
+        }
+    }
+    const ally = e.allyRef && !e.allyRef.dead ? e.allyRef : null;
+    if (ally) {
+        const [ax, ay, adist] = getVector(ally.x, ally.y, player.x, player.y);
+        const tx = ally.x - ax / adist * 120, ty = ally.y - ay / adist * 120;
+        const [mx, my, md] = getVector(e.x, e.y, tx, ty);
+        if (curSpd > 0 && md > 0) {
+            if (currentMap.grid && !bannermanSees(e, tx, ty)) { // a tent or a tree in the way: take the flow field's route round it
+                if (edist > 0 && edist !== Infinity) { e.x += edx / edist * curSpd * dt; e.y += edy / edist * curSpd * dt; }
+            } else { const s = Math.min(curSpd * dt, md); e.x += mx / md * s; e.y += my / md * s; }
+        }
+    } else if (curSpd > 0 && edist !== Infinity && edist > 0) {
+        if (edist > 380) { e.x += edx / edist * curSpd * dt; e.y += edy / edist * curSpd * dt; }
+        else if (edist < 300) { e.x -= edx / edist * curSpd * dt; e.y -= edy / edist * curSpd * dt; }
+    }
+    e.rallyCd = (e.rallyCd === undefined ? Math.random() * 1.5 : e.rallyCd) - dt;
+    if (e.rallyCd <= 0) {
+        e.rallyCd = 3; e.rallyAt = fxTime;
+        effects.push({ type: 'rally_pulse', x: e.x, y: e.y, radius: RALLY_RADIUS, life: 0.6, maxLife: 0.6 }); // bandits.js: a thin ring, no fill
+    }
+};
+
+// The slinger: keeps 260-380 px off the hero (the flow field's way round walls), and every SLING_CD s, with a clear shot, winds up
+// and lobs one stone at where the hero stood at release; the landing marker shows where. It stands still while winding up.
+var SlingerAI = (e, dt, curSpd, edx, edy, edist, i) => {
+    e.stateTimer = (e.stateTimer === undefined ? 0.8 + Math.random() * 0.8 : e.stateTimer) - dt;
+    const rd = Math.hypot(player.x - e.x, player.y - e.y);
+    if (e.frozenTimer > 0 && e.state === 'windup') { e.state = null; e.stateTimer = SLING_CD * 0.5; }
+    if (e.state === 'windup') {
+        e.facingAngle = Math.atan2(player.y - e.y, player.x - e.x);
+        if (e.stateTimer <= 0) {
+            const tx = player.x, ty = player.y, flight = Math.max(0.15, Math.hypot(tx - e.x, ty - e.y) / SLING_SPEED);
+            projectiles.push({ type: 'sling_stone', x: e.x, y: e.y, ox: e.x, oy: e.y, targetX: tx, targetY: ty, speed: SLING_SPEED, radius: 7, life: flight + 0.1, isEnemy: true, owner: e, damage: 0 });
+            effects.push({ type: 'slam_warn', x: tx, y: ty, radius: 26, color: '#bcaaa4', life: flight, maxLife: flight }); // where it lands
+            e.state = null; e.stateTimer = SLING_CD;
+        }
+        return;
+    }
+    if (curSpd > 0 && edist > 0 && edist !== Infinity) {
+        if (rd > SLING_FAR) { e.x += edx / edist * curSpd * dt; e.y += edy / edist * curSpd * dt; }
+        else if (rd < SLING_NEAR) { e.x -= edx / edist * curSpd * dt; e.y -= edy / edist * curSpd * dt; }
+    }
+    if (e.stateTimer <= 0 && curSpd > 0 && e.frozenTimer <= 0 && rd < SLING_FAR + 120 && shotClear(e.x, e.y, player.x, player.y)) { e.state = 'windup'; e.stateTimer = SLING_WINDUP; }
+};
+
+// The hound: a pack beast that never just bumps into you. It runs a ring round the hero at its own angle (spread so the
+// pack doesn't stack); from the ring it darts in, bites once and runs back out, so the pack takes turns. The sprite is
+// bandits.js (BANDIT_SPRITES.hound, a stamped sprWolf), its bite is e.biteAt.
+var HoundAI = (e, dt, curSpd, edx, edy, edist, i) => {
+    const [rx, ry, rd0] = getVector(e.x, e.y, player.x, player.y), rd = rd0 || 1;
+    if (e.master && e.master.dead) { e.xp = 0; e.hp = 0; checkEnemyDeath(e); return; } // the Beastmaster fell: his pack dies with him
+    if (e.stateTimer === undefined) e.stateTimer = 0.5 + Math.random();
+    if (e.orbitA === undefined) e.orbitA = Math.atan2(e.y - player.y, e.x - player.x); // its place on the ring
+    if (e.heading === undefined) e.heading = Math.atan2(ry, rx);
+    e.stateTimer -= dt;
+    if (e.frozenTimer > 0) e.state = null;
+    const ringX = player.x + Math.cos(e.orbitA) * HOUND_RING, ringY = player.y + Math.sin(e.orbitA) * HOUND_RING;
+    if (!e.state || e.state === 'idle' || e.state === 'circle') {
+        e.state = 'circle';
+        e.orbitA += HOUND_DRIFT * dt;
+        for (const o of enemies) { // pack mates keep apart round the ring
+            if (o === e || o.dead || o.type !== 'hound' || o.orbitA === undefined) continue;
+            let d = e.orbitA - o.orbitA; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2;
+            if (Math.abs(d) < HOUND_SPACING) e.orbitA += (d >= 0 ? 1 : -1) * (HOUND_SPACING - Math.abs(d)) * Math.min(1, 3 * dt);
+        }
+        const rx2 = player.x + Math.cos(e.orbitA) * HOUND_RING, ry2 = player.y + Math.sin(e.orbitA) * HOUND_RING;
+        const far = edist > 400 && edist !== Infinity; // a long way off: straight at the hero (main.js's path round walls)
+        const [tx, ty, td] = far ? [edx, edy, edist] : getVector(e.x, e.y, rx2, ry2);
+        if (curSpd > 0) { const s = Math.min(curSpd * dt, td); e.x += tx / td * s; e.y += ty / td * s; e.heading = Math.atan2(ty, tx); }
+        if (e.stateTimer <= 0 && curSpd > 0 && Math.hypot(e.x - rx2, e.y - ry2) < 40) { // on the ring, its turn: dart
+            e.state = 'dart'; e.stateTimer = HOUND_DART_T; e.hitDone = false;
+        }
+    } else if (e.state === 'dart') { // a quick lunge straight at the hero
+        if (curSpd > 0) { const s = Math.min(HOUND_DART * dt, rd); e.x += rx / rd * s; e.y += ry / rd * s; }
+        e.heading = Math.atan2(ry, rx);
+        if (!e.hitDone && rd < e.size / 2 + player.radius + 6) { // one bite
+            e.hitDone = true; takeDamage(e.dmg); e.biteAt = fxTime;
+            e.state = 'retreat'; e.stateTimer = HOUND_RETREAT_T;
+        } else if (e.stateTimer <= 0) { e.state = 'retreat'; e.stateTimer = HOUND_RETREAT_T; }
+    } else if (e.state === 'retreat') { // back out to the ring
+        const [mx, my, md] = getVector(e.x, e.y, ringX, ringY);
+        if (curSpd > 0) { const s = Math.min(curSpd * dt, md); e.x += mx / md * s; e.y += my / md * s; e.heading = Math.atan2(my, mx); }
+        if (e.stateTimer <= 0) { e.state = 'circle'; e.stateTimer = 1.1 + Math.random() * 0.9; }
+    }
+    e.facingAngle = e.heading; // it faces where it runs (as RiderAI does)
+};
+
+// The Beastmaster's hounds: real pack hounds (HoundAI) on the wave's hound stats, `master` set so they die with him
+function beastHounds(e, spots, spawnT) {
+    const m = (activeDungeon.stage2_minions || []).find(mn => mn.type === 'hound'); if (!m) return;
+    for (const [x, y] of spots) {
+        const hp = m.baseHp + wave * m.hpScale;
+        enemies.push({ x, y, size: m.size, color: m.color, speed: m.baseSpeed + Math.random() * m.speedVar + wave * 2.5, hp, maxHp: hp, type: m.type, dmg: m.baseDmg + wave * m.dmgScale, xp: 0, attackTimer: 0, meleeTimer: 0, ammo: 0, frozenTimer: 0, facingAngle: 0, puddleTimer: 0, bleedTimer: 0, bleedDmg: 0, orbs: 0, maxOrbs: 0, master: e, spawnT, spawnMax: spawnT });
+        activeEnemies++;
+    }
+}
+// The Kennel Call: a horn across the reeds, then three hounds break out of the reeds well away from the hero
+function beastKennelCall(e) {
+    effects.push({ type: 'slime_shock', x: e.x, y: e.y, radius: 260, color: '#c8a060', life: 0.6, maxLife: 0.6 }); addShake(4);
+    const spots = [];
+    for (let k = 0; k < 3; k++) {
+        let sp = randomOpenSpot(380); // stage.js: open ground (null on maps without a grid)
+        if (!sp) { const a = Math.random() * Math.PI * 2; sp = [e.x + Math.cos(a) * 150, e.y + Math.sin(a) * 150]; }
+        spots.push(sp);
+        burst(sp[0], sp[1], 0, Math.PI * 2, 10, { kind: 'dot', color: '#9ad1c8', size: 3, speed: [60, 180], life: 0.5, drag: 3 }); // splashing out of the water
+    }
+    beastHounds(e, spots, 0.5);
+}
+// The Beastmaster prowls round the hero at whip's length instead of waiting for him, and never stands idle for long:
+//  - Whip Crack (in reach): the lash drawn back while a narrow wedge on the ground shows where it falls; it hits hard
+//    and yanks the hero toward him. Enraged (below half) he cracks it twice.
+//  - Bolas: three spinning stones that root and drag.
+//  - Hounds: two of his pack cracked loose beside him (never more than BEAST_HOUND_CAP of his alive).
+//  - Joust: he mounts his warhorse for three runs down marked lanes, drops two traps where the third ends, and comes off it winded.
+//  - Kennel Call at 50% and 25%: a horn, and three hounds out of the reeds.
+const BEAST_WHIP_WIND = 0.85, BEAST_WHIP_REACH = 250, BEAST_WHIP_ARC = 0.3, BEAST_WHIP_DMG = 1.8, BEAST_WHIP_PULL = 80;
+const BEAST_JOUST_PREP = 0.8, BEAST_JOUST_SPEED = 950, BEAST_JOUST_RANGE = 620, BEAST_JOUST_DMG = 2.5, BEAST_HOUND_CAP = 4, BEAST_PROWL = 190;
+function beastPrep(e, t) { // a joust's wind-up: the lane follows the hero, then locks RIDER_LOCK s before the charge
+    e.state = 'joust_prep'; e.stateTimer = t; e.prepLen = t; e.laneA = Math.atan2(player.y - e.y, player.x - e.x); e.facingAngle = e.laneA;
+    effects.push({ type: 'lance_lane', e, w: 50, len: BEAST_JOUST_RANGE, lockAt: t - RIDER_LOCK, life: t, maxLife: t }); // bandits.js
+}
+function beastWhip(e) { // the lash falls along e.whipA: a narrow wedge out to BEAST_WHIP_REACH
+    const [rx, ry, rd] = getVector(e.x, e.y, player.x, player.y);
+    let off = Math.atan2(ry, rx) - e.whipA; while (off > Math.PI) off -= Math.PI * 2; while (off < -Math.PI) off += Math.PI * 2;
+    e.lashAt = fxTime; addShake(3);
+    const tx = e.x + Math.cos(e.whipA) * BEAST_WHIP_REACH, ty = e.y + Math.sin(e.whipA) * BEAST_WHIP_REACH;
+    burst(tx, ty, e.whipA, 1.2, 10, { kind: 'spark', color: '#fff3e0', size: 2.2, speed: [120, 320], life: 0.25, drag: 5 }); // the crack at the tip
+    if (player.z <= 4 && rd < BEAST_WHIP_REACH + player.radius && Math.abs(off) < BEAST_WHIP_ARC + player.radius / Math.max(rd, 40)) {
+        takeDamage(e.dmg * BEAST_WHIP_DMG); addShake(4);
+        if (!player.dash && !player.grappleTarget && rd > e.size / 2 + player.radius + 30) { // yanked in toward him
+            const pull = Math.min(BEAST_WHIP_PULL, rd - e.size / 2 - player.radius - 30);
+            player.x -= rx / rd * pull; player.y -= ry / rd * pull; clampToBounds(player, player.radius);
+        }
+        buffs.slowed = Math.max(buffs.slowed, 0.5);
+    }
+}
+var BeastmasterAI = (e, dt, curSpd, edx, edy, edist, i) => {
+    const [rx, ry, rd] = getVector(e.x, e.y, player.x, player.y), enraged = e.hp < e.maxHp * 0.5, pace = enraged ? 0.7 : 1;
+    e.stateTimer -= dt;
+    if (!e.kennel1 && e.hp < e.maxHp * 0.5) { e.kennel1 = true; beastKennelCall(e); }
+    if (!e.kennel2 && e.hp < e.maxHp * 0.25) { e.kennel2 = true; beastKennelCall(e); }
+    if (!e.state || e.state === 'idle') {
+        // prowl: close to whip's length, then circle the hero there
+        if (curSpd > 0 && edist !== Infinity && edist > 0) {
+            let mx = edx / edist, my = edy / edist;
+            if (rd < BEAST_PROWL + 60 && (!currentMap.grid || e.los !== false)) { const sd = e.prowlSide || 1; mx = -ry / rd * sd + rx / rd * (rd - BEAST_PROWL) / 120; my = rx / rd * sd + ry / rd * (rd - BEAST_PROWL) / 120; }
+            const ml = Math.hypot(mx, my) || 1; e.x += mx / ml * curSpd * dt; e.y += my / ml * curSpd * dt;
+        }
+        if (rd < player.radius + e.size / 2 + 5 && e.meleeTimer <= 0) { takeDamage(e.dmg * 1.2); e.meleeTimer = 0.9; }
+        if (e.stateTimer <= 0 && e.frozenTimer <= 0) {
+            const mine = enemies.filter(o => !o.dead && o.master === e).length, near = rd < BEAST_WHIP_REACH + 30;
+            const pick = () => { const r = Math.random(); return near ? (r < 0.5 ? 'whip' : r < 0.68 ? 'bolas' : r < 0.82 ? 'hounds' : 'joust') : (r < 0.4 ? 'joust' : r < 0.72 ? 'bolas' : 'hounds'); };
+            let next = pick(); if (next === e.lastAtk) next = pick(); // rarely the same move twice
+            if (next === 'hounds' && mine >= BEAST_HOUND_CAP) next = near ? 'whip' : 'bolas';
+            e.lastAtk = next; e.prowlSide = Math.random() < 0.5 ? -1 : 1;
+            if (next === 'whip') { e.state = 'whip'; e.stateTimer = BEAST_WHIP_WIND * pace; e.whipLen = e.stateTimer; e.whipA = Math.atan2(ry, rx); e.cracks = enraged ? 2 : 1;
+                effects.push({ type: 'whip_lane', e, life: e.stateTimer, maxLife: e.stateTimer }); }
+            else if (next === 'bolas') { e.state = 'bolas'; e.stateTimer = 0.85 * pace; e.bolasLen = e.stateTimer; e.bolasA = Math.atan2(ry, rx); }
+            else if (next === 'hounds') { e.state = 'hounds'; e.stateTimer = 0.6 * pace; }
+            else { beastPrep(e, BEAST_JOUST_PREP * pace); e.joustCount = 0; }
+        }
+    } else if (e.state === 'whip') { // the lash drawn back; the wedge follows the hero until the last 0.3 s
+        if (e.stateTimer > 0.3) e.whipA = Math.atan2(ry, rx);
+        e.facingAngle = e.whipA;
+        if (e.stateTimer <= 0) {
+            beastWhip(e);
+            if (--e.cracks > 0) { e.stateTimer = 0.65; e.whipLen = 0.65; effects.push({ type: 'whip_lane', e, life: 0.65, maxLife: 0.65 }); } // enraged: a second crack
+            else { e.state = 'idle'; e.stateTimer = 1.3 * pace; }
+        }
+    } else if (e.state === 'bolas') {
+        e.bolasK = clamp01(1 - e.stateTimer / e.bolasLen); // bandits.js: the cord spins up in his fist
+        if (e.stateTimer > 0.25) e.bolasA = Math.atan2(ry, rx); // aim follows the hero, then locks for the last 0.25 s
+        e.facingAngle = e.bolasA;
+        if (e.stateTimer <= 0) {
+            const a0 = e.bolasA;
+            for (let r = -1; r <= 1; r++) { const a = a0 + r * 0.2; projectiles.push({ x: e.x, y: e.y, vx: Math.cos(a) * 560, vy: Math.sin(a) * 560, radius: 15, color: '#795548', life: 2.4, isEnemy: true, owner: e, damage: e.dmg, type: 'bolas' }); }
+            e.state = 'idle'; e.stateTimer = 1.5 * pace; e.bolasK = 0;
+        }
+    } else if (e.state === 'hounds') {
+        if (e.stateTimer <= 0) { // the whip cracks two of the pack loose beside him
+            const a0 = Math.atan2(ry, rx), spots = [-0.6, 0.6].map(d => [e.x + Math.cos(a0 + d) * 55, e.y + Math.sin(a0 + d) * 55]);
+            e.lashAt = fxTime; beastHounds(e, spots, 0.35);
+            burst(e.x, e.y, a0, 1.0, 6, { kind: 'smoke', color: 'rgba(120, 110, 96, 0.55)', size: 10, speed: [30, 90], life: 0.6, drag: 3, grow: 18 });
+            e.state = 'idle'; e.stateTimer = 1.6 * pace;
+        }
+    } else if (e.state === 'joust_prep') {
+        if (e.stateTimer > RIDER_LOCK) e.laneA = Math.atan2(ry, rx); // the lane follows the hero until it locks
+        e.facingAngle = e.laneA;
+        if (e.stateTimer <= 0) { e.state = 'jousting'; e.runLeft = BEAST_JOUST_RANGE; e.dashHit = false; e.joustCount++; }
+    } else if (e.state === 'jousting') {
+        e.facingAngle = e.laneA;
+        const step = (curSpd > 0 ? BEAST_JOUST_SPEED : 0) * dt, nx = e.x + Math.cos(e.laneA) * step, ny = e.y + Math.sin(e.laneA) * step;
+        if (step === 0 || (currentMap.grid && solidCell(terrainAt(nx, ny), false))) e.runLeft = 0; // a wall (or a root) ends the run
+        else { e.x = nx; e.y = ny; e.runLeft -= step; }
+        if (Math.random() < 0.5) spawnParticle({ kind: 'smoke', color: 'rgba(120, 100, 80, 0.5)', x: e.x - Math.cos(e.laneA) * 40, y: e.y - Math.sin(e.laneA) * 40 + 10, vx: jitter(40), vy: jitter(40), size: 10, grow: 26, life: 0.6, drag: 2, spin: 0, rot: 0 }); // dust behind the warhorse
+        if (!e.dashHit && Math.hypot(e.x - player.x, e.y - player.y) < e.size / 2 + player.radius + 8) { // ridden down
+            e.dashHit = true; takeDamage(e.dmg * BEAST_JOUST_DMG); addShake(6); buffs.rooted = Math.max(buffs.rooted, 0.4);
+            const side = (player.x - e.x) * -Math.sin(e.laneA) + (player.y - e.y) * Math.cos(e.laneA) > 0 ? 1 : -1;
+            if (!player.dash && !player.grappleTarget) { player.x += -Math.sin(e.laneA) * side * 70 + Math.cos(e.laneA) * 30; player.y += Math.cos(e.laneA) * side * 70 + Math.sin(e.laneA) * 30; clampToBounds(player, player.radius); }
+        }
+        if (e.runLeft <= 0) {
+            if (e.joustCount < 3) beastPrep(e, 0.5 * pace);
+            else {
+                for (const s of [-1, 1]) effects.push({ type: 'bear_trap', x: e.x - Math.sin(e.laneA) * s * 40, y: e.y + Math.cos(e.laneA) * s * 40, radius: 15, color: '#795548', life: 7, maxLife: 7, dmg: 0, owner: e }); // two traps where the lane ends, none in the lane
+                e.state = 'winded'; e.stateTimer = 0.9; e.dismountAt = fxTime;
+            } // off the horse after the third run, winded: a window to punish him
+        }
+    } else if (e.state === 'winded') {
+        if (e.stateTimer <= 0) { e.state = 'idle'; e.stateTimer = 0.6; }
+    }
+};
+
 const UNDERTOW_WARN = 0.65; // the Amalgam's Undertow: warning ring before it erupts under you (1 s was too easy to walk out of, 0.5 too tight)
 
 var EnemyAI = {
-    'slime_melee': MeleeAI, 'thief': MeleeAI, 'shield': MeleeAI, 'voltaic_ooze': MeleeAI, 'toxic_sludge': MeleeAI, 'queen_guard': MeleeAI,
+    'slime_melee': MeleeAI, 'thief': ThiefAI, 'shield': ShieldAI, 'voltaic_ooze': MeleeAI, 'toxic_sludge': MeleeAI, 'queen_guard': MeleeAI,
     'slime_ranged': RangedAI, 'archer': RangedAI,
     
     'valerius_archer': (e, dt, curSpd, edx, edy, edist, i) => {
@@ -39,62 +370,74 @@ var EnemyAI = {
         }
     },
 
+    // The Warchief: a knife fan, a Bull Rush down a lane marked on the ground, and his torch (it sets the ground alight where it lands). Below half
+    // health he also kicks lit powder kegs at you (bandits.js). Hitting him with a keg blast staggers him.
     'boss_warlord': (e, dt, curSpd, edx, edy, edist, i) => {
         if (edist < player.radius + e.size / 2 + 5 && e.meleeTimer <= 0) { takeDamage(e.dmg); e.meleeTimer = 1.0; }
         e.stateTimer -= dt;
+        const enraged = e.hp < e.maxHp * 0.5;
         if (e.state === 'idle') {
             if (edist > 80) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
             if (e.stateTimer <= 0 && e.frozenTimer <= 0) {
-                if (Math.random() < 0.5) { e.state = 'knife_volley'; e.stateTimer = 0.5; } else { e.state = 'dash_telegraph'; e.stateTimer = 0.4; e.dashTargetX = player.x + (edx/edist)*250; e.dashTargetY = player.y + (edy/edist)*250; }
+                const r = Math.random();
+                if (enraged && r < 0.25) { e.state = 'keg_kick'; e.stateTimer = 0.7; }
+                else if (r < (enraged ? 0.5 : 0.35)) { e.state = 'torch_toss'; e.stateTimer = 0.55; }
+                else if (r < (enraged ? 0.75 : 0.68)) { e.state = 'knife_volley'; e.stateTimer = 0.5; }
+                else {
+                    // Bull Rush: he lowers his head and a lane on the ground shows where he'll run, then he charges down it and past you
+                    const a = Math.atan2(player.y - e.y, player.x - e.x), L = Math.min(CHARGE_MAX, Math.hypot(player.x - e.x, player.y - e.y) + 200);
+                    e.dashTargetX = e.x + Math.cos(a) * L; e.dashTargetY = e.y + Math.sin(a) * L;
+                    const cl = clipToWalls(e.x, e.y, e.dashTargetX, e.dashTargetY, e.size / 2, false); if (cl) [e.dashTargetX, e.dashTargetY] = cl; // stage.js: never through a fence or a house
+                    e.state = 'dash_telegraph'; e.stateTimer = CHARGE_WINDUP;
+                    effects.push({ type: 'charge_lane', x0: e.x, y0: e.y, x1: e.dashTargetX, y1: e.dashTargetY, w: e.size * 1.25, life: CHARGE_WINDUP, maxLife: CHARGE_WINDUP }); // bandits.js
+                }
             }
         } else if (e.state === 'knife_volley') {
             if (e.stateTimer <= 0) {
-                const baseAngle = Math.atan2(edy, edx);
+                const baseAngle = Math.atan2(player.y - e.y, player.x - e.x);
                 for(let r=-2; r<=2; r++) { projectiles.push({ x: e.x, y: e.y, vx: Math.cos(baseAngle+(r*0.15))*500, vy: Math.sin(baseAngle+(r*0.15))*500, radius: 6, color: '#ff9800', life: 2.0, isEnemy: true, owner: e, damage: e.dmg, shape: 'knife' }); }
                 e.state = 'idle'; e.stateTimer = 2.0;
             }
+        } else if (e.state === 'torch_toss') { // one torch on where you stand; enraged, a second one beside you
+            if (e.stateTimer <= 0) {
+                warchiefTorch(e, player.x, player.y);
+                if (enraged) { const a = Math.random() * Math.PI * 2; warchiefTorch(e, player.x + Math.cos(a) * 140, player.y + Math.sin(a) * 140); }
+                e.state = 'idle'; e.stateTimer = 1.8;
+            }
+        } else if (e.state === 'keg_kick') {
+            if (e.stateTimer <= 0) { warchiefKegKick(e); e.state = 'idle'; e.stateTimer = 1.8; }
         } else if (e.state === 'dash_telegraph') {
-            effects.push({ type: 'circle', x: e.x, y: e.y, radius: e.size, color: 'rgba(216, 67, 21, 0.2)', life: 0.1, maxLife: 0.1 });
-            if (e.stateTimer <= 0) { e.state = 'dash_execute'; e.stateTimer = 0.1; e.dashSpeedX = (e.dashTargetX - e.x) / 0.1; e.dashSpeedY = (e.dashTargetY - e.y) / 0.1; e.dashHit = false; }
+            if (e.stateTimer <= 0) {
+                const [dx, dy, d] = getVector(e.x, e.y, e.dashTargetX, e.dashTargetY);
+                e.state = 'dash_execute'; e.stateTimer = d / CHARGE_SPEED; e.dashSpeedX = dx / d * CHARGE_SPEED; e.dashSpeedY = dy / d * CHARGE_SPEED; e.dashHit = false; addShake(2);
+            }
         } else if (e.state === 'dash_execute') {
+            if (curSpd <= 0) e.stateTimer = 0; // frozen or rooted: the charge dies
             e.x += e.dashSpeedX * dt; e.y += e.dashSpeedY * dt;
-            if (Math.hypot(e.x - player.x, e.y - player.y) < e.size/2 + player.radius && !e.dashHit) { takeDamage(e.dmg * 2); e.dashHit = true; }
-            if (e.stateTimer <= 0) { e.state = 'idle'; e.stateTimer = 2.0; }
+            if (Math.random() < 0.5) spawnParticle({ kind: 'smoke', color: 'rgba(120, 100, 80, 0.5)', x: e.x - e.dashSpeedX * 0.03, y: e.y - e.dashSpeedY * 0.03 + 10, vx: jitter(40), vy: jitter(40), size: 10, grow: 26, life: 0.6, drag: 2, spin: 0, rot: 0 }); // dust kicked up
+            if (Math.hypot(e.x - player.x, e.y - player.y) < e.size/2 + player.radius && !e.dashHit) {
+                e.dashHit = true; takeDamage(e.dmg * 2); addShake(5);
+                const s = Math.hypot(e.dashSpeedX, e.dashSpeedY) || 1, side = (player.x - e.x) * -e.dashSpeedY + (player.y - e.y) * e.dashSpeedX > 0 ? 1 : -1; // bowled aside
+                if (!player.dash && !player.grappleTarget) { player.x += -e.dashSpeedY / s * side * 60 + e.dashSpeedX / s * 30; player.y += e.dashSpeedX / s * side * 60 + e.dashSpeedY / s * 30; clampToBounds(player, player.radius); }
+            }
+            if (e.stateTimer <= 0) { e.state = 'dash_recover'; e.stateTimer = 0.55; }
+        } else if (e.state === 'dash_recover') { // winded for a moment after the charge: a window to punish him
+            if (e.stateTimer <= 0) { e.state = 'idle'; e.stateTimer = 1.6; }
         }
     },
 
-    'caster': (e, dt, curSpd, edx, edy, edist, i) => {
-        if (edist > 400) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; } else if (edist < 250) { e.x -= (edx/edist)*curSpd*dt; e.y -= (edy/edist)*curSpd*dt; } 
-        effects.push({ type: 'circle', x: e.x, y: e.y, radius: 400, color: 'rgba(255, 235, 59, 0.05)', life: 0.1, maxLife: 0.1 });
-    },
-    'trapper': (e, dt, curSpd, edx, edy, edist, i) => {
-        if (edist > 300) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; } else if (edist < 200) { e.x -= (edx/edist)*curSpd*dt; e.y -= (edy/edist)*curSpd*dt; } 
+    'trapper': (e, dt, curSpd, edx, edy, edist, i) => { // keeps its distance and lobs traps round the hero: TRAP_THROW at a time, TRAP_CAP of its own down at most
+        if (edist > 300) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; } else if (edist < 200) { e.x -= (edx/edist)*curSpd*dt; e.y -= (edy/edist)*curSpd*dt; }
         e.attackTimer -= dt;
         if (e.attackTimer <= 0 && edist <= 450 && e.frozenTimer <= 0) {
-            for(let r=0; r<3; r++) { const offX = (Math.random() - 0.5) * 150; const offY = (Math.random() - 0.5) * 150; projectiles.push({ x: e.x, y: e.y, targetX: player.x + offX, targetY: player.y + offY, vx: 0, vy: 0, radius: 8, color: '#5d4037', life: 1.0, isEnemy: true, owner: e, damage: 0, type: 'trap_throw' }); }
-            e.attackTimer = 4.0;
+            const down = effects.filter(ef => ef.type === 'bear_trap' && ef.owner === e).length + projectiles.filter(p => p.type === 'trap_throw' && p.owner === e).length;
+            for (let r = 0; r < Math.min(TRAP_THROW, TRAP_CAP - down); r++) { const a = Math.random() * Math.PI * 2, d = 40 + Math.random() * 80, tx = player.x + Math.cos(a) * d, ty = player.y + Math.sin(a) * d, flight = Math.hypot(tx - e.x, ty - e.y) / 400; // 400 px/s, as main.js flies it
+                projectiles.push({ x: e.x, y: e.y, ox: e.x, oy: e.y, targetX: tx, targetY: ty, vx: 0, vy: 0, radius: 8, color: '#5d4037', life: flight + 0.15, isEnemy: true, owner: e, damage: 0, type: 'trap_throw' });
+                effects.push({ type: 'slam_warn', x: tx, y: ty, radius: 22, color: '#bcaaa4', life: flight, maxLife: flight }); } // where it lands
+            e.attackTimer = TRAP_CD;
         }
     },
-    'horse': (e, dt, curSpd, edx, edy, edist, i) => {
-        if (edist < player.radius + e.size / 2 + 5 && e.meleeTimer <= 0 && (!e.state || e.state === 'idle')) { takeDamage(e.dmg); e.meleeTimer = 1.0; }
-        e.stateTimer -= dt;
-        if (!e.state || e.state === 'idle') {
-            if (edist > 0) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
-            if (edist < 350 && e.stateTimer <= 0 && e.frozenTimer <= 0) { 
-                e.state = 'telegraph'; e.stateTimer = 0.75; 
-                const [dx, dy, d] = getVector(e.x, e.y, player.x, player.y);
-                e.dashVx = (dx/d) * curSpd * 7.0; e.dashVy = (dy/d) * curSpd * 7.0;
-                e.dashTargetX = e.x + (dx/d)*800; e.dashTargetY = e.y + (dy/d)*800;
-            }
-        } else if (e.state === 'telegraph') {
-            effects.push({ type: 'line', x1: e.x, y1: e.y, x2: e.dashTargetX, y2: e.dashTargetY, color: 'rgba(255, 0, 0, 0.3)', life: 0.1, maxLife: 0.1 });
-            if (e.stateTimer <= 0) { e.state = 'charge'; e.stateTimer = 1.0; e.dashHit = false; }
-        } else if (e.state === 'charge') {
-            e.x += e.dashVx * dt; e.y += e.dashVy * dt;
-            if (Math.hypot(e.x - player.x, e.y - player.y) < e.size/2 + player.radius && !e.dashHit) { takeDamage(e.dmg * 2); e.dashHit = true; buffs.slowed = 1.0; }
-            if (e.stateTimer <= 0 || (e.x <= currentMap.left || e.x >= currentMap.right || e.y <= currentMap.top || e.y >= currentMap.bottom)) { e.state = 'idle'; e.stateTimer = 2.0; }
-        }
-    },
+    'horse': RiderAI, 'bannerman': BannermanAI, 'hound': HoundAI, 'slinger': SlingerAI,
     'spore_slime': (e, dt, curSpd, edx, edy, edist, i) => {
         if (edist > 250) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
         e.attackTimer -= dt;
@@ -304,40 +647,9 @@ var EnemyAI = {
             }
         }
     },
-    'boss_beastmaster': (e, dt, curSpd, edx, edy, edist, i) => {
-        e.stateTimer -= dt; let enrageMult = (e.hp < e.maxHp * 0.5) ? 0.6 : 1.0; 
-        if (e.state === 'idle' || !e.state) {
-            if (edist > 150) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
-            if (edist < player.radius + e.size/2 + 5 && e.meleeTimer <= 0) { takeDamage(e.dmg); e.meleeTimer = 1.0; }
-            if (e.stateTimer <= 0 && e.frozenTimer <= 0) {
-                e.attackIndex = (e.attackIndex || 0) + 1; const nextAtk = e.attackIndex % 3;
-                if (nextAtk === 1) { e.state = 'bolas'; e.stateTimer = 0.5 * enrageMult; }
-                else if (nextAtk === 2) { e.state = 'hounds'; e.stateTimer = 1.0 * enrageMult; }
-                else { e.state = 'joust_prep'; e.stateTimer = 1.0 * enrageMult; e.joustCount = 0; }
-            }
-        } else if (e.state === 'bolas') {
-            if (e.stateTimer <= 0) {
-                const baseAngle = Math.atan2(edy, edx);
-                for(let r=-1; r<=1; r++) { const angle = baseAngle + (r*0.2); projectiles.push({ x: e.x, y: e.y, vx: Math.cos(angle)*700, vy: Math.sin(angle)*700, radius: 15, color: '#795548', life: 2.0, isEnemy: true, owner: e, damage: e.dmg, type: 'bolas' }); }
-                e.state = 'idle'; e.stateTimer = 2.5 * enrageMult;
-            }
-        } else if (e.state === 'hounds') {
-            if (e.stateTimer <= 0) {
-                const baseAngle = Math.atan2(edy, edx);
-                projectiles.push({ x: e.x, y: e.y, vx: Math.cos(baseAngle - 0.5)*400, vy: Math.sin(baseAngle - 0.5)*400, speed: 450, radius: 12, color: '#d7ccc8', life: 4.0, isEnemy: true, owner: e, damage: e.dmg, type: 'hound', trackTimer: 1.5 });
-                projectiles.push({ x: e.x, y: e.y, vx: Math.cos(baseAngle + 0.5)*400, vy: Math.sin(baseAngle + 0.5)*400, speed: 450, radius: 12, color: '#d7ccc8', life: 4.0, isEnemy: true, owner: e, damage: e.dmg, type: 'hound', trackTimer: 1.5 });
-                e.state = 'idle'; e.stateTimer = 3.0 * enrageMult;
-            }
-        } else if (e.state === 'joust_prep') {
-            effects.push({ type: 'circle', x: e.x, y: e.y, radius: e.size, color: 'rgba(255, 87, 34, 0.3)', life: 0.1, maxLife: 0.1 });
-            if (e.stateTimer <= 0) { e.state = 'jousting'; e.stateTimer = 0.5; e.dashHit = false; e.joustCount++; e.dashVx = (edx/edist) * curSpd * 5.0; e.dashVy = (edy/edist) * curSpd * 5.0; }
-        } else if (e.state === 'jousting') {
-            e.x += e.dashVx * dt; e.y += e.dashVy * dt;
-            if (Math.random() < 0.1) effects.push({ type: 'bear_trap', x: e.x, y: e.y, radius: 10, color: '#795548', life: 5.0, maxLife: 5.0, dmg: e.dmg });
-            if (Math.hypot(e.x - player.x, e.y - player.y) < e.size/2 + player.radius && !e.dashHit) { takeDamage(e.dmg * 2); e.dashHit = true; buffs.rooted = 0.5; }
-            if (e.stateTimer <= 0) { if (e.joustCount < 3) { e.state = 'joust_prep'; e.stateTimer = 0.4 * enrageMult; } else { e.state = 'idle'; e.stateTimer = 3.0 * enrageMult; } }
-        }
-    },
+    // The Beastmaster: bolas, a pack of hounds (they die with him), three jousts down lanes drawn on the ground (bandits.js
+    // lance_lane), and a Kennel Call (a horn, a pack out of the reeds) at half health and again at a quarter.
+    'boss_beastmaster': BeastmasterAI,
     'boss_valerius': (e, dt, curSpd, edx, edy, edist, i) => {
         let hpPercent = e.hp / e.maxHp;
 

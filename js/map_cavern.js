@@ -506,7 +506,7 @@ function updateSealBreak(ev, dt) {
 
 // ---------- drawing (world space; the camera transform is already applied) ----------
 
-function cavView(m) { return [camera.x - m, camera.y - m, camera.x + canvas.width + m, camera.y + canvas.height + m]; }
+function cavView(m) { return [camera.x - m, camera.y - m, camera.x + viewW() + m, camera.y + viewH() + m]; }
 const cavIn = (x, y, V) => x > V[0] && x < V[2] && y > V[1] && y < V[3];
 
 function drawCavernGround() {
@@ -607,20 +607,24 @@ function drawCavStreams(t) { // ribbons of slime pouring from the lakes into the
 // Dim the cave, then cut soft holes for every light: the hero, lakes, mushrooms, glowing slimes and shots
 // Dim the screen with `fill`, then cut soft holes wherever `lights(hole)` says there's light. Half resolution: it's all soft gradients.
 function drawDarkLayer(fill, lights) {
-    const cw = Math.ceil((canvas.width + 80) / 2), ch = Math.ceil((canvas.height + 80) / 2);
+    const cw = Math.ceil((viewW() + 80) / 2), ch = Math.ceil((viewH() + 80) / 2);
     if (!cav.dark || cav.dark.width !== cw || cav.dark.height !== ch) cav.dark = cavCanvas(cw, ch);
     const v = cav.dark.getContext('2d'), ox = Math.round(camera.x) - 40, oy = Math.round(camera.y) - 40;
     v.globalCompositeOperation = 'source-over'; v.clearRect(0, 0, cw, ch);
     v.fillStyle = fill; v.fillRect(0, 0, cw, ch);
     v.globalCompositeOperation = 'destination-out';
+    if (!cav.hole) { // one soft hole, painted once and stamped (scaled, faded) for every light
+        cav.hole = cavCanvas(128, 128); const k = cav.hole.getContext('2d'), g = k.createRadialGradient(64, 64, 0, 64, 64, 64);
+        g.addColorStop(0, 'rgba(0, 0, 0, 1)'); g.addColorStop(0.45, 'rgba(0, 0, 0, 0.8)'); g.addColorStop(1, 'rgba(0, 0, 0, 0)'); k.fillStyle = g; k.fillRect(0, 0, 128, 128);
+    }
     const hole = (x, y, r, a) => {
         x = (x - ox) / 2; y = (y - oy) / 2; r /= 2; if (x < -r || y < -r || x > cw + r || y > ch + r) return;
-        const g = v.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, `rgba(0, 0, 0, ${a})`); g.addColorStop(0.45, `rgba(0, 0, 0, ${a * 0.8})`); g.addColorStop(1, 'rgba(0, 0, 0, 0)');
-        v.fillStyle = g; v.fillRect(x - r, y - r, r * 2, r * 2);
+        v.globalAlpha = Math.max(0, Math.min(1, a)); v.drawImage(cav.hole, x - r, y - r, r * 2, r * 2);
     };
     hole(player.x, player.y, 470 + Math.sin(fxTime * 7) * 6 + Math.sin(fxTime * 13) * 4, 0.97); // the hero's light
     lights(hole);
-    for (let i = 0; i < projectiles.length && i < 40; i++) { const p = projectiles[i]; hole(p.x, p.y, p.isEnemy ? 70 : 90, 0.45); } // a bullet hell would mean hundreds of gradients
+    for (let i = 0; i < projectiles.length && i < 40; i++) { const p = projectiles[i]; hole(p.x, p.y, p.isEnemy ? 70 : 90, 0.45); } // a bullet hell would mean hundreds of holes
+    v.globalAlpha = 1;
     ctx.drawImage(cav.dark, ox, oy, cw * 2, ch * 2);
 }
 

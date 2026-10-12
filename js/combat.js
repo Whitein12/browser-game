@@ -126,6 +126,7 @@ function applyDamage(enemy, amount, source = 'player', projAngle = null) {
         }
 
         if (enemy.type === 'thief' && Math.random() < 0.20) {
+            enemy.dodgeAt = fxTime; enemy.dodgeSide = Math.random() < 0.5 ? -1 : 1; // bandits.js draws the sidestep
             effects.push({ type: 'text', text: 'Evaded!', x: enemy.x, y: enemy.y - 20, color: '#fff', life: 0.6, maxLife: 0.6 }); return;
         }
 
@@ -312,7 +313,7 @@ function gainXP(amount) {
 }
 
 function checkEnemyDeath(e) {
-    if (e.pod && e.hp <= 0 && !e.dead) { podPopped(e); return; } // map_hive.js: a brood pod popped; it never counts toward the wave
+    if (e.pod && e.hp <= 0 && !e.dead) { if (e.type === 'powder_keg') kegBlown(e); else podPopped(e); return; } // bandits.js / map_hive.js: a keg or a brood pod; neither counts toward the wave
     if (e.hp <= 0 && !e.dead) {
         e.dead = true;
         enemyDeathFx(e); // enemysprites.js
@@ -346,6 +347,10 @@ function checkEnemyDeath(e) {
         if (e.type.startsWith('boss')) {
             drops.push({ x: e.x + 20, y: e.y, type: 'item', itemData: generateItem(wave + 2), radius: 10, life: 30.0 });
             for(let i=0; i<5; i++) drops.push({ x: e.x - 20 + (i*10), y: e.y + (i*10), type: 'gold', val: 20 + wave*2, radius: 8, life: 30.0 });
+            if (e.type === 'boss_warlord' && currentMap.type === 'village' && !isEndlessMode) { // his war chest: stage 1 alone pays for the first rare weapon (BALANCE.md section 7)
+                for (let i = 0; i < 4; i++) { const a = i / 4 * Math.PI * 2 + 0.6, d = 45 + (i % 2) * 20; drops.push({ x: e.x + Math.cos(a) * d, y: e.y + Math.sin(a) * d, type: 'gold', val: 20, radius: 8, life: 30.0 }); }
+                effects.push({ type: 'text', text: 'The war chest!', x: e.x, y: e.y - 50, color: '#ffd54f', life: 1.6, maxLife: 1.6 });
+            }
         } else {
             const roll = Math.random();
             if (roll < rates.item) drops.push({ x: e.x, y: e.y, type: 'item', itemData: generateItem(wave), radius: 10, life: 15.0 });

@@ -1,8 +1,8 @@
 // ==========================================
 // stage.js - Stage maps, camera, solid terrain, enemy pathing, spawn points, scripted stage events
 // ==========================================
-// Maps listed in STAGE_MAPS are bigger than the screen and scroll with a camera. Every other map type
-// ('open', 'bridge') is still exactly the window, so the camera stays at 0,0 there and nothing changes.
+// Maps listed in STAGE_MAPS are bigger than the screen and scroll with a camera (map_village.js and training.js add
+// their own). Every other map type ('open', 'bridge') is still exactly the window, so the camera stays at 0,0 there.
 // mouseX / mouseY are world coordinates: the screen-space mouse plus the camera offset.
 
 const STAGE_MAPS = {
@@ -50,11 +50,16 @@ let stageEvent = null; // scripted sequence { type, t, blocking, ... }; blocking
 const mapDef = () => STAGE_MAPS[currentMap.type] || null;
 const worldW = () => (mapDef() ? mapDef().w : canvas.width);
 const worldH = () => (mapDef() ? mapDef().h : canvas.height);
+// A map can be drawn closer in (`zoom` in STAGE_MAPS). The view then covers less of the world: viewW / viewH are its size in world units.
+const camZoom = () => (mapDef() && mapDef().zoom) || 1;
+const viewW = () => canvas.width / camZoom(), viewH = () => canvas.height / camZoom();
 
 // Which map a wave is fought on
 function mapTypeForWave(w) {
     if (isTraining()) return 'training'; // training.js
     if (isEndlessMode) return 'open';
+    if (activeDungeonId === 'bandit_bastion' && w <= 5) return 'village';
+    if (activeDungeonId === 'bandit_bastion' && w >= 6 && w <= 10) return 'trail'; // map_trail.js
     if (activeDungeonId === 'bandit_bastion' && w >= 11) return 'bridge';
     if (activeDungeonId === 'slime_caves' && w <= 5) return 'clearing';
     if (activeDungeonId === 'slime_caves' && w <= 10) return 'cavern';
@@ -69,14 +74,19 @@ function setStageMap(type) {
     if (changed && type === 'clearing') buildClearing(); // map_clearing.js
     if (changed && type === 'cavern') { buildCavern(); resetCavern(); } // map_cavern.js
     if (changed && type === 'hive') buildHive(); // map_hive.js
+    if (changed && type === 'village') buildVillage(); // map_village.js
+    if (changed && type === 'trail') buildTrail(); // map_trail.js
     updateMapBounds();
     if (changed) {
+        for (const e of enemies) if (e.prop) e.dead = true; // props (the village's powder kegs) belong to their map
         currentMap.caveOpen = false; stageEvent = null; showStagePrompt(false);
         player.wading = false; player.fadeOut = 0; player.exitFade = 0; player.wallHit = null;
         effects.length = 0; projectiles.length = 0; // splats and shots don't follow you to the next map
         const d = mapDef();
         player.x = d ? d.start.x : canvas.width / 2; player.y = d ? d.start.y : canvas.height / 2;
         if (type === 'hive') resetHive(); // the brood pods are enemies, so they go in after the map is set
+        if (type === 'village') resetVillage(); // so are the powder kegs
+        if (type === 'trail') resetTrail(); // map_trail.js: the logjams and the gate shut again
         updateNav(true);
         updateCamera(0, true);
     }
@@ -84,14 +94,14 @@ function setStageMap(type) {
 }
 
 function updateCamera(dt, snap) {
-    const cw = canvas.width, ch = canvas.height, W = worldW(), H = worldH();
+    const cw = viewW(), ch = viewH(), W = worldW(), H = worldH();
     let fx = camera.tx !== null ? camera.tx : player.x, fy = camera.ty !== null ? camera.ty : player.y;
     if (camera.tx === null && currentMap.type === 'hive') { const q = enemies.find(e => e.onThrone && !e.dead); if (q) { fx += (q.x - fx) * 0.4; fy += (q.y - fy) * 0.4; } } // her last stand: keep the throne in view
     const tx = W <= cw ? (W - cw) / 2 : Math.max(0, Math.min(W - cw, fx - cw / 2));
     const ty = H <= ch ? (H - ch) / 2 : Math.max(0, Math.min(H - ch, fy - ch / 2));
     const k = snap ? 1 : 1 - Math.exp(-dt * (camera.tx !== null ? 3 : 10)); // cutscene pans are slower than player follow
     camera.x += (tx - camera.x) * k; camera.y += (ty - camera.y) * k;
-    mouseX = mouseScreenX + camera.x; mouseY = mouseScreenY + camera.y;
+    mouseX = mouseScreenX / camZoom() + camera.x; mouseY = mouseScreenY / camZoom() + camera.y;
 }
 
 // ---------- solid things ----------
@@ -183,10 +193,11 @@ function clipToWalls(x0, y0, x1, y1, r, air) {
 function shotHitsWall(p) {
     const v = terrainAt(p.x, p.y);
     if (v !== T_WALL && v !== T_SEAL) return false;
-    if (p.customUpdate || p.type === 'turret' || p.type === 'tesla_coil_trap' || p.type === 'trap_throw' || p.type === 'spore' || p.returning) return false;
+    if (p.customUpdate || p.type === 'turret' || p.type === 'tesla_coil_trap' || p.type === 'trap_throw' || p.type === 'spore' || p.type === 'sling_stone' || p.returning) return false;
     if (p.type === 'shield_throw') { p.returning = true; p.hitList = []; return false; }
     const back = Math.atan2(-p.vy, -p.vx);
-    if (p.isEnemy) burst(p.x, p.y, back, 2.2, 6, { kind: 'goo', color: p.color || '#8bc34a', size: 3, speed: [40, 140], life: 0.45, drag: 4 });
+    if (currentMap.type === 'village' || currentMap.type === 'trail') burst(p.x, p.y, back, 2.0, 5, { kind: 'debris', color: '#5d4330', size: 2.5, speed: [60, 180], life: 0.4, drag: 4 }); // splinters off a wall
+    else if (p.isEnemy) burst(p.x, p.y, back, 2.2, 6, { kind: 'goo', color: p.color || '#8bc34a', size: 3, speed: [40, 140], life: 0.45, drag: 4 });
     else burst(p.x, p.y, back, 2.0, 5, { kind: 'debris', color: '#6d6a66', size: 2.5, speed: [60, 180], life: 0.4, drag: 4 });
     return true;
 }
@@ -254,6 +265,8 @@ function randomOpenSpot(minFromHero, near, clear = 40) {
 function pickSpawnPoint() {
     if (currentMap.type === 'cavern') return cavernSpawnPoint(); // map_cavern.js: out of the lakes and burrows
     if (currentMap.type === 'hive') return hiveSpawnPoint(); // map_hive.js: hatched from a brood pod
+    if (currentMap.type === 'village') return villageSpawnPoint(); // map_village.js: a doorway, the trees, over the barricade
+    if (currentMap.type === 'trail') return trailSpawnPoint(); // map_trail.js: the tree line of the open section, the camp's doorways
     const b = currentMap, d = mapDef();
     for (let tries = 0; tries < 14; tries++) {
         let x, y, from = 'forest';
@@ -270,6 +283,8 @@ function pickSpawnPoint() {
 function onEnemySpawned(e) {
     if (!mapDef()) return;
     e.spawnT = e.spawnMax = 0.7; // bubble up out of the ground; AI waits until it's formed
+    if (currentMap.type === 'village') { villageOnSpawn(e); return; } // map_village.js: steps in from where it came
+    if (currentMap.type === 'trail') { trailOnSpawn(e); return; } // map_trail.js
     if (e.spawnFrom === 'cave') burst(e.x, e.y, Math.PI, 1.6, 8, { kind: 'goo', color: '#8bc34a', size: 4, speed: [60, 160], life: 0.6, drag: 3 });
     if (e.spawnFrom === 'lake') { burst(e.x, e.y, 0, Math.PI * 2, 10, { kind: 'goo', color: '#5fd38d', size: 4, speed: [50, 150], life: 0.6, drag: 3 }); effects.push({ type: 'slime_shock', x: e.x, y: e.y, radius: 50, color: '#69f0ae', life: 0.5, maxLife: 0.5 }); }
     if (e.spawnFrom === 'burrow') burst(e.x, e.y, e.spawnA || 0, 1.4, 8, { kind: 'debris', color: '#5d5a55', size: 3, speed: [60, 170], life: 0.5, drag: 3 });
@@ -284,6 +299,8 @@ function onWaveCleared() {
     if (mapDef() && isBossWave && !isEndlessMode) {
         if (!currentMap.caveOpen) {
             if (currentMap.type === 'cavern') startSealBreak(); // map_cavern.js: the wall gives way first
+            else if (currentMap.type === 'village') dropWarchiefLetter(); // map_village.js: his letter first, then the barricade burns
+            else if (currentMap.type === 'trail') startGateOpen(); // map_trail.js: the chain snaps, the barrier falls
             else openStageExit();
         }
         gameState = STATE.PLAYING; lastTime = performance.now(); // walk out to finish the stage
@@ -291,6 +308,7 @@ function onWaveCleared() {
     }
     if (isBossWave) { showWaveCleared(); return; }
     if (waveBreak > 0) return; // already counting down (a level-up closed during the breather)
+    if (currentMap.type === 'trail') trailWaveCleared(); // map_trail.js: a logjam may roll aside before the breather
     gameState = STATE.PLAYING; lastTime = performance.now();
     waveBreak = WAVE_BREAK; // main.js update counts it down; the wave plaque shows it
 }
@@ -301,16 +319,19 @@ function openStageExit(color) {
     effects.push({ type: 'cave_open_flash', x: m.x, y: m.y, color: color || '#b2ff59', life: 1.2, maxLife: 1.2 });
 }
 
-function showStagePrompt(on) {
+function showStagePrompt(on, text) {
     const p = el('stage-prompt'), d = mapDef();
-    if (on && d) p.innerHTML = `<span class="sp-arrow">&#10148;</span> ${d.prompt}`;
+    if (on && d) p.innerHTML = `<span class="sp-arrow">&#10148;</span> ${text || d.prompt}`;
     p.classList.toggle('hidden', !on);
     p.classList.toggle('pink', !!(d && d.arrow === '#ff80ab'));
+    p.classList.toggle('ember', !!(d && d.arrow === '#ffab40'));
 }
 
 function startBossIntro(boss) {
     if (currentMap.type === 'cavern') { startAmalgamIntro(boss); return; } // map_cavern.js: it forms out of the lakes
     if (currentMap.type === 'hive') { startQueenWake(boss); return; } // map_hive.js: she wakes on her throne
+    if (currentMap.type === 'village') { startWarchiefIntro(boss); return; } // map_village.js: he bursts out of the longhall
+    if (currentMap.type === 'trail') { startBeastmasterIntro(boss); return; } // map_trail.js: he sounds his horn and leaps the gate
     const m = mapDef().mouth;
     boss.state = 'intro'; boss.x = m.x + 110; boss.y = m.y; boss.introK = 0;
     stageEvent = { type: 'boss_intro', t: 0, boss, blocking: true, shook: 0 };
@@ -347,6 +368,11 @@ function updateStageEvent(dt) {
     else if (ev.type === 'queen_wake') updateQueenWake(ev, dt); // map_hive.js
     else if (ev.type === 'trophy_claim') updateTrophyClaim(ev, dt);
     else if (ev.type === 'queen_throes') updateQueenThroes(ev, dt);
+    else if (ev.type === 'warchief_intro') updateWarchiefIntro(ev, dt); // map_village.js
+    else if (ev.type === 'barricade_burn') updateBarricadeBurn(ev, dt);
+    else if (ev.type === 'logjam_break') updateLogjamBreak(ev, dt); // map_trail.js
+    else if (ev.type === 'beast_intro') updateBeastmasterIntro(ev, dt);
+    else if (ev.type === 'gate_open') updateGateOpen(ev, dt);
     else if (ev.type === 'cave_exit') {
         player.dash = null; player.grappleTarget = null;
         const [dx, dy, dd] = getVector(player.x, player.y, d.exitTo.x, d.exitTo.y);
@@ -360,7 +386,10 @@ function updateStageEvent(dt) {
 // Per-frame checks that don't block (exit trigger, cave terrain)
 function updateStage(dt) {
     const d = mapDef();
-    if (currentMap.grid) { updateNav(); if (currentMap.type === 'hive') updateHive(dt); else updateCavern(dt); } // map_hive.js / map_cavern.js
+    if (currentMap.grid) { // map_hive.js / map_village.js / map_cavern.js
+        updateNav();
+        if (currentMap.type === 'hive') updateHive(dt); else if (currentMap.type === 'village') updateVillage(dt); else if (currentMap.type === 'trail') updateTrail(dt); else updateCavern(dt);
+    }
     if (d && currentMap.caveOpen && !stageEvent && Math.hypot(player.x - d.exit.x, player.y - d.exit.y) < d.exitR) {
         if (currentMap.type === 'hive') startTrophyClaim(); else startCaveExit();
     }
@@ -377,14 +406,20 @@ function showBossCard(name, kicker) {
 
 // ---------- screen-space extras drawn after the world (vignette, pointer to the exit) ----------
 
+let stageVignette = null;
 function drawStageScreen() {
     const d = mapDef(); if (!d) return;
     const cw = canvas.width, ch = canvas.height, cave = currentMap.type === 'cavern' || currentMap.type === 'hive';
-    const v = ctx.createRadialGradient(cw / 2, ch / 2, Math.min(cw, ch) * (cave ? 0.35 : 0.45), cw / 2, ch / 2, Math.max(cw, ch) * 0.75);
-    v.addColorStop(0, 'rgba(0, 10, 0, 0)'); v.addColorStop(1, currentMap.type === 'hive' ? 'rgba(14, 0, 8, 0.6)' : cave ? 'rgba(0, 3, 8, 0.6)' : 'rgba(0, 12, 4, 0.45)');
-    ctx.fillStyle = v; ctx.fillRect(0, 0, cw, ch);
+    const key = currentMap.type + cw + 'x' + ch;
+    if (!stageVignette || stageVignette.key !== key) { // painted once per map and window size, not every frame
+        stageVignette = document.createElement('canvas'); stageVignette.width = cw; stageVignette.height = ch; stageVignette.key = key;
+        const vc = stageVignette.getContext('2d'), v = vc.createRadialGradient(cw / 2, ch / 2, Math.min(cw, ch) * (cave ? 0.35 : 0.45), cw / 2, ch / 2, Math.max(cw, ch) * 0.75);
+        const edge = currentMap.type === 'hive' ? 'rgba(14, 0, 8, 0.6)' : currentMap.type === 'village' ? 'rgba(20, 7, 0, 0.55)' : currentMap.type === 'trail' ? 'rgba(8, 14, 2, 0.45)' : cave ? 'rgba(0, 3, 8, 0.6)' : 'rgba(0, 12, 4, 0.45)';
+        v.addColorStop(0, 'rgba(0, 10, 0, 0)'); v.addColorStop(1, edge); vc.fillStyle = v; vc.fillRect(0, 0, cw, ch);
+    }
+    ctx.drawImage(stageVignette, 0, 0);
     if (currentMap.caveOpen && !stageEvent) { // arrow at the screen edge pointing at the exit while it's off-screen
-        const m = d.exit, sx = m.x - camera.x, sy = m.y - camera.y;
+        const m = d.exit, z = camZoom(), sx = (m.x - camera.x) * z, sy = (m.y - camera.y) * z;
         if (sx < 40 || sx > cw - 40 || sy < 40 || sy > ch - 40) {
             const a = Math.atan2(sy - ch / 2, sx - cw / 2), px = Math.max(50, Math.min(cw - 50, sx)), py = Math.max(50, Math.min(ch - 200, sy));
             const pulse = 0.7 + 0.3 * Math.sin(fxTime * 5);
@@ -398,6 +433,11 @@ function drawStageScreen() {
         const g = ctx.createRadialGradient(cw / 2, ch / 2, Math.min(cw, ch) * 0.3, cw / 2, ch / 2, Math.max(cw, ch) * 0.7);
         const rgb = currentMap.type === 'hive' ? '235, 70, 150' : '60, 220, 120'; // royal jelly is pink
         g.addColorStop(0, `rgba(${rgb}, 0)`); g.addColorStop(1, `rgba(${rgb}, ${0.22 + 0.08 * Math.sin(fxTime * 6)})`);
+        ctx.fillStyle = g; ctx.fillRect(0, 0, cw, ch);
+    }
+    if (player.burning) { // standing in fire (bandits.js): a hot orange pulse at the screen edges
+        const g = ctx.createRadialGradient(cw / 2, ch / 2, Math.min(cw, ch) * 0.3, cw / 2, ch / 2, Math.max(cw, ch) * 0.7);
+        g.addColorStop(0, 'rgba(255, 110, 20, 0)'); g.addColorStop(1, `rgba(255, 110, 20, ${0.2 + 0.08 * Math.sin(fxTime * 9)})`);
         ctx.fillStyle = g; ctx.fillRect(0, 0, cw, ch);
     }
     if (player.exitFade > 0) { ctx.fillStyle = `rgba(0, 0, 0, ${player.exitFade})`; ctx.fillRect(0, 0, cw, ch); }

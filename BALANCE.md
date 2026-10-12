@@ -25,6 +25,10 @@ In-engine DPS on a boss dummy with every round-one finisher (late gear, see "DPS
 
 ### Playtest checklist
 
+- **Cinderholt (Bandit Bastion stage 1, new):** do the bandits read at a glance (thief, archer, shieldbearer)? Do fences and houses make good cover without trapping you? Kegs: worth luring bandits to, or just a hazard? The Warchief's Torch Toss and Keg Kick (does the warning give enough time?), the intro out of the longhall, and the barricade burning down.
+
+- **The Raiders' Trail (Bandit Bastion stage 2, new):** do the riders' lanes give enough warning? Are the traps fair? Do bannermen read as priority targets? Do hound packs feel like the Druid's wolf? The Beastmaster's mount and Kennel Call; does advancing section by section feel like a journey?
+
 - **Bosses:** do the fights land near the targets (Slime King ~40 s, Amalgam ~65 s, Hive Queen ~120 s) with combos? Does the Queen's 60-30% guard phase still get skipped by strong AoE? The Queen's bullet hell.
 - **Amalgam:** the Undertow with its 0.65 s warning. Is the fight winnable for single-target classes?
 - **Economy:** shop 2 with ~1000 gold: does choosing what to skip feel good or stingy? Is shop 1 a real choice with the rare weapon starting at +50%?
@@ -375,7 +379,7 @@ Sections:
 4. [Class details (skills, upgrades, rares)](#4-class-details)
 5. [Class rare items](#5-class-rare-items)
 6. [Slime Caves: stages, hazards, enemies, bosses](#6-slime-caves)
-7. [Bandit Bastion (old arena)](#7-bandit-bastion-old-arena)
+7. [Bandit Bastion](#7-bandit-bastion)
 8. [Balance observations](#8-balance-observations)
 9. [Bugs and mismatches found while reading](#9-bugs-and-mismatches-found-while-reading)
 
@@ -942,21 +946,38 @@ All bosses (including Bandit Bastion's) count down stun, root, freeze and blind 
 
 ---
 
-## 7. Bandit Bastion (old arena)
+## 7. Bandit Bastion
 
-Still playable but not yet reworked: a plain arena with circle/square enemies, 11 waves, and Valerius on a bridge map at wave 11.
+Being reworked stage by stage like the Slime Caves (see CLAUDE.md, Known issues). Stage 1, Cinderholt (waves 1-5), is a real map with sprites and is playtested; stage 2, The Raiders' Trail (waves 6-10), is a real scrolling map ending in the Beastmaster; Valerius is still on the old bridge map at wave 11.
+
+**Cinderholt: fire and powder** ([bandits.js](js/bandits.js); raw numbers, before the global ×0.6 on damage taken and `HIT_SCALE` on damage dealt):
+- **Gold and the war chest:** a regular kill drops gold 30% of the time, worth 5 + w; the Warchief's own drop is 5 piles of 20 + 2w = 150. Waves 1-4 have 5, 8, 10 and 13 enemies, wave 5 has 3 plus him, so an average run collects 9 + 16.8 + 24 + 35.1 + 9 + 150 = **~244 gold** (std dev ~23) against the rare weapon's 250. To leave real slack the Warchief now also drops his **war chest** (village only, not Endless): 4 piles of 20 = **80 gold**, so ~324 on average, ~300 even a standard deviation unlucky, and everything is auto-collected when the wave clears.
+- **Fire on the ground** (`ground_fire`): the hero takes 10 + 1.5w per second standing in it; bandits take 20 + 5w per second. The Warchief walks through it.
+- **Powder keg** (8 spots in the village, each restocked 28 s after it blows, once the hero is 520 px away): any hit sets it off. 115 px blast: 14 + 3w to the hero, 50 + 12w to enemies (it kills a thief or archer outright early on), staggers the Warchief (his wind-up is lost, 1.4 s before his next move), and leaves fire (70 px, 3.5 s). Kegs within 150 px catch and go off one after another.
 
 | Enemy | Stage | Weight | HP | Raw dmg | Notes |
 |---|---|---|---|---|---|
-| Thief | 1 | 40% | 18 + 7w | 10 + 1.8w | Fast (155), **20% evade** |
+| Thief | 1 | 40% | 18 + 7w | 10 + 1.8w | Fast (155), **20% evade**. No touch damage: a knife thrust (0.3 s wind-up with a faint blade glint, a quick lunge) for ×1.3, then 0.35 s open |
 | Archer | 1 | 30% | 15 + 6w | 12 + 2w | 3-shot bursts |
-| Shield | 1 | 30% | 30 + 15w | 8 + 1.2w | A 35 HP frontal shield blocks hits within ±72° |
-| Horse | 2 | 65% | 40 + 15w | 15 + 2.5w | Telegraphed charge ×2 + slow |
-| Trapper | 2 | 25% | 25 + 8w | 10 + 1.5w | Throws 3 bear traps (root 1.5 s) |
-| Caster | 2 | 10% | 30 + 10w | 5 + 1w | **Doubles the speed** of enemies within 400 px |
-| **Warlord** (boss) | 5 | 1200 + 240w | 18 + 2.5w | Knife fan, or a dash for ×2 |
-| **Beastmaster** (boss) | 10 | 3500 + 510w | 22 + 3w | Bolas (root + pull), 2 homing hounds, 3 jousts with traps; 40% faster below 50% HP |
+| Shield | 1 | 30% | 30 + 15w | 8 + 1.2w | A 35 HP frontal shield blocks hits within ±72°. No touch damage: a shield bash (0.5 s wind-up, while it turns to track you at 7 rad/s; a wedge marks its reach) lurches forward at 560 px/s, reaching 30 px past its edge over a ±1.35 rad arc, for ×2, shoving you 70 px back and slowing you; with the shield gone, the same move as an axe chop |
+| Horse rider | 2 | 30% (default) | 40 + 15w | 15 + 2.5w | Circles at 300 px, then sets its lance (a lane on the ground, locked for the last 0.35 s, was 0.2) and charges at 640 px/s for up to 520 px: ×2 and a slow, then wheels round in a wide turn |
+| Trapper | 2 | 22% (default) | 25 + 8w | 10 + 1.5w | Lobs 2 bear traps every 6 s (was 3 every 4 s), never more than 3 of its own down at once; each has a landing marker; a trap snaps shut on you for a **0.8 s** root (was 1.5 s), and any player shot springs it harmlessly. Traps never snap while you dash, leap or have i-frames, and after one snaps you can't be rooted by another for 2.5 s (the others stay armed) |
+| Bannerman | 2 | 12% (default) | 45 + 12w | 6 + 1w | Never attacks. Hangs back behind its allies; bandits within 300 px are Rallied: ×1.3 speed and ×1.25 damage |
+| Hound | 2 | 16% (default) | 14 + 6w | 6 + 1.2w | Packs of up to 3 (on the trail: 2). Circle at 130 px, spread out, dart in at 520 px/s for one bite, then retreat |
+| Slinger | 2 | 20% (default) | 22 + 7w | 9 + 1.4w | 90 speed. Keeps 260-380 px off you (backs off when you close in). Every 2.6 s, with a clear shot, it winds up for 0.6 s and lobs one stone at where you stood when it let go: a 26 px marker shows the landing, the stone flies at 420 px/s and hurts only if you are still in the marker when it lands. The less oppressive ranged enemy: one telegraphed hit, no area denial |
+| **Warchief** (boss) | 5 | 1200 + 240w | 18 + 2.5w | Knife fan; **Bull Rush**: a lane on the ground through a 0.7 s wind-up, then he charges down it (1150 px/s, up to 560 px) for ×2, knocking you aside, and stands winded for 0.55 s; **Torch Toss**: a torch on your spot (0.75 s warning ring), ×0.8 on a direct hit, then 75 px of fire for 5 s. Below 50%: a second torch beside you, and **Keg Kick**: a lit keg rolls at you (340 px/s, 2.2 s fuse) and goes off on whatever it touches first, his own men included, for ×1.5 |
+| **Beastmaster** (boss) | 10 | 3500 + 510w | 22 + 3w | Prowls at whip's length (190 px). **Whip Crack** in reach: a wedge on the ground for 0.85 s (locks 0.3 s before; was 0.55 / 0.15, too fast in the playtest), 250 px, ×1.8, yanks you 80 px in and slows; twice when enraged (0.65 s between cracks, was 0.42). Bolas (root + pull): a 0.85 s wind-up (was 0.5) with three aim lanes on the ground that lock for the last 0.25 s, thrown at 560 px/s (was 700). Hounds: 2 at a time, never more than 4 of his. **Joust**: mounted, 3 runs down lance lanes (0.8 s / 0.5 s prep), 950 px/s up to 620 px, ×2.5 and knocked aside, winded 0.9 s after; no traps during the runs, he drops 2 at the end of the third run's lane. Touch ×1.2. Kennel Call at 50% and 25%: 3 hounds out of the reeds (his hounds die with him). Bolas root 0.6 s (was 1.0 s). Below 50% everything comes 30% faster. Riders never spawn on the forest road |
 | **Valerius** (final) | 11 | 5600 + 670w | 25 + 5w | P1: lunges/sunder. P2 (65%): 2000 shield + 2 archers, javelin spiral, breaking the shield staggers him (×2 damage taken). P3 (30%): chain hook, frenzy lunge, slam ×3 |
+
+**The Raiders' Trail** (stage 2, waves 6-10; [map_trail.js](js/map_trail.js)):
+- **Sections:** the trail opens one section at a time: the forest road (waves 6-7), the bandits' hunting camp in a clearing (waves 8-9), the riverbank (wave 10). A logjam closes each next section until the wave before it is cleared (the camp's until wave 7, the riverbank's until wave 9). Spawns come only from the newest open section, ahead of you.
+- **The river:** a ravine across the map that you can't walk through; the stone bridge crosses it. A chained gate at the bridgehead holds until the Beastmaster dies, and the exit is on the bridge.
+- **Section mix** (`trailMinions`, [map_trail.js](js/map_trail.js); the weights in enemies.json stay the defaults for Endless): forest road: slinger 40%, trapper 25%, hound 20%, bannerman 15%, no riders. Clearing and riverbank: slinger 30%, rider 22%, trapper 20%, hound 15%, bannerman 13%.
+- **Caps on what's alive at once:** 2 horse riders, 4 hounds (the Beastmaster's count); a capped type drops out of the pick. Hound packs are 2 at most on the trail, never past the cap.
+- **Dash-friendly traps:** bear trap root 0.8 s (was 1.5), bolas root 0.6 s (was 1.0); traps ignore a hero who is dashing, leaping or has i-frames, and a snap grants 2.5 s of trap immunity (`player.trapImmuneUntil`). The rider's lance lane locks 0.35 s before the charge (`RIDER_LOCK_TIME`).
+- **Dev jump:** starting wave 8 opens logjam 1 and places you at the clearing (x 2150); wave 10 opens both and places you on the riverbank (x 4000) (`trailEnter`).
+- **Rally:** bandits within 300 px of a bannerman run ×1.3 speed and hit ×1.25 damage.
+- **Wave 10:** the Beastmaster alone. His intro is a horn, then he leaps the gate from the bridge.
 
 ---
 
