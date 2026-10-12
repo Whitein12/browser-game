@@ -67,8 +67,8 @@ function calcCooldown(baseCd, skillLevel = 1) {
     return baseCd * Math.max(0.4, (1 - ((skillLevel > 1 ? skillLevel - 1 : 0) * 0.15)));
 }
 
-// Only dashes (Space) and the Swordsaint's stance toggle get shorter with rank; every other skill keeps its base cooldown
-function rankScalesCooldown(slot) { return slot === 3 || (activeClass.name === 'Swordsaint' && slot === 2); }
+// Only dashes (Space) and the Kensei's stance toggle get shorter with rank; every other skill keeps its base cooldown
+function rankScalesCooldown(slot) { return slot === 3 || (activeClass.name === 'Kensei' && slot === 2); }
 function skillBaseCd(slot, level) {
     const sk = activeClass.skills[slot];
     return rankScalesCooldown(slot) ? calcCooldown(sk.maxCd, level) : sk.maxCd;
@@ -82,7 +82,7 @@ function getCDR() {
 }
 
 // Armor HP scales with the class's own base HP, so fragile classes stay fragile when geared; the tanks' 240 is the cap
-// (Nightblade x0.62, Spellweaver/Swordsaint x0.77, Ranger/Cleric/Druid x0.92, Machinist/Paladin/Dragonknight x1)
+// (Nightblade x0.62, Spellweaver/Kensei x0.77, Ranger/Cleric/Druid x0.92, Machinist/Paladin/Dragonknight x1)
 const ARMOR_HP_REF = 130;
 function armorHpMult() { return Math.min(1, activeClass.baseMaxHp / ARMOR_HP_REF); }
 
@@ -111,7 +111,7 @@ function applyDamage(enemy, amount, source = 'player', projAngle = null) {
     }
 
     const weak = weakPointDamage(enemy, source, projAngle); // Nightblade: true damage on top, and the hit goes through blocks
-    if (queenLastStand(enemy, amount + weak)) return;
+    if (queenLastStand(enemy, amount + weak) || valeriusLastStand(enemy, amount + weak)) return;
 
     if (!weak) {
         if (enemy.type === 'slime_warden' && enemy.orbs > 0) {
@@ -125,12 +125,13 @@ function applyDamage(enemy, amount, source = 'player', projAngle = null) {
             return;
         }
 
+        if (enemy.type === 'boss_valerius' && source !== 'dot' && valDodge(enemy)) return; // ai.js: he reads the blow and steps aside
         if (enemy.type === 'thief' && Math.random() < 0.20) {
             enemy.dodgeAt = fxTime; enemy.dodgeSide = Math.random() < 0.5 ? -1 : 1; // bandits.js draws the sidestep
             effects.push({ type: 'text', text: 'Evaded!', x: enemy.x, y: enemy.y - 20, color: '#fff', life: 0.6, maxLife: 0.6 }); return;
         }
 
-        if ((enemy.type === 'shield' || enemy.type === 'boss_valerius') && enemy.shieldHp > 0) {
+        if (enemy.type === 'shield' && enemy.shieldHp > 0) {
             const angleToPlayer = Math.atan2(player.y - enemy.y, player.x - enemy.x);
             let diff = enemy.facingAngle - angleToPlayer;
             while(diff < -Math.PI) diff += Math.PI*2;
@@ -170,6 +171,14 @@ function queenLastStand(enemy, dmg) {
     return true;
 }
 
+// Valerius can't die on the bridge: the blow that would kill him leaves him at 1 HP and he escapes (map_bridge.js)
+function valeriusLastStand(enemy, dmg) {
+    if (enemy.type !== 'boss_valerius' || isEndlessMode || currentMap.type !== 'bridge' || enemy.hp - dmg > 0 || enemy.escaping) return false;
+    enemy.hp = 1; enemy.invulnerable = true; enemy.escaping = true;
+    startValeriusEscape(enemy);
+    return true;
+}
+
 // Nightblade weak point: a hit from the marked side consumes the mark for true damage (no x0.6), and that hit
 // ignores blocks (Warden orbs, frontal shields, dodges). Returns the true damage, or 0 if this wasn't a weak-point hit.
 function weakPointDamage(enemy, source, projAngle) {
@@ -199,7 +208,7 @@ function weakPointDamage(enemy, source, projAngle) {
             et.aoeResistStacks = (et.aoeResistStacks || 0) + 1;
             et.aoeResistTimer = 2.0;
             const splashDmg = (trueDmg * 0.5) / et.aoeResistStacks;
-            if (queenLastStand(et, splashDmg)) continue;
+            if (queenLastStand(et, splashDmg) || valeriusLastStand(et, splashDmg)) continue;
             et.hp -= splashDmg;
             checkEnemyDeath(et);
         }
@@ -207,27 +216,24 @@ function weakPointDamage(enemy, source, projAngle) {
     return trueDmg;
 }
 
+// Kensei: a successful parry, a hit taken in Parry Thrust's window or shots its sweep cuts out of the air (skills.js)
+function parrySuccess(sourceObj) {
+    effects.push({ type: 'text', text: 'Parried!', x: player.x, y: player.y - 30, color: '#00e5ff', life: 0.6, maxLife: 0.6 });
+    onParry(sourceObj);
+    counterParry(); // combos.js Counter Step: Shadow Step is ready at once
+    let flowGain = player.maxFlow * 0.2; // Base parry flow gain
+    if (activeClass && activeClass.skills[1] && activeClass.skills[1].selectedUpg === 'A') { // Flawless Execution: full Flow and Q ready again
+        flowGain = player.maxFlow;
+        cooldowns.s1 = 0;
+    }
+    player.flow = Math.min(player.maxFlow, (player.flow || 0) + flowGain);
+    player.flowGainTimer = 0;
+}
+
 function takeDamage(amount, isContinuous = false, sourceObj = null) {
     amount *= 0.6; // Global enemy damage reduction to player
 
-    if (player.parryTimer > 0 && !isContinuous) {
-        effects.push({ type: 'text', text: 'Parried!', x: player.x, y: player.y - 30, color: '#00e5ff', life: 0.6, maxLife: 0.6 });
-        onParry(sourceObj);
-        counterParry(); // combos.js Counter Step: Shadow Step is ready at once
-        
-        let flowGain = player.maxFlow * 0.2; // Base parry flow gain
-        
-        // Grant Maximum Flow and reset cooldown for Upgrade A
-        if (activeClass && activeClass.skills[1] && activeClass.skills[1].selectedUpg === 'A') {
-            flowGain = player.maxFlow;
-            cooldowns.s1 = 0; // Reset skill 1 cooldown
-        }
-        
-        player.flow = Math.min(player.maxFlow, (player.flow || 0) + flowGain);
-        player.flowGainTimer = 0;
-        
-        return; // Mitigate all damage
-    }
+    if (player.parryTimer > 0 && !isContinuous) { parrySuccess(sourceObj); return; } // Mitigate all damage
 
     if (player.iFrames > 0) return;
     if (buffs.evade100 > 0) {
@@ -277,10 +283,10 @@ function takeDamage(amount, isContinuous = false, sourceObj = null) {
         else { amount -= player.shield; player.shield = 0; player.shieldTimer = 0; }
     }
     
-    // Swordsaint, Razor's Edge (skills.js): a hit that gets through costs Flow. The Saint's Silk Shroud softens it, and Airborne
+    // Kensei, Razor's Edge (skills.js): a hit that gets through costs Flow. The Ronin's Silk Shroud softens it, and Airborne
     // it dodges 10% of hits outright. Continuous damage (puddles, wading) doesn't cost Flow.
-    if (activeClass && activeClass.name === 'Swordsaint' && !isContinuous) {
-        const shroud = equipment.armor && equipment.armor.name === "Saint's Silk Shroud";
+    if (activeClass && activeClass.name === 'Kensei' && !isContinuous) {
+        const shroud = equipment.armor && equipment.armor.name === "Ronin's Silk Shroud";
         if (shroud && player.stance === 'airborne' && Math.random() < 0.10) {
             effects.push({ type: 'text', text: 'Evaded!', x: player.x, y: player.y - 30, color: '#e1bee7', life: 0.6, maxLife: 0.6 });
             return;

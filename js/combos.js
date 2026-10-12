@@ -439,7 +439,7 @@ function eclipseMult(e, ray) { // skills.js Divine Ray, per enemy per tick
     return ECLIPSE_MULT;
 }
 
-// Nightblade and Swordsaint, round two: both already ask a lot of skill, so these deepen what's there instead of adding a layer.
+// Nightblade and Kensei, round two: both already ask a lot of skill, so these deepen what's there instead of adding a layer.
 // Nightblade, Shadow Strike (R + Space): while Mark for Death runs, a Phantom Dash straight through the marked target is an
 //   extra clone strike (x0.6 the Mark from a fresh weak side, facing where you came from, so it always pops), up to twice
 //   per Mark. You weave your own strikes between the clones', and you pass through the boss to do it.
@@ -469,19 +469,19 @@ function smokeStep(smoke) { // and at the landing: the cloud follows
     comboText();
 }
 
-// Swordsaint, Counter Step (parry → Space → LMB; it was going to be "Riposte Step", but the E evolution is Riposte Recall):
+// Kensei, Counter Step (parry → Space → LMB; it was going to be "Riposte Step", but the E evolution is Riposte Recall):
 //   a successful parry readies Shadow Step at once, and a Shadow Step within 1.5 s makes its Iaido cut x1.5.
-// Swordsaint, Return Cut (Airborne E, the recall): the blade cuts back through everything between it and you, for x3 a
+// Kensei, Return Cut (Airborne E, the recall): the blade cuts back through everything between it and you, for x3 a
 //   basic times the Flow the recall spends (nothing at empty, full at 100). Riposte Recall (E-A) cuts as if Flow were full
 //   and keeps 30%. (Riposte Recall used to be the only recall that cut, a flat x2 basic.)
-// Swordsaint, Whirling Orbit (Guardian Orbit → Q): Q during the orbit spins it twice as fast for the rest of it (twice the cuts),
+// Kensei, Whirling Orbit (Guardian Orbit → Q): Q during the orbit spins it twice as fast for the rest of it (twice the cuts),
 //   and 0.3 s longer, instead of Blade Surge, so press it early. The user's idea. Measured on a boss: a Blade Surge 264; the
 //   whirl adds about as much (+0.6 s made it ~+70% more than a Surge, no extension ~30% less).
-// Swordsaint, Gale Orbit (Guardian Orbit → RMB): Phantom Wind during the orbit flings it wide: the circle grows to 250 px for
+// Kensei, Gale Orbit (Guardian Orbit → RMB): Phantom Wind during the orbit flings it wide: the circle grows to 250 px for
 //   the rest of the orbit and cuts a ring, not the disc (the user's pick over Hammer & Anvil and Wind Step).
 const COUNTER_WINDOW = 1.5, COUNTER_IAIDO = 1.5, RETURN_MULT = 3, WHIRL_ORBIT_SPIN = 2, WHIRL_ORBIT_EXTRA = 0.3, GALE_ORBIT_RADIUS = 250, GALE_ORBIT_GROW = 900;
 function counterParry() { // combat.js takeDamage, on a parry
-    if (activeClass.name !== 'Swordsaint' || player.stance !== 'handheld' || !(activeClass.skills[3].level > 0)) return;
+    if (activeClass.name !== 'Kensei' || player.stance !== 'handheld' || !(activeClass.skills[3].level > 0)) return;
     cooldowns.s3 = 0; buffs.counterUntil = fxTime + COUNTER_WINDOW;
     effects.push({ type: 'text', text: 'COUNTER', x: player.x, y: player.y - 52, color: '#84ffff', life: 0.7, maxLife: 0.7 });
 }
@@ -516,7 +516,7 @@ function galeOrbit() { // skills.js Phantom Wind
     comboText();
 }
 
-// Swordsaint, Gathering Gale (Shadow Step → R → Q, in hand; the user's design): R cast in Shadow Step's window doesn't storm
+// Kensei, Gathering Gale (Shadow Step → R → Q, in hand; the user's design): R cast in Shadow Step's window doesn't storm
 // round you: the blades gather in front of you. Q within 1 s releases them: you dash forward 260 px and a hurricane flies on
 // ahead down that line (650 px), cutting what it passes every 0.15 s for x0.5 the R, carrying non-bosses along, +10 Flow per
 // enemy it catches, and bursting at the end (x0.8 in 160 px). No Q in time: the storm breaks round you as a plain Blade
@@ -528,7 +528,7 @@ function gatherGale(sk, dmg) { // skills.js Blade Whirlwind, cast in the window
     effects.push({ type: 'gale_gather', life: GALE_HOLD, maxLife: GALE_HOLD, customUpdate: (dt, ef) => { // skillfx_ult.js
         const g = buffs.gale;
         if (!g) { ef.life = 0; return; } // released
-        if (fxTime >= g.until || player.stance !== 'handheld') { buffs.gale = null; ef.life = 0; SkillRegistry.Swordsaint[4](g.sk, g.dmg); } // no Q in time: a plain whirlwind
+        if (fxTime >= g.until || player.stance !== 'handheld') { buffs.gale = null; ef.life = 0; SkillRegistry.Kensei[4](g.sk, g.dmg); } // no Q in time: a plain whirlwind
     } });
     comboText();
 }
@@ -568,11 +568,11 @@ function releaseHurricane() { // skills.js Parry Thrust, while the blades are ga
 // COMBO_SKILLS[className][slot]: a skill pressed in the window, or while the dash that opens it is still in the air, runs `cast`
 // instead of its own cast (main.js keydown, before hold-to-charge starts). The cooldown check has already passed.
 // air: only while the dash is still in the air; keep: the dash's finisher window still opens (otherwise this spends it);
-// when: an extra condition (the Swordsaint's only in hand).
+// when: an extra condition (the Kensei's only in hand).
 const COMBO_SKILLS = {
     Ranger: { 1: { cast: () => castSkill(1, 1, { skyline: true }) } },
     Dragonknight: { 4: { cast: () => castSkill(4, undefined, { wyrmfall: true }), air: true, keep: true } },
-    Swordsaint: { 4: { cast: () => castSkill(4, undefined, { gather: true }), when: () => player.stance === 'handheld' } },
+    Kensei: { 4: { cast: () => castSkill(4, undefined, { gather: true }), when: () => player.stance === 'handheld' } },
 };
 function comboSkill(slot) {
     const c = (COMBO_SKILLS[activeClass.name] || {})[slot];
@@ -672,7 +672,7 @@ function callingBolt(dmg) {
     return true;
 }
 
-// Swordsaint: one finisher per stance.
+// Kensei: one finisher per stance.
 // Handheld, Iaido: the slash after Shadow Step is a draw-cut. A beat later a line of light splits everything you dashed through,
 // 2x a slash (with the Flow bonus), and each enemy cut gives +20 Flow. Rewards dashing through enemies, not past them.
 // Airborne, Guardian Orbit: the click after Spatial Swap pulls the blade into a tight circle around you for 1.2 s. It cuts
@@ -682,7 +682,7 @@ function callingBolt(dmg) {
 // (Blade Rush and Impale came before it: one fired by itself, the other cut slower than steering.)
 const IAIDO_MULT = 2, IAIDO_WIDTH = 30, IAIDO_FLOW = 20, IAIDO_DELAY = 0.15;
 const ORBIT_TIME = 1.2, ORBIT_RADIUS = 70, ORBIT_REACH = 45, ORBIT_SPIN = 14, ORBIT_MULT = 1.5, ORBIT_PUSH = 18; // x1.5 (x2 gave +29% on the dummy)
-function swordsaintFinisher(dmg, c) {
+function kenseiFinisher(dmg, c) {
     const flowK = 1 + BLADE_FLOW_BONUS * player.flow / Math.max(1, player.maxFlow); // the same Flow bonus the slashes and the blade get
     if (player.stance === 'airborne') {
         const ab = player.airborneBlade;
@@ -732,7 +732,7 @@ function updateOrbit(ab, dt) {
 }
 
 const COMBO_FINISHERS = {
-    Swordsaint: (dmg, heavy, c) => swordsaintFinisher(dmg, c),
+    Kensei: (dmg, heavy, c) => kenseiFinisher(dmg, c),
     Druid: (dmg, heavy, c) => callingBolt(dmg),
     Nightblade: (dmg, heavy, c) => shadowDaggers(dmg),
     Cleric: (dmg, heavy, c) => radiantBurst(dmg),

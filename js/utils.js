@@ -8,12 +8,6 @@ function updateMapBounds() {
     currentMap.grid = stageMap && stageMap.grid || null; // cave terrain (walls, lakes, ravines)
     if (stageMap) {
         Object.assign(currentMap, stageMap.bounds);
-    } else if (currentMap.type === 'bridge') {
-        const bridgeHeight = 450;
-        currentMap.left = 0;
-        currentMap.right = canvas.width;
-        currentMap.top = canvas.height / 2 - bridgeHeight / 2;
-        currentMap.bottom = canvas.height / 2 + bridgeHeight / 2;
     } else {
         currentMap.left = 0;
         currentMap.right = canvas.width;

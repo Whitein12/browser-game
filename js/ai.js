@@ -100,7 +100,7 @@ var RiderAI = (e, dt, curSpd, edx, edy, edist, i) => {
         if (rd < player.radius + e.size / 2 + 5 && e.meleeTimer <= 0) { takeDamage(e.dmg); e.meleeTimer = 1.0; }
         if (e.stateTimer <= 0 && curSpd > 0 && rd < 460 && (!currentMap.grid || walkClear(e.x, e.y, player.x, player.y))) {
             e.state = 'lance_aim'; e.stateTimer = RIDER_AIM; e.laneA = Math.atan2(ry, rx);
-            effects.push({ type: 'lance_lane', e, w: 26, lockAt: RIDER_AIM - RIDER_LOCK_TIME, life: RIDER_AIM, maxLife: RIDER_AIM }); // bandits.js draws the lane
+            effects.push({ type: 'lance_lane', e, w: e.size + 12, lockAt: RIDER_AIM - RIDER_LOCK_TIME, life: RIDER_AIM, maxLife: RIDER_AIM }); // bandits.js draws the lane, as wide as the hit (size / 2 + 6 past your edge): clear of it is safe
         }
     } else if (e.state === 'lance_aim') { // slowed to a walk; the lance follows the hero until the lane locks
         if (e.stateTimer > RIDER_LOCK_TIME) e.laneA = Math.atan2(ry, rx);
@@ -195,6 +195,7 @@ var SlingerAI = (e, dt, curSpd, edx, edy, edist, i) => {
 var HoundAI = (e, dt, curSpd, edx, edy, edist, i) => {
     const [rx, ry, rd0] = getVector(e.x, e.y, player.x, player.y), rd = rd0 || 1;
     if (e.master && e.master.dead) { e.xp = 0; e.hp = 0; checkEnemyDeath(e); return; } // the Beastmaster fell: his pack dies with him
+    if (e.state === 'rest') { e.facingAngle = e.restFace; return; } // lying at his feet at the bridgehead (map_trail.js) until he rises
     if (e.stateTimer === undefined) e.stateTimer = 0.5 + Math.random();
     if (e.orbitA === undefined) e.orbitA = Math.atan2(e.y - player.y, e.x - player.x); // its place on the ring
     if (e.heading === undefined) e.heading = Math.atan2(ry, rx);
@@ -263,7 +264,7 @@ const BEAST_WHIP_WIND = 0.85, BEAST_WHIP_REACH = 250, BEAST_WHIP_ARC = 0.3, BEAS
 const BEAST_JOUST_PREP = 0.8, BEAST_JOUST_SPEED = 950, BEAST_JOUST_RANGE = 620, BEAST_JOUST_DMG = 2.5, BEAST_HOUND_CAP = 4, BEAST_PROWL = 190;
 function beastPrep(e, t) { // a joust's wind-up: the lane follows the hero, then locks RIDER_LOCK s before the charge
     e.state = 'joust_prep'; e.stateTimer = t; e.prepLen = t; e.laneA = Math.atan2(player.y - e.y, player.x - e.x); e.facingAngle = e.laneA;
-    effects.push({ type: 'lance_lane', e, w: 50, len: BEAST_JOUST_RANGE, lockAt: t - RIDER_LOCK, life: t, maxLife: t }); // bandits.js
+    effects.push({ type: 'lance_lane', e, w: e.size + 16, len: BEAST_JOUST_RANGE, lockAt: t - RIDER_LOCK, life: t, maxLife: t }); // bandits.js; as wide as the hit (size / 2 + 8 past your edge)
 }
 function beastWhip(e) { // the lash falls along e.whipA: a narrow wedge out to BEAST_WHIP_REACH
     const [rx, ry, rd] = getVector(e.x, e.y, player.x, player.y);
@@ -281,6 +282,7 @@ function beastWhip(e) { // the lash falls along e.whipA: a narrow wedge out to B
     }
 }
 var BeastmasterAI = (e, dt, curSpd, edx, edy, edist, i) => {
+    if (e.state === 'guard') { e.facingAngle = BEAST_GUARD.face; return; } // crouched with his hounds until the hero comes (map_trail.js)
     const [rx, ry, rd] = getVector(e.x, e.y, player.x, player.y), enraged = e.hp < e.maxHp * 0.5, pace = enraged ? 0.7 : 1;
     e.stateTimer -= dt;
     if (!e.kennel1 && e.hp < e.maxHp * 0.5) { e.kennel1 = true; beastKennelCall(e); }
@@ -356,20 +358,285 @@ var BeastmasterAI = (e, dt, curSpd, edx, edy, edist, i) => {
     }
 };
 
+// Valerius the Vanguard (Bandit Bastion stage 3, map_bridge.js): a duel with a war spear on a chain. Every lane, wedge and
+// ring he telegraphs is drawn exactly as wide as its hit (bandits.js val_* effects): if your body is clear of it, you're safe.
+// He's fast and never still for long: he stalks you at a run and sprints in from afar, vaults over on his spear from middle
+// distance, and between moves he reads your blows: when his dodge is ready, the next hit is evaded with a blurred side-step
+// (valDodge, from combat.js applyDamage; a Nightblade weak-point hit still goes through).
+//  Phase 1 (to 65%): Spear Lunge down a lane; Hook & Haul (the spear thrown on its chain: a hit drags you to him and he kicks
+//    you off; a miss leaves it stuck in the deck while he tugs it free, a window to punish him); Sweeping Arc up close.
+//  Phase 2 (to 30%): the castle's archers loose volleys (map_bridge.js); Spear Toss (out and reeled back: it hits both ways);
+//    Chain Lasso (a ring at the chain's length: step inside it or stay out); the lunge.
+//  Phase 3: Chain Cyclone (two turns of the spear swung on the full chain: keep out of reach, or leap or dash through it);
+//    Skewer Leap onto a marked spot (then he wrenches the spear free); Hook & Haul twice running; everything a little faster.
+//  At 0 HP on the bridge he escapes instead of dying (combat.js valeriusLastStand, map_bridge.js startValeriusEscape).
+const VAL_LUNGE_PREP = 0.6, VAL_LUNGE_LOCK = 0.25, VAL_LUNGE_RUN = 420, VAL_LUNGE_SPEED = 1400, VAL_LUNGE_REACH = 40, VAL_LUNGE_DMG = 1.6;
+const VAL_HOOK_PREP = 0.55, VAL_HOOK_LOCK = 0.2, VAL_HOOK_RANGE = 520, VAL_HOOK_SPEED = 1500, VAL_HOOK_W = 10, VAL_HOOK_DMG = 0.8, VAL_KICK_DMG = 0.6, VAL_HOOK_STUCK = 1.0;
+const VAL_ARC_PREP = 0.5, VAL_ARC_LOCK = 0.15, VAL_ARC_HALF = 1.4, VAL_ARC_REACH = 95, VAL_ARC_DMG = 1.3;
+const VAL_TOSS_PREP = 0.55, VAL_TOSS_LOCK = 0.2, VAL_TOSS_RANGE = 600, VAL_TOSS_OUT = 1300, VAL_TOSS_BACK = 1000, VAL_TOSS_W = 12, VAL_TOSS_DMG = 1.0;
+const VAL_LASSO_PREP = 0.9, VAL_LASSO_R = 225, VAL_LASSO_W = 25, VAL_LASSO_DMG = 1.4;
+const VAL_CYC_PREP = 0.8, VAL_CYC_TURNS = 2, VAL_CYC_TURN = 1.1, VAL_CYC_R = 270, VAL_CYC_W = 10, VAL_CYC_DMG = 1.3, VAL_CYC_DRIFT = 90;
+const VAL_LEAP_PREP = 0.35, VAL_LEAP_FLIGHT = 0.85, VAL_LEAP_R = 100, VAL_LEAP_DMG = 1.8, VAL_LEAP_STUCK = 0.7, VAL_LEAP_Z = 220;
+const VAL_STEP_SPEED = 720, VAL_STEP_T = 0.22, VAL_VAULT_FAR = 430, VAL_VAULT_MAX = 650, VAL_VAULT_CD = 4, VAL_VAULT_FLIGHT = 0.55, VAL_VAULT_Z = 80, VAL_VAULT_DMG = 0.8;
+const VAL_SPRINT = 600, VAL_SPRINT_K = 2.2, VAL_DODGE_CD = [0, 2.6, 2.2, 1.7]; // sprints when further than VAL_SPRINT; dodge cooldown by phase
+const VAL_TOUCH_DMG = 0.7, VAL_PHASE2 = 0.65, VAL_PHASE3 = 0.3, VAL_GAP = [0, 0.55, 0.5, 0.35];
+const VAL_BLUR = { lunge: 1, v_step: 1, vault: 1, leap: 1 }; // states drawn with afterimages (bandits.js)
+function valHit(e, mult) { // a blow leaps, dashes, i-frames and parries can beat; true only if it really landed (HP or shield lost)
+    if (player.z > 4) return false;
+    const hp0 = player.hp, sh0 = player.shield || 0;
+    takeDamage(e.dmg * mult);
+    const landed = player.hp < hp0 || (player.shield || 0) < sh0;
+    if (landed) { // it connects: a beat of hit-stop and a jolt, scaled by the blow
+        hitStopTimer = Math.max(hitStopTimer, 0.03 + mult * 0.03); addShake(2 + mult * 2.5);
+        burst(player.x, player.y, Math.atan2(player.y - e.y, player.x - e.x), 1.6, 8 + Math.round(mult * 4), { kind: 'spark', color: '#ffe0b2', size: 2.4, speed: [160, 380], life: 0.3, drag: 5 });
+    }
+    return landed;
+}
+function valImpact(x, y, power) { // the weight of a blow landing, hit or miss: a jolt, stone chips off the slabs, a puff of dust
+    addShake(power);
+    burst(x, y, 0, Math.PI * 2, 5 + Math.round(power * 2), { kind: 'debris', color: '#8d8579', size: 2.4 + power * 0.25, speed: [60, 120 + power * 35], life: 0.5, drag: 3 });
+    for (let k = 0; k < Math.round(power * 1.5); k++) spawnParticle({ kind: 'smoke', color: 'rgba(150, 140, 125, 0.45)', x: x + jitter(30), y: y + jitter(30), vx: jitter(140), vy: jitter(140), size: 12 + power * 2.5, grow: 30, life: 0.8, drag: 2.5, spin: 0, rot: 0 });
+}
+function valShove(e, d) { // knocked back, away from him
+    if (player.dash || player.grappleTarget) return;
+    const [x, y, l] = getVector(e.x, e.y, player.x, player.y);
+    player.x += x / l * d; player.y += y / l * d; clampToBounds(player, player.radius);
+}
+const valTip = (e, d, a) => ({ x: e.x + Math.cos(a) * (e.size / 2 + d), y: e.y + Math.sin(a) * (e.size / 2 + d), a }); // the spearhead d px past his body along a
+const valWall = (x, y) => !!currentMap.grid && (terrainAt(x, y) === T_WALL || terrainAt(x, y) === T_SEAL);
+function valDone(e, gap) { e.state = 'idle'; e.stateTimer = gap !== undefined ? gap : VAL_GAP[e.phase]; e.spear = null; e.airborne = false; e.liftZ = 0; }
+function valReset(e) { // a phase change cuts the current move short
+    for (let i = effects.length - 1; i >= 0; i--) if (effects[i].e === e && String(effects[i].type).startsWith('val_')) effects.splice(i, 1);
+    if (e.pull && player.grappleTarget === e.pull) player.grappleTarget = null;
+    e.spear = null; e.airborne = false; e.liftZ = 0; e.pull = null;
+}
+function valPrep(e, state, len, fx) { // a move's wind-up: e.aimA follows the hero until the move locks
+    e.state = state; e.prepLen = e.stateTimer = len; e.aimA = Math.atan2(player.y - e.y, player.x - e.x);
+    if (fx) effects.push(Object.assign({ e, life: len, maxLife: len }, fx)); // bandits.js draws it
+}
+const valHookLane = (e, len) => ({ type: 'val_lane', chain: true, w: VAL_HOOK_W * 2, len: VAL_HOOK_RANGE + e.size / 2, lockAt: len - VAL_HOOK_LOCK });
+// He reads the blow and steps aside: the hit is evaded, he blurs out sideways and away. Only between moves (stalking, or in
+// a side-step's blur), only when his dodge is ready (VAL_DODGE_CD, shorter each phase), never while held by crowd control
+function valDodge(e) {
+    if ((e.state !== 'idle' && e.state !== 'v_step') || e.dodgeCd > 0 || e.escaping || e.frozenTimer > 0 || e.stunTimer > 0 || e.rootedTimer > 0) return false;
+    const away = Math.atan2(e.y - player.y, e.x - player.x);
+    e.state = 'v_step'; e.stepT = VAL_STEP_T; e.stepA = away + (Math.random() < 0.5 ? 1 : -1) * 1.15; e.dodgeCd = VAL_DODGE_CD[e.phase || 1]; e.stepCd = Math.max(e.stepCd || 0, 0.8);
+    burst(e.x, e.y, e.stepA + Math.PI, 1.2, 8, { kind: 'smoke', color: 'rgba(150, 140, 125, 0.55)', size: 10, speed: [60, 160], life: 0.45, drag: 3, grow: 18 });
+    effects.push({ type: 'text', text: 'Evaded!', x: e.x, y: e.y - e.size / 2 - 14, color: '#ffccbc', life: 0.6, maxLife: 0.6 });
+    return true;
+}
+function valChoose(e, rd) {
+    const near = rd < 170, inHook = rd < VAL_HOOK_RANGE - 20, pace = e.phase === 3 ? 0.8 : 1;
+    if (rd > VAL_VAULT_FAR && rd < VAL_VAULT_MAX && !(e.vaultCd > 0) && Math.random() < 0.5) { // middle distance: over he goes on his spear, now and then
+        e.state = 'vault_prep'; e.prepLen = e.stateTimer = 0.28; e.aimA = Math.atan2(player.y - e.y, player.x - e.x); e.vaultCd = VAL_VAULT_CD; return;
+    }
+    const pick = () => { const r = Math.random();
+        if (e.phase === 1) return near ? (r < 0.6 ? 'arc' : 'lunge') : inHook ? (r < 0.45 ? 'lunge' : 'hook') : null;
+        if (e.phase === 2) return near ? (r < 0.45 ? 'arc' : 'lasso') : rd < 330 ? (r < 0.5 ? 'lasso' : r < 0.75 ? 'toss' : 'lunge') : rd < VAL_TOSS_RANGE ? (r < 0.6 ? 'toss' : 'lunge') : null;
+        return near ? (r < 0.5 ? 'cyclone' : r < 0.75 ? 'arc' : 'leap') : inHook ? (r < 0.35 ? 'cyclone' : r < 0.65 ? 'hook' : 'leap') : 'leap'; };
+    let m = pick(); if (m && m === e.lastMove) m = pick() || m; // rarely the same move twice
+    if (!m) { e.stateTimer = 0.15; return; } // out of reach: keep closing in
+    e.lastMove = m;
+    if (m === 'lunge') valPrep(e, 'lunge_prep', VAL_LUNGE_PREP * pace, { type: 'val_lane', w: e.size + 16, len: VAL_LUNGE_RUN + e.size / 2 + VAL_LUNGE_REACH, lockAt: VAL_LUNGE_PREP * pace - VAL_LUNGE_LOCK });
+    else if (m === 'hook') { e.hooks = e.phase === 3 ? 2 : 1; valPrep(e, 'hook_prep', VAL_HOOK_PREP * pace, valHookLane(e, VAL_HOOK_PREP * pace)); }
+    else if (m === 'arc') valPrep(e, 'arc_prep', VAL_ARC_PREP * pace, { type: 'val_wedge', R: e.size / 2 + VAL_ARC_REACH, half: VAL_ARC_HALF, lockAt: VAL_ARC_PREP * pace - VAL_ARC_LOCK });
+    else if (m === 'toss') valPrep(e, 'toss_prep', VAL_TOSS_PREP, { type: 'val_lane', chain: true, w: VAL_TOSS_W * 2, len: VAL_TOSS_RANGE + e.size / 2, lockAt: VAL_TOSS_PREP - VAL_TOSS_LOCK });
+    else if (m === 'lasso') valPrep(e, 'lasso_prep', VAL_LASSO_PREP, { type: 'val_ring', R: VAL_LASSO_R, w: VAL_LASSO_W });
+    else if (m === 'cyclone') { e.cycDir = Math.random() < 0.5 ? -1 : 1; valPrep(e, 'cyc_prep', VAL_CYC_PREP, { type: 'val_cyclone', R: VAL_CYC_R, dir: e.cycDir }); }
+    else valPrep(e, 'leap_prep', VAL_LEAP_PREP);
+}
+function valLeapTo(e, state, x, y, flight) { // shared by the vault and the Skewer Leap: an arc to (x, y), marked where he'll come down
+    e.state = state; e.leapK = 0; e.lx0 = e.x; e.ly0 = e.y; e.lx1 = x; e.ly1 = y; e.leapT = flight; e.airborne = true;
+    valImpact(e.x, e.y, 2); // pushing off
+}
+var ValeriusAI = (e, dt, curSpd, edx, edy, edist, i) => {
+    if (e.state === 'escape' || e.state === 'escape_throw' || e.state === 'v_intro' || e.state === 'intro_throw' || e.state === 'v_wall') return; // map_bridge.js moves him
+    const [rx, ry, rd0] = getVector(e.x, e.y, player.x, player.y), rd = rd0 || 1, toHero = Math.atan2(ry, rx), hpK = e.hp / e.maxHp;
+    if (!e.phase) e.phase = 1;
+    if (e.phase === 1 && hpK < VAL_PHASE2) { // Hold the Bridge: he raises the spear with a roar and the castle answers with its archers (map_bridge.js)
+        e.phase = 2; valReset(e); e.state = 'rally'; e.stateTimer = 1.1; valImpact(e.x, e.y, 5); hitStopTimer = Math.max(hitStopTimer, 0.08);
+        effects.push({ type: 'slime_shock', x: e.x, y: e.y, radius: 220, color: '#c9a227', life: 0.6, maxLife: 0.6 }, { type: 'slime_shock', x: e.x, y: e.y, radius: 360, color: '#c9a227', life: 0.9, maxLife: 0.9 });
+        if (typeof brg !== 'undefined') brg.flare = 1;
+    }
+    if (e.phase === 2 && hpK < VAL_PHASE3) { // Last Stand: a roar that shakes the bridge, the archers pull back, and he stops holding back
+        e.phase = 3; valReset(e); e.state = 'rage'; e.stateTimer = 0.9; valImpact(e.x, e.y, 7); hitStopTimer = Math.max(hitStopTimer, 0.12);
+        effects.push({ type: 'slime_shock', x: e.x, y: e.y, radius: 300, color: '#ff5252', life: 0.7, maxLife: 0.7 }, { type: 'slime_shock', x: e.x, y: e.y, radius: 460, color: '#ff1744', life: 1.0, maxLife: 1.0 });
+        burst(e.x, e.y, 0, Math.PI * 2, 24, { kind: 'spark', color: '#ff8a65', size: 2.6, speed: [120, 420], life: 0.6, drag: 3 });
+        if (typeof brg !== 'undefined') brg.flare = 1;
+    }
+    const pace = e.phase === 3 ? 0.8 : 1, R = player.radius;
+    e.stateTimer -= dt; e.ghosting = !!VAL_BLUR[e.state];
+    if (e.cycHitCd > 0) e.cycHitCd -= dt;
+    if (e.stepCd > 0) e.stepCd -= dt;
+    if (e.vaultCd > 0) e.vaultCd -= dt;
+    if (e.dodgeCd > 0) e.dodgeCd -= dt;
+    if (!e.airborne && rd < e.size / 2 + R + 4 && e.meleeTimer <= 0) { takeDamage(e.dmg * VAL_TOUCH_DMG); e.meleeTimer = 1.0; }
+    const aimTrack = lock => { if (e.stateTimer > lock) e.aimA = toHero; e.facingAngle = e.aimA; };
+
+    if (!e.state || e.state === 'idle') { // stalking: at a run round the hero at his phase's distance, closing in along the path when far
+        const pref = e.phase === 2 ? 280 : e.phase === 3 ? 160 : 150;
+        if (curSpd > 0 && edist !== Infinity && edist > 0) {
+            let mx = edx / edist, my = edy / edist;
+            if (rd < pref + 70 && (!currentMap.grid || e.los !== false)) { const sd = e.circle || 1, pull = (rd - pref) / 120; mx = -ry / rd * sd + rx / rd * pull; my = rx / rd * sd + ry / rd * pull; }
+            const sprint = rd > VAL_SPRINT, sp = curSpd * (sprint ? VAL_SPRINT_K : 1), ml = Math.hypot(mx, my) || 1; // far off: a flat-out sprint, not hops
+            e.x += mx / ml * sp * dt; e.y += my / ml * sp * dt;
+            if (sprint) { e.ghosting = true; if (Math.random() < 0.5) spawnParticle({ kind: 'smoke', color: 'rgba(150, 140, 125, 0.45)', x: e.x - mx / ml * 22 + jitter(12), y: e.y - my / ml * 22 + jitter(12), vx: jitter(40), vy: jitter(40), size: 10, grow: 24, life: 0.5, drag: 2, spin: 0, rot: 0 }); }
+        }
+        e.facingAngle = toHero;
+        if (!(e.stepCd > 0) && rd < 420 && e.stateTimer > 0.25 && curSpd > 0 && e.frozenTimer <= 0) { // a side-step in a blur, to keep you guessing
+            e.state = 'v_step'; e.stepT = VAL_STEP_T; e.stepA = toHero + (Math.random() < 0.5 ? 1 : -1) * (Math.PI / 2 - 0.25); e.stepCd = 1.6 + Math.random() * 1.2; e.circle = -(e.circle || 1); // fewer of these now that he dodges for real (valDodge)
+            burst(e.x, e.y, e.stepA + Math.PI, 1.2, 6, { kind: 'smoke', color: 'rgba(150, 140, 125, 0.5)', size: 9, speed: [40, 120], life: 0.45, drag: 3, grow: 16 });
+        } else if (e.stateTimer <= 0 && e.frozenTimer <= 0) { e.circle = Math.random() < 0.5 ? -1 : 1; valChoose(e, rd); }
+    } else if (e.state === 'v_step') {
+        e.stepT -= dt; e.facingAngle = toHero;
+        const nx = e.x + Math.cos(e.stepA) * VAL_STEP_SPEED * dt, ny = e.y + Math.sin(e.stepA) * VAL_STEP_SPEED * dt;
+        if (curSpd > 0 && !(currentMap.grid && solidCell(terrainAt(nx, ny), false))) { e.x = nx; e.y = ny; } else e.stepT = 0;
+        if (e.stepT <= 0) e.state = 'idle';
+    } else if (e.state === 'rally' || e.state === 'rage') {
+        e.facingAngle = toHero;
+        if (e.stateTimer <= 0) valDone(e, 0.2);
+    // ---- the vault: the spear planted, and over he goes ----
+    } else if (e.state === 'vault_prep') {
+        e.facingAngle = e.aimA = toHero;
+        if (e.stateTimer <= 0) {
+            const land = Math.max(140, rd - 170), x = e.x + rx / rd * Math.min(land, 520), y = e.y + ry / rd * Math.min(land, 520);
+            valLeapTo(e, 'vault', x, y, VAL_VAULT_FLIGHT);
+            effects.push({ type: 'slam_warn', x, y, radius: e.size / 2 + 12, color: '#ff7043', life: VAL_VAULT_FLIGHT, maxLife: VAL_VAULT_FLIGHT });
+        }
+    } else if (e.state === 'vault' || e.state === 'leap') { // in the air: an arc to the marked spot, bigger as he rises
+        const vault = e.state === 'vault';
+        e.leapK = Math.min(1, e.leapK + dt / e.leapT); const k = e.leapK;
+        e.x = lerp(e.lx0, e.lx1, k); e.y = lerp(e.ly0, e.ly1, k); e.liftZ = Math.sin(Math.PI * k) * (vault ? VAL_VAULT_Z : VAL_LEAP_Z); e.facingAngle = e.aimA;
+        if (k >= 1) {
+            e.airborne = false; e.liftZ = 0;
+            if (vault) {
+                valImpact(e.x, e.y, 4);
+                if (Math.hypot(player.x - e.x, player.y - e.y) < e.size / 2 + 12 + R && valHit(e, VAL_VAULT_DMG)) valShove(e, 60);
+                e.state = 'skewer'; e.stateTimer = 0.22; e.afterVault = true;
+            } else { // the Skewer Leap comes down spear-first
+                valImpact(e.x, e.y, 8); hitStopTimer = Math.max(hitStopTimer, 0.1);
+                effects.push({ type: 'slime_shock', x: e.x, y: e.y, radius: VAL_LEAP_R + 30, color: '#c9a227', life: 0.45, maxLife: 0.45 }, { type: 'slime_shock', x: e.x, y: e.y, radius: VAL_LEAP_R + 150, color: '#8d8579', life: 0.7, maxLife: 0.7 });
+                effects.push({ type: 'scorch', x: e.x, y: e.y, r: 70, life: 5, maxLife: 5 });
+                if (Math.hypot(player.x - e.x, player.y - e.y) < VAL_LEAP_R + R && valHit(e, VAL_LEAP_DMG)) valShove(e, 90);
+                e.state = 'skewer'; e.stateTimer = VAL_LEAP_STUCK * pace; e.afterVault = false;
+            }
+        }
+    // ---- Spear Lunge ----
+    } else if (e.state === 'lunge_prep') {
+        aimTrack(VAL_LUNGE_LOCK);
+        if (e.stateTimer <= 0) { e.state = 'lunge'; e.runLeft = VAL_LUNGE_RUN; e.hitDone = false; valImpact(e.x, e.y, 2.5); }
+    } else if (e.state === 'lunge') {
+        e.facingAngle = e.aimA;
+        const step = (curSpd > 0 ? VAL_LUNGE_SPEED : 0) * dt, nx = e.x + Math.cos(e.aimA) * step, ny = e.y + Math.sin(e.aimA) * step;
+        if (step === 0 || (currentMap.grid && solidCell(terrainAt(nx, ny), false))) e.runLeft = 0; else { e.x = nx; e.y = ny; e.runLeft -= step; }
+        if (Math.random() < 0.7) spawnParticle({ kind: 'smoke', color: 'rgba(150, 140, 125, 0.45)', x: e.x - Math.cos(e.aimA) * 24 + jitter(14), y: e.y - Math.sin(e.aimA) * 24 + jitter(14), vx: jitter(50), vy: jitter(50), size: 10, grow: 26, life: 0.55, drag: 2, spin: 0, rot: 0 });
+        const tip = valTip(e, VAL_LUNGE_REACH, e.aimA);
+        if (!e.hitDone && (Math.hypot(player.x - e.x, player.y - e.y) < e.size / 2 + R + 8 || Math.hypot(player.x - tip.x, player.y - tip.y) < R + 8)) { e.hitDone = true; if (valHit(e, VAL_LUNGE_DMG)) valShove(e, 70); }
+        if (e.runLeft <= 0) { e.state = 'lunge_rec'; e.stateTimer = 0.3 * pace; valImpact(tip.x, tip.y, 1.5); } // a skid at the end of it
+    } else if (e.state === 'lunge_rec') {
+        e.facingAngle = e.aimA;
+        if (e.stateTimer <= 0) valDone(e);
+    // ---- Hook & Haul ----
+    } else if (e.state === 'hook_prep') {
+        aimTrack(VAL_HOOK_LOCK);
+        if (e.stateTimer <= 0) { e.state = 'hook_fly'; e.spearD = 0; addShake(1.5); }
+    } else if (e.state === 'hook_fly') {
+        e.facingAngle = e.aimA; e.spearD += VAL_HOOK_SPEED * dt;
+        const tip = e.spear = valTip(e, e.spearD, e.aimA);
+        if (player.z <= 4 && Math.hypot(player.x - tip.x, player.y - tip.y) < R + VAL_HOOK_W) {
+            const parried = player.parryTimer > 0;
+            if (valHit(e, VAL_HOOK_DMG)) { // it bites: dragged in to his feet
+                e.state = 'haul'; e.stateTimer = 1.2; const a = Math.atan2(player.y - e.y, player.x - e.x);
+                player.dash = null; player.charge = null;
+                e.pull = player.grappleTarget = { x: e.x + Math.cos(a) * (e.size / 2 + R + 14), y: e.y + Math.sin(a) * (e.size / 2 + R + 14), speed: 1700, iFrames: false, noLine: true };
+            } else if (parried) { e.state = 'hook_reel'; burst(tip.x, tip.y, e.aimA + Math.PI, 1.4, 10, { kind: 'spark', color: '#ffe0b2', size: 2.2, speed: [120, 300], life: 0.3, drag: 5 }); } // knocked aside
+        }
+        if (e.state === 'hook_fly' && (e.spearD >= VAL_HOOK_RANGE || valWall(tip.x, tip.y))) { e.state = 'hook_stuck'; e.stateTimer = VAL_HOOK_STUCK * pace; valImpact(tip.x, tip.y, 3); }
+    } else if (e.state === 'hook_stuck') { // the spear bit the deck: he leans on the chain to tug it free
+        e.facingAngle = e.aimA; e.spear = valTip(e, e.spearD, e.aimA);
+        if (Math.random() < 0.15) burst(e.spear.x, e.spear.y, e.aimA + Math.PI, 1, 2, { kind: 'debris', color: '#8d8579', size: 2, speed: [30, 90], life: 0.35, drag: 3 });
+        if (e.stateTimer <= 0) { e.state = 'hook_reel'; burst(e.spear.x, e.spear.y, e.aimA + Math.PI, 1.4, 8, { kind: 'debris', color: '#8d8579', size: 3, speed: [80, 200], life: 0.45, drag: 3 }); }
+    } else if (e.state === 'hook_reel') {
+        e.facingAngle = e.aimA; e.spearD -= 1800 * dt; e.spear = valTip(e, Math.max(0, e.spearD), e.aimA);
+        if (e.spearD <= 0) { e.spear = null; if (--e.hooks > 0) valPrep(e, 'hook_prep', 0.4, valHookLane(e, 0.4)); else valDone(e); }
+    } else if (e.state === 'haul') { // reeling the hero in on the chain; at his feet, the kick
+        const a = Math.atan2(player.y - e.y, player.x - e.x); e.facingAngle = a; e.aimA = a;
+        e.spear = { x: player.x, y: player.y, a };
+        if (Math.random() < 0.5) spawnParticle({ kind: 'smoke', color: 'rgba(150, 140, 125, 0.45)', x: player.x + jitter(10), y: player.y + jitter(10), vx: jitter(40), vy: jitter(40), size: 9, grow: 18, life: 0.45, drag: 2, spin: 0, rot: 0 }); // dragged along the slabs
+        if (player.grappleTarget !== e.pull || e.stateTimer <= 0) { // arrived (or broke free with a dash)
+            if (player.grappleTarget === e.pull) player.grappleTarget = null;
+            e.pull = null; e.spear = null;
+            if (rd < e.size / 2 + R + 40) { e.kickAt = fxTime; if (valHit(e, VAL_KICK_DMG)) { valImpact(player.x, player.y, 3); startDash({ x: e.x + Math.cos(a) * 280, y: e.y + Math.sin(a) * 280, dur: 0.3, arc: 22, iFrames: false }); } } // skillfx_space.js: off his boot
+            if (--e.hooks > 0) valPrep(e, 'hook_prep', 0.45, valHookLane(e, 0.45));
+            else { e.state = 'lunge_rec'; e.stateTimer = 0.3; }
+        }
+    // ---- Sweeping Arc ----
+    } else if (e.state === 'arc_prep') {
+        aimTrack(VAL_ARC_LOCK);
+        if (e.stateTimer <= 0) {
+            e.state = 'arc_strike'; e.stateTimer = 0.18; e.sweepAt = fxTime; addShake(3);
+            effects.push({ type: 'val_slash', e, a: e.aimA, R: e.size / 2 + VAL_ARC_REACH, half: VAL_ARC_HALF, life: 0.24, maxLife: 0.24 }); // bandits.js: the crescent
+            let off = toHero - e.aimA; while (off > Math.PI) off -= Math.PI * 2; while (off < -Math.PI) off += Math.PI * 2;
+            if (rd < e.size / 2 + VAL_ARC_REACH + R && Math.abs(off) < VAL_ARC_HALF + R / Math.max(rd, 20) && valHit(e, VAL_ARC_DMG)) valShove(e, 80);
+        }
+    } else if (e.state === 'arc_strike') {
+        e.facingAngle = e.aimA;
+        if (e.stateTimer <= 0) { e.state = 'lunge_rec'; e.stateTimer = 0.25 * pace; }
+    // ---- Spear Toss ----
+    } else if (e.state === 'toss_prep') {
+        aimTrack(VAL_TOSS_LOCK);
+        if (e.stateTimer <= 0) { e.state = 'toss_out'; e.spearD = 0; e.hitOut = e.hitBack = false; addShake(1.5); }
+    } else if (e.state === 'toss_out' || e.state === 'toss_back') {
+        e.facingAngle = e.aimA; const out = e.state === 'toss_out';
+        e.spearD += (out ? VAL_TOSS_OUT : -VAL_TOSS_BACK) * dt;
+        const tip = e.spear = valTip(e, Math.max(0, e.spearD), e.aimA);
+        if (!(out ? e.hitOut : e.hitBack) && player.z <= 4 && Math.hypot(player.x - tip.x, player.y - tip.y) < R + VAL_TOSS_W) { if (out) e.hitOut = true; else e.hitBack = true; valHit(e, VAL_TOSS_DMG); }
+        if (out && (e.spearD >= VAL_TOSS_RANGE || valWall(tip.x, tip.y))) { e.state = 'toss_hold'; e.stateTimer = 0.12; valImpact(tip.x, tip.y, 2.5); }
+        if (!out && e.spearD <= 0) valDone(e);
+    } else if (e.state === 'toss_hold') {
+        e.facingAngle = e.aimA;
+        if (e.stateTimer <= 0) e.state = 'toss_back';
+    // ---- Chain Lasso ----
+    } else if (e.state === 'lasso_prep') {
+        e.facingAngle = toHero;
+        if (e.stateTimer <= 0) {
+            effects.push({ type: 'val_lash', e, x: e.x, y: e.y, R: VAL_LASSO_R, life: 0.3, maxLife: 0.3 }); addShake(4);
+            for (let k = 0; k < 20; k++) { const a = k / 20 * Math.PI * 2; burst(e.x + Math.cos(a) * VAL_LASSO_R, e.y + Math.sin(a) * VAL_LASSO_R, a, 0.8, 1, { kind: 'spark', color: '#ffe0b2', size: 2, speed: [80, 220], life: 0.3, drag: 5 }); }
+            if (Math.abs(rd - VAL_LASSO_R) < VAL_LASSO_W + R) valHit(e, VAL_LASSO_DMG);
+            e.state = 'lunge_rec'; e.aimA = toHero; e.stateTimer = 0.3 * pace;
+        }
+    // ---- Chain Cyclone ----
+    } else if (e.state === 'cyc_prep') {
+        e.facingAngle = toHero; e.cycA = toHero + Math.PI; // the arm starts on the far side and comes round
+        if (e.stateTimer <= 0) { e.state = 'cyclone'; e.cycLeft = VAL_CYC_TURNS * Math.PI * 2; e.cycHitCd = 0; e.cycHalf = 0; effects.push({ type: 'val_cyclone', e, R: VAL_CYC_R, dir: e.cycDir, spin: true, life: 9, maxLife: 9 }); }
+    } else if (e.state === 'cyclone') {
+        const da = e.cycDir * Math.PI * 2 / (VAL_CYC_TURN * pace) * dt; e.cycA += da; e.cycLeft -= Math.abs(da); e.facingAngle = e.cycA;
+        if (curSpd > 0) { e.x += rx / rd * VAL_CYC_DRIFT * dt; e.y += ry / rd * VAL_CYC_DRIFT * dt; }
+        const tip = e.spear = valTip(e, VAL_CYC_R - e.size / 2, e.cycA);
+        if (Math.random() < 0.5) burst(tip.x, tip.y, e.cycA + e.cycDir * Math.PI / 2 + Math.PI, 0.8, 1, { kind: 'spark', color: '#ffcc80', size: 2, speed: [80, 200], life: 0.25, drag: 5 }); // the blade scoring the deck
+        if (Math.random() < 0.35) spawnParticle({ kind: 'smoke', color: 'rgba(150, 140, 125, 0.4)', x: tip.x, y: tip.y, vx: jitter(60), vy: jitter(60), size: 12, grow: 26, life: 0.6, drag: 2, spin: 0, rot: 0 });
+        if ((e.cycHalf += Math.abs(da)) >= Math.PI) { e.cycHalf = 0; addShake(1.5); }
+        if (!(e.cycHitCd > 0) && distToSegment(player.x, player.y, e.x, e.y, tip.x, tip.y) < R + VAL_CYC_W && valHit(e, VAL_CYC_DMG)) e.cycHitCd = 0.6;
+        if (e.cycLeft <= 0) { for (const f of effects) if (f.e === e && f.type === 'val_cyclone') f.life = 0; e.state = 'lunge_rec'; e.aimA = e.cycA; e.stateTimer = 0.5; e.spear = null; } // winded after the spin
+    // ---- Skewer Leap ----
+    } else if (e.state === 'leap_prep') {
+        e.facingAngle = e.aimA = toHero;
+        if (e.stateTimer <= 0) {
+            valLeapTo(e, 'leap', player.x, player.y, VAL_LEAP_FLIGHT);
+            effects.push({ type: 'slam_warn', x: e.lx1, y: e.ly1, radius: VAL_LEAP_R, color: '#ff5252', life: VAL_LEAP_FLIGHT, maxLife: VAL_LEAP_FLIGHT });
+        }
+    } else if (e.state === 'skewer') { // the spear driven into the deck: he wrenches it free
+        e.facingAngle = e.aimA;
+        if (e.stateTimer <= 0) valDone(e, e.afterVault ? 0.15 : undefined); // straight into the next move after a vault
+    }
+};
+
 const UNDERTOW_WARN = 0.65; // the Amalgam's Undertow: warning ring before it erupts under you (1 s was too easy to walk out of, 0.5 too tight)
 
 var EnemyAI = {
     'slime_melee': MeleeAI, 'thief': ThiefAI, 'shield': ShieldAI, 'voltaic_ooze': MeleeAI, 'toxic_sludge': MeleeAI, 'queen_guard': MeleeAI,
     'slime_ranged': RangedAI, 'archer': RangedAI,
     
-    'valerius_archer': (e, dt, curSpd, edx, edy, edist, i) => {
-        e.attackTimer -= dt;
-        if (e.attackTimer <= 0 && e.frozenTimer <= 0) {
-            projectiles.push({ x: e.x, y: e.y, vx: (edx/edist)*400, vy: (edy/edist)*400, radius: 6, color: '#ff5722', life: 5.0, isEnemy: true, owner: e, damage: e.dmg, shape: 'arrow' });
-            e.attackTimer = 1.2; 
-        }
-    },
-
     // The Warchief: a knife fan, a Bull Rush down a lane marked on the ground, and his torch (it sets the ground alight where it lands). Below half
     // health he also kicks lit powder kegs at you (bandits.js). Hitting him with a keg blast staggers him.
     'boss_warlord': (e, dt, curSpd, edx, edy, edist, i) => {
@@ -650,153 +917,7 @@ var EnemyAI = {
     // The Beastmaster: bolas, a pack of hounds (they die with him), three jousts down lanes drawn on the ground (bandits.js
     // lance_lane), and a Kennel Call (a horn, a pack out of the reeds) at half health and again at a quarter.
     'boss_beastmaster': BeastmasterAI,
-    'boss_valerius': (e, dt, curSpd, edx, edy, edist, i) => {
-        let hpPercent = e.hp / e.maxHp;
-
-        if (e.state === 'jump_in') {
-            e.stateTimer -= dt;
-            e.y += ((e.targetY - e.y) * 10 * dt);
-            if (e.stateTimer <= 0) {
-                e.y = e.targetY; e.state = 'idle'; e.stateTimer = 2.0;
-                effects.push({ type: 'circle', x: e.x, y: e.y, radius: 100, color: '#4e342e', life: 0.5, maxLife: 0.5 });
-            }
-            return;
-        }
-
-        if (e.isStaggered) {
-            e.renderColor = '#ffeb3b'; e.staggerTimer -= dt;
-            if (e.staggerTimer <= 0) {
-                e.isStaggered = false; e.shieldHp = 0;
-            }
-            return;
-        }
-        e.renderColor = e.color;
-
-        let phase = 1;
-        if (hpPercent <= 0.65 && hpPercent > 0.3) phase = 2;
-        if (hpPercent <= 0.3) phase = 3;
-
-        e.stateTimer -= dt;
-
-        if (!e.state || e.state === 'idle') {
-            if (phase === 1) {
-                if (edist > 100) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
-                if (e.stateTimer <= 0) {
-                    e.state = (edist > 200) ? 'lunge' : (Math.random() < 0.4 ? 'sunder' : 'lunge');
-                    e.stateTimer = e.state === 'lunge' ? 0.6 : 1.5;
-                    if (e.state === 'lunge') {
-                        let px = player.x; let py = player.y;
-                        if (player.isMoving) {
-                            px += (keys.d ? 1 : (keys.a ? -1 : 0)) * player.speed * 0.4;
-                            py += (keys.s ? 1 : (keys.w ? -1 : 0)) * player.speed * 0.4;
-                        }
-                        let [pdx, pdy, pdist] = getVector(e.x, e.y, px, py);
-                        e.dashVx = (pdx/pdist) * curSpd * 14.0;
-                        e.dashVy = (pdy/pdist) * curSpd * 14.0;
-                    }
-                }
-            } else if (phase === 2) {
-                let cx = (currentMap.left + currentMap.right)/2;
-                let cy = (currentMap.top + currentMap.bottom)/2;
-                let [cdx, cdy, cdist] = getVector(e.x, e.y, cx, cy);
-                if (cdist > 10) { e.x += (cdx/cdist)*curSpd*3*dt; e.y += (cdy/cdist)*curSpd*3*dt; }
-
-                if (!e.archersSpawned) {
-                    e.archersSpawned = true; e.shieldHp = 2000; e.facingAngle = Math.PI; 
-                    enemies.push({ x: currentMap.left + 50, y: cy - 100, size: 24, color: '#8d6e63', speed: 0, hp: 300, maxHp: 300, type: 'valerius_archer', dmg: e.dmg*0.6, xp: 0, attackTimer: 0.5, ammo: 999, isValeriusMinion: true, frozenTimer: 0 });
-                    enemies.push({ x: currentMap.right - 50, y: cy + 100, size: 24, color: '#8d6e63', speed: 0, hp: 300, maxHp: 300, type: 'valerius_archer', dmg: e.dmg*0.6, xp: 0, attackTimer: 0.5, ammo: 999, isValeriusMinion: true, frozenTimer: 0 });
-                    activeEnemies += 2;
-                }
-
-                if (e.shieldHp <= 0 && !e.phase2Broken) {
-                    e.phase2Broken = true; e.isStaggered = true; e.staggerTimer = 3.0; e.state = 'idle'; e.stateTimer = 3.0;
-                    for(let j=enemies.length-1; j>=0; j--) {
-                        if (enemies[j].isValeriusMinion) { enemies[j].hp = 0; checkEnemyDeath(enemies[j]); }
-                    }
-                    return;
-                }
-
-                if (e.stateTimer <= 0 && !e.isStaggered) {
-                    e.state = 'javelin_volley'; e.stateTimer = 2.0; e.volleyAngle = e.facingAngle - 1.0;
-                }
-            } else if (phase === 3) {
-                if (edist > 150) { e.x += (edx/edist)*curSpd*1.5*dt; e.y += (edy/edist)*curSpd*1.5*dt; }
-                if (e.stateTimer <= 0) { 
-                    let moves = ['chain_hook', 'frenzy_lunge', 'slam'];
-                    e.state = moves[Math.floor(Math.random() * moves.length)];
-                    if (e.state === 'chain_hook') { e.stateTimer = 1.0; e.hookFired = false; }
-                    else if (e.state === 'frenzy_lunge') { 
-                        e.stateTimer = 0.8; 
-                        e.dashVx = (edx/edist) * curSpd * 8.0; 
-                        e.dashVy = (edy/edist) * curSpd * 8.0; 
-                    }
-                    else if (e.state === 'slam') { e.stateTimer = 1.0; }
-                }
-            }
-        } 
-        else if (e.state === 'lunge') {
-            if (e.stateTimer > 0.2) {
-                effects.push({ type: 'line', x1: e.x, y1: e.y, x2: e.x + e.dashVx*0.4, y2: e.y + e.dashVy*0.4, color: 'rgba(255,0,0,0.5)', life: 0.1, maxLife: 0.1, lineWidth: 24 });
-            } else { 
-                e.x += e.dashVx * dt; e.y += e.dashVy * dt; 
-                if (Math.hypot(player.x - e.x, player.y - e.y) < e.size/2 + player.radius + 15) { takeDamage(e.dmg * 2); e.state = 'idle'; e.stateTimer = 1.5; } 
-            }
-            if (e.stateTimer <= 0) { e.state = 'idle'; e.stateTimer = 0.8; }
-        }
-        else if (e.state === 'sunder') {
-            if (e.stateTimer > 0.5) { effects.push({ type: 'circle', x: e.x, y: e.y, radius: 100, color: 'rgba(93, 64, 55, 0.3)', life: 0.1, maxLife: 0.1 }); }
-            else {
-                effects.push({ type: 'puddle', x: e.x, y: e.y, radius: 100, color: '#5d4037', life: 4.0, maxLife: 4.0, dmg: e.dmg });
-                e.state = 'idle'; e.stateTimer = 1.5;
-            }
-        }
-        else if (e.state === 'javelin_volley') {
-            e.volleyAngle += dt * 1.5; 
-            if (e.stateTimer > 0 && e.stateTimer % 0.2 < 0.05) {
-                // ADDED shape: 'spear' to the end of this projectile push
-                projectiles.push({ x: e.x, y: e.y, vx: Math.cos(e.volleyAngle)*600, vy: Math.sin(e.volleyAngle)*600, radius: 8, color: '#ff9800', life: 3.0, isEnemy: true, owner: e, damage: e.dmg, shape: 'spear' });
-            }
-            if (e.stateTimer <= 0) { e.state = 'idle'; e.stateTimer = 2.0; e.facingAngle = Math.atan2(player.y - e.y, player.x - e.x); }
-        }
-        else if (e.state === 'chain_hook') {
-            if (e.stateTimer > 0.5) {
-                effects.push({ type: 'line', x1: e.x, y1: e.y, x2: player.x, y2: player.y, color: 'rgba(117, 117, 117, 0.5)', life: 0.1, maxLife: 0.1 });
-                e.hookTargetX = player.x; e.hookTargetY = player.y;
-            } else if (!e.hookFired) {
-                e.hookFired = true;
-                const [hx, hy, hdist] = getVector(e.x, e.y, e.hookTargetX, e.hookTargetY);
-                projectiles.push({ x: e.x, y: e.y, vx: (hx/hdist)*1200, vy: (hy/hdist)*1200, radius: 15, color: '#757575', life: 2.0, isEnemy: true, owner: e, damage: e.dmg, type: 'chain_hook', sourceBoss: e });
-            }
-            if (e.stateTimer <= 0 && e.hookFired) { e.stateTimer = 0.1; } 
-        }
-        else if (e.state === 'hook_pull') {
-            const [px, py, pdist] = getVector(e.x, e.y, e.pullTargetX, e.pullTargetY);
-            if (pdist > 50) { e.x += (px/pdist)*2500*dt; e.y += (py/pdist)*2500*dt; }
-            else {
-                e.x = e.pullTargetX; e.y = e.pullTargetY;
-                effects.push({ type: 'circle', x: e.x, y: e.y, radius: 200, color: '#5d4037', life: 0.3, maxLife: 0.3 });
-                if (Math.hypot(player.x - e.x, player.y - e.y) <= 200 + player.radius) { takeDamage(e.dmg * 2); buffs.rooted = 1.0; }
-                e.state = 'idle'; e.stateTimer = 2.0;
-            }
-        }
-        else if (e.state === 'frenzy_lunge') {
-            if (e.stateTimer > 0.4) {
-                effects.push({ type: 'line', x1: e.x, y1: e.y, x2: e.x + e.dashVx*0.3, y2: e.y + e.dashVy*0.3, color: 'rgba(255,87,34,0.6)', life: 0.1, maxLife: 0.1, lineWidth: 10 });
-            } else { 
-                e.x += e.dashVx * dt; e.y += e.dashVy * dt; 
-                if (Math.hypot(player.x - e.x, player.y - e.y) < e.size/2 + player.radius) { takeDamage(e.dmg * 2.5); e.state = 'idle'; e.stateTimer = 1.0; } 
-            }
-            if (e.stateTimer <= 0) { e.state = 'idle'; e.stateTimer = 0.5; }
-        }
-        else if (e.state === 'slam') {
-            if (e.stateTimer > 0.4) { effects.push({ type: 'circle', x: e.x, y: e.y, radius: 140, color: 'rgba(78, 52, 46, 0.3)', life: 0.1, maxLife: 0.1 }); }
-            else {
-                effects.push({ type: 'circle', x: e.x, y: e.y, radius: 140, color: '#4e342e', life: 0.3, maxLife: 0.3 });
-                if (edist <= 140 + player.radius) takeDamage(e.dmg * 3);
-                e.state = 'idle'; e.stateTimer = 1.5;
-            }
-        }
-    },
+    'boss_valerius': ValeriusAI, // the duel on the bridge (above)
     'amalgam_minion': (e, dt, curSpd, edx, edy, edist, i) => { 
         if (e.dazed > 0) { e.dazed -= dt; return; } // still seeing stars after the landing
         const boss = enemies.find(en => !en.dead && en.type === 'boss_amalgam');

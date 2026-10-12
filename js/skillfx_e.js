@@ -208,7 +208,7 @@ function drawESkillEffect(ef, p, k) {
             ctx.restore();
             return true;
         }
-        case 'blade_launch': { // Swordsaint Deploy: the blade leaps from the hand
+        case 'blade_launch': { // Kensei Deploy: the blade leaps from the hand
             if (!ef.burstDone) {
                 ef.burstDone = true;
                 burst(ef.x, ef.y, 0, Math.PI * 2, 10, { kind: 'spark', color: '#84ffff', size: 2, life: 0.3, speed: [150, 320], drag: 6 });
@@ -224,7 +224,7 @@ function drawESkillEffect(ef, p, k) {
             ctx.restore();
             return true;
         }
-        case 'blade_recall': { // Swordsaint Recall: the katana streaks back to the hand, trailing ghosts
+        case 'blade_recall': { // Kensei Recall: the katana streaks back to the hand, trailing ghosts
             const ang = Math.atan2(ef.y2 - ef.y1, ef.x2 - ef.x1);
             ctx.save();
             ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 1;

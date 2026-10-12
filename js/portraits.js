@@ -483,7 +483,7 @@ const PORTRAITS = {
         },
     },
 
-    swordsaint: {
+    kensei: {
         color: '#00bcd4',
         bg(c, t) {
             for (let i = 0; i < 4; i++) { // faint slash arcs drifting past
@@ -567,6 +567,123 @@ function drawPortrait(cv, id, t, a) {
     c.setTransform(k, 0, 0, k, 0, 0); // melt the waist into the card
     g = c.createLinearGradient(0, PT_H - 70, 0, PT_H); g.addColorStop(0, 'rgba(32, 28, 24, 0)'); g.addColorStop(1, 'rgba(32, 28, 24, 1)');
     c.fillStyle = g; c.fillRect(0, PT_H - 70, PT_W, 70);
+}
+
+// ---------- big dialogue portraits (dialogue.js) ----------
+// Taller than the class cards: head to hips, painted to stand large beside the text box, no card behind them. Each has its
+// own frame (w x h), a bg drawn behind (an aura), draw (lit from the top-left as one layer, with a red rim from behind) and fx.
+const BIG_PORTRAITS = {
+    // Valerius the Vanguard: an iron-crowned great helm with embers for eyes, a horse-tail crest, spiked pauldrons, a crimson
+    // tabard with his gold sigil over blackened plate, a skull on his belt; his war spear held across him, its chain wound round
+    // his other forearm and hanging from the fist; a crimson cloak billowing out behind
+    valerius: {
+        w: 400, h: 520,
+        bg(c, t) {
+            const g = c.createRadialGradient(200, 270, 20, 200, 270, 196); g.addColorStop(0, 'rgba(150, 16, 12, 0.6)'); g.addColorStop(1, 'rgba(150, 16, 12, 0)'); // fades out inside the frame
+            c.fillStyle = g; c.fillRect(0, 0, 400, 520);
+            for (let i = 0; i < 26; i++) { const y = 520 - ((t * (20 + ptRand(i) * 30) + ptRand(i + 9) * 560) % 560), x = ptRand(i + 3) * 400 + Math.sin(t * 1.3 + i) * 10; c.fillStyle = `rgba(255, ${110 + (i % 3) * 45}, 50, ${0.2 + 0.6 * y / 520})`; c.fillRect(x, y, 2.4, 2.4); }
+        },
+        draw(c, t) {
+            const ST = '#4b515a', ST_D = '#2f3338', IRON = '#26292e', RED = '#9a1f1f', GOLD = '#c9a227', H = 520;
+            const fl = Math.sin(t * 1.4) * 7, fl2 = Math.sin(t * 1.9 + 1) * 6, sw = Math.sin(t * 2) * 6;
+            const shadeRight = (path, a = 0.3) => { c.save(); path(); c.clip(); c.fillStyle = `rgba(0, 0, 0, ${a})`; c.fillRect(200, 0, 200, H); c.restore(); }; // cel shading: the side away from the light
+            // the cloak, billowing out behind his shoulders
+            const cloak = () => { c.beginPath(); c.moveTo(116, 170); c.bezierCurveTo(56, 230, 18 - fl, 370, 4 - fl, H + 10); c.lineTo(396 + fl2, H + 10); c.bezierCurveTo(384 + fl2, 370, 344, 230, 284, 170); c.closePath(); };
+            cloak(); ptFill(c, '#4a1416', 3);
+            c.save(); cloak(); c.clip(); c.strokeStyle = GOLD; c.lineWidth = 10; c.stroke(); c.restore(); cloak(); c.strokeStyle = PT_LINE; c.lineWidth = 3; c.stroke();
+            c.strokeStyle = '#2a0a0b'; c.lineWidth = 2.4; c.beginPath(); c.moveTo(96, 250); c.quadraticCurveTo(60 - fl, 380, 48 - fl, H); c.moveTo(304, 250); c.quadraticCurveTo(342 + fl2, 380, 352 + fl2, H); c.moveTo(70, 330); c.quadraticCurveTo(40 - fl, 420, 30 - fl, H); c.stroke(); // folds
+            // the horse-tail crest streaming off the helm
+            ptRibbon(c, '#120d0d', 24, [206, 60], [292, 18 + sw], [352, 96 + sw], [378, 230 + sw]);
+            ptRibbon(c, '#6b1010', 9, [208, 62], [288, 30 + sw], [338, 100 + sw], [360, 214 + sw]);
+            // the faulds and tassets below the belt, behind the tabard
+            for (let k = 0; k < 4; k++) { const y = 408 + k * 26; c.beginPath(); c.moveTo(126 - k * 4, y); c.lineTo(274 + k * 4, y); c.lineTo(278 + k * 4, y + 24); c.lineTo(122 - k * 4, y + 24); c.closePath(); ptFill(c, k % 2 ? ST_D : ST, 2.6); }
+            // the cuirass, broad at the shoulders
+            const plate = () => { c.beginPath(); c.moveTo(106, 180); c.quadraticCurveTo(200, 150, 294, 180); c.lineTo(302, 262); c.quadraticCurveTo(292, 342, 270, 402); c.lineTo(130, 402); c.quadraticCurveTo(108, 342, 98, 262); c.closePath(); };
+            plate(); ptFill(c, ST, 3); shadeRight(plate);
+            c.strokeStyle = ST_D; c.lineWidth = 3; c.beginPath(); c.moveTo(200, 172); c.lineTo(200, 300); c.moveTo(126, 236); c.quadraticCurveTo(160, 262, 196, 240); c.moveTo(274, 236); c.quadraticCurveTo(240, 262, 204, 240); c.stroke(); // the ridge and the chest plates
+            // the tabard: crimson down the front, torn into tatters at the hem, his sigil in gold, blood on it
+            const tab = () => { c.beginPath(); c.moveTo(160, 196); c.lineTo(240, 196); c.lineTo(250, 400); c.lineTo(254, H + 6); c.lineTo(240, 492); c.lineTo(228, H + 6); c.lineTo(214, 488); c.lineTo(200, H + 6); c.lineTo(186, 494); c.lineTo(172, H + 6); c.lineTo(160, 496); c.lineTo(146, H + 6); c.lineTo(150, 400); c.closePath(); };
+            tab(); ptFill(c, RED, 3); shadeRight(tab, 0.25);
+            c.save(); tab(); c.clip(); c.strokeStyle = GOLD; c.lineWidth = 5; c.stroke(); c.restore(); tab(); c.strokeStyle = PT_LINE; c.lineWidth = 3; c.stroke();
+            c.strokeStyle = GOLD; c.lineWidth = 5; c.lineCap = 'round'; c.beginPath(); c.arc(200, 268, 26, 0, Math.PI * 2); c.moveTo(176, 300); c.lineTo(226, 234); c.stroke(); // his sigil: a spear through a ring
+            c.beginPath(); c.moveTo(222, 230); c.lineTo(236, 222); c.lineTo(230, 238); c.closePath(); c.fillStyle = GOLD; c.fill();
+            c.lineWidth = 2.4; for (let k = 0; k < 7; k++) { const a = -2.6 + k * 0.4; c.beginPath(); c.ellipse(200 + Math.cos(a) * 34, 268 + Math.sin(a) * 34, 4.5, 2.6, a + Math.PI / 2, 0, Math.PI * 2); c.stroke(); } // the chain round the ring
+            c.fillStyle = 'rgba(55, 4, 4, 0.8)'; for (const [x, y, r] of [[222, 318, 12], [236, 336, 6], [214, 344, 5], [178, 330, 4], [230, 300, 4], [246, 360, 7]]) { c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill(); }
+            // the belt, a bandit's skull for its buckle
+            c.beginPath(); c.rect(124, 390, 152, 20); ptFill(c, '#2b1d16', 2.6);
+            ptEll(c, 200, 400, 17, 19, '#e8e0cc', 2.6); ptEll(c, 200, 412, 10, 7, '#e8e0cc', 2.2);
+            for (const s of [-1, 1]) ptEll(c, 200 + s * 7, 397, 4.6, 5.4, '#1a120d', 0);
+            c.fillStyle = '#1a120d'; c.beginPath(); c.moveTo(200, 403); c.lineTo(197, 409); c.lineTo(203, 409); c.closePath(); c.fill();
+            c.strokeStyle = '#1a120d'; c.lineWidth = 1.2; c.beginPath(); for (let k = -2; k <= 2; k++) { c.moveTo(200 + k * 3.4, 410); c.lineTo(200 + k * 3.4, 416); } c.stroke();
+            // the spear across him: the shaft from below his left hip up past his right shoulder, a long leaf blade high on our left
+            const P0 = [306, H + 20], P1 = [80, 126], L = Math.hypot(P1[0] - P0[0], P1[1] - P0[1]), dx = (P1[0] - P0[0]) / L, dy = (P1[1] - P0[1]) / L, nx = -dy, ny = dx, at = (u, o = 0) => [P1[0] + dx * u + nx * o, P1[1] + dy * u + ny * o];
+            ptLine(c, '#4a3020', 11, [P0, P1]);
+            c.fillStyle = IRON; for (const u of [0.18, 0.62]) { const q = [P0[0] + (P1[0] - P0[0]) * u, P0[1] + (P1[1] - P0[1]) * u]; c.save(); c.translate(...q); c.rotate(Math.atan2(dy, dx)); c.fillRect(-6, -8, 12, 16); c.restore(); }
+            for (let k = -2; k <= 2; k++) ptLine(c, k % 2 ? '#c62828' : '#8e1b1b', 3, [at(-12, k * 3), at(-34 - Math.abs(k) * 4, k * 6 + Math.sin(t * 3 + k) * 3)]); // the tassel
+            ptPoly(c, [at(-8, -24), at(4, 0), at(-8, 24), at(-2, 0)], '#78909c', 2.6); // the lugs
+            ptPoly(c, [at(2, -11), at(44, -19), at(116, 0), at(44, 19), at(2, 11)], '#d5dde2', 3); // the blade
+            c.strokeStyle = 'rgba(255, 255, 255, 0.7)'; c.lineWidth = 2; c.beginPath(); c.moveTo(...at(10, -4)); c.lineTo(...at(98, -1)); c.stroke();
+            c.fillStyle = 'rgba(70, 6, 6, 0.75)'; c.beginPath(); c.moveTo(...at(84, -6)); c.lineTo(...at(116, 0)); c.lineTo(...at(80, 9)); c.closePath(); c.fill(); // blood on the point
+            // his right arm (our left), bent up to grip the shaft at his chest
+            const grip = [P0[0] + (P1[0] - P0[0]) * 0.745, P0[1] + (P1[1] - P0[1]) * 0.745];
+            ptArm(c, ST, [114, 196], [70, 302], grip, 36, 28);
+            ptEll(c, grip[0], grip[1], 22, 20, '#1c1a1a', 3); c.strokeStyle = GOLD; c.lineWidth = 2; c.beginPath(); c.arc(grip[0], grip[1], 14, -2.4, -0.6); c.stroke(); // the gauntlet's knuckle plate
+            // his left arm (our right), down at his side, the fist clenched round the chain
+            const F = [302, 384];
+            ptArm(c, ST, [288, 196], [336, 300], F, 36, 28);
+            c.strokeStyle = '#90a4ae'; c.lineWidth = 3.4; for (let k = 0; k < 5; k++) { const u = 0.25 + k * 0.13, x = lerp(336, F[0], u), y = lerp(300, F[1], u); c.beginPath(); c.ellipse(x, y, 24, 6.5, -1.1, 0, Math.PI * 2); c.stroke(); } // wound round the forearm
+            for (let k = 0; k < 9; k++) { const y = F[1] + 18 + k * 15, x = F[0] + 4 + Math.sin(k * 0.5 + t * 1.5) * 3 * k * 0.3; c.lineWidth = 3; c.strokeStyle = k % 2 ? IRON : '#90a4ae'; c.beginPath(); if (k % 2) { c.moveTo(x, y - 6); c.lineTo(x, y + 6); } else c.ellipse(x, y, 5.5, 8.5, 0, 0, Math.PI * 2); c.stroke(); } // hanging from the fist
+            ptEll(c, F[0], F[1], 23, 21, '#1c1a1a', 3);
+            // the pauldrons: three lames each, gold-rimmed, iron spikes along the top; the right one cracked
+            for (const s of [-1, 1]) {
+                const cx = 200 + s * 94, cy = 184;
+                for (const [ox, oy, rx, ry] of [[s * 10, 32, 40, 20], [s * 5, 16, 48, 26], [0, 0, 56, 34]]) { ptEll(c, cx + ox, cy + oy, rx, ry, ST, 3, s * 0.28); c.strokeStyle = GOLD; c.lineWidth = 2.4; c.beginPath(); c.ellipse(cx + ox, cy + oy, rx - 5, ry - 5, s * 0.28, Math.PI * 1.05, Math.PI * 1.95); c.stroke(); }
+                if (s > 0) { c.save(); c.beginPath(); c.ellipse(cx, cy, 56, 34, 0.28, 0, Math.PI * 2); c.clip(); c.fillStyle = 'rgba(0, 0, 0, 0.3)'; c.fillRect(cx - 60, cy - 40, 120, 80); c.restore(); }
+                for (let k = 0; k < 3; k++) { const a = -Math.PI / 2 + s * (0.35 + k * 0.42), bx = cx + Math.cos(a) * 46, by = cy + Math.sin(a) * 28; ptPoly(c, [[bx - 7, by + 2], [bx + Math.cos(a) * 34, by + Math.sin(a) * 34 - 6], [bx + 7, by + 2]], IRON, 2.4); }
+                ptEll(c, cx - s * 18, cy - 12, 10, 5, 'rgba(255, 255, 255, 0.22)', 0, s * 0.28);
+            }
+            c.strokeStyle = '#141518'; c.lineWidth = 3; c.beginPath(); c.moveTo(84, 166); c.lineTo(100, 182); c.lineTo(90, 194); c.lineTo(104, 208); c.stroke(); // the crack
+            c.fillStyle = 'rgba(55, 4, 4, 0.8)'; for (const [x, y, r] of [[128, 196, 6], [118, 206, 3.5], [140, 190, 3]]) { c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill(); }
+            // the gorget and the great helm, an iron crown round its top
+            ptEll(c, 200, 166, 48, 17, ST_D, 3);
+            const helm = () => { c.beginPath(); c.moveTo(160, 102); c.quadraticCurveTo(160, 56, 200, 53); c.quadraticCurveTo(240, 56, 240, 102); c.lineTo(238, 150); c.quadraticCurveTo(200, 168, 162, 150); c.closePath(); };
+            helm(); ptFill(c, ST, 3); shadeRight(helm);
+            for (let k = 0; k < 5; k++) { const x = 168 + k * 16, top = 46 - (k === 2 ? 14 : k % 2 ? 6 : 0); ptPoly(c, [[x - 7, 74], [x, top], [x + 7, 74]], IRON, 2.4); } // the crown's spikes
+            c.beginPath(); c.rect(160, 70, 80, 11); ptFill(c, IRON, 2.6); c.fillStyle = GOLD; for (let k = 0; k < 5; k++) c.fillRect(165 + k * 16, 73.5, 5, 4);
+            c.fillStyle = '#0b0b0d'; c.fillRect(168, 102, 64, 11); c.fillRect(195, 102, 10, 44); // the T of the visor
+            c.fillStyle = '#0b0b0d'; for (let k = 0; k < 4; k++) for (let j = 0; j < 2; j++) { c.beginPath(); c.arc(218 + j * 8, 124 + k * 7, 1.8, 0, Math.PI * 2); c.fill(); } // breaths
+            c.strokeStyle = '#141518'; c.lineWidth = 2.6; c.beginPath(); c.moveTo(168, 84); c.quadraticCurveTo(176, 96, 170, 108); c.stroke(); // a dent
+            c.fillStyle = 'rgba(255, 255, 255, 0.28)'; c.fillRect(166, 84, 7, 52);
+            const blink = 0.85 + 0.15 * Math.sin(t * 3.1); // two embers in the slit
+            c.save(); c.shadowBlur = 18; c.shadowColor = '#ff3d00'; c.fillStyle = `rgba(255, 171, 64, ${blink})`;
+            for (const s of [-1, 1]) { c.beginPath(); c.ellipse(200 + s * 16, 107.5, 6, 2.6, s * -0.2, 0, Math.PI * 2); c.fill(); }
+            c.restore();
+        },
+        fx(c, t) { for (const s of [-1, 1]) ptGlow(c, 200 + s * 16, 107, 30, '#ff5722', 0.3 + 0.1 * Math.sin(t * 3.1)); },
+    },
+};
+
+// Paint a big portrait onto `cv` (sized to its frame's aspect): the aura behind, the figure lit as one layer, the glows on top
+function drawBigPortrait(cv, id, t) {
+    const P = BIG_PORTRAITS[id]; if (!P) return;
+    const c = cv.getContext('2d'), k = cv.width / P.w;
+    c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, cv.width, cv.height);
+    c.setTransform(k, 0, 0, k, 0, 0); c.lineJoin = 'round';
+    if (P.bg) P.bg(c, t);
+    if (ptLayer.width !== cv.width || ptLayer.height !== cv.height) { ptLayer.width = cv.width; ptLayer.height = cv.height; }
+    const L = ptLayerCtx, breathe = 1 + Math.sin(t * 2) * 0.01;
+    L.setTransform(1, 0, 0, 1, 0, 0); L.clearRect(0, 0, ptLayer.width, ptLayer.height);
+    L.setTransform(k, 0, 0, k, 0, 0); L.translate(P.w / 2, P.h); L.scale(1, breathe); L.translate(-P.w / 2, -P.h); L.lineJoin = 'round';
+    P.draw(L, t);
+    L.setTransform(1, 0, 0, 1, 0, 0); L.globalCompositeOperation = 'source-atop';
+    let g = L.createLinearGradient(0, 0, ptLayer.width, ptLayer.height); // warm light from the top-left, shadow toward the bottom-right
+    g.addColorStop(0, 'rgba(255, 230, 200, 0.18)'); g.addColorStop(0.5, 'rgba(255, 255, 255, 0)'); g.addColorStop(1, 'rgba(0, 0, 20, 0.42)');
+    L.fillStyle = g; L.fillRect(0, 0, ptLayer.width, ptLayer.height);
+    g = L.createLinearGradient(ptLayer.width * 0.62, 0, ptLayer.width, 0); g.addColorStop(0, 'rgba(255, 40, 20, 0)'); g.addColorStop(1, 'rgba(255, 40, 20, 0.22)'); // a red rim from the fires behind
+    L.fillStyle = g; L.fillRect(0, 0, ptLayer.width, ptLayer.height);
+    L.globalCompositeOperation = 'source-over';
+    c.setTransform(1, 0, 0, 1, 0, 0); c.drawImage(ptLayer, 0, 0);
+    if (P.fx) { c.setTransform(k, 0, 0, k, 0, 0); P.fx(c, t); }
 }
 
 // Each carousel card has a <canvas class="class-portrait" data-class="...">.

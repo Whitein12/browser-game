@@ -271,7 +271,7 @@ function drawSpaceProjectile(p) {
 
 function drawSpaceEffect(ef, p, k) {
     switch (ef.type) {
-        case 'dash_trail': { // generic dash streak (Nightblade / Swordsaint dashes keep its end on the player)
+        case 'dash_trail': { // generic dash streak (Nightblade / Kensei dashes keep its end on the player)
             drawStreak(ef.x1, ef.y1, ef.x2, ef.y2, (ef.width || 16) * (0.4 + 0.6 * k), ef.color, k);
             return true;
         }
@@ -382,7 +382,7 @@ function drawSpaceEffect(ef, p, k) {
             return true;
         }
 
-        case 'iai_flash': { // Swordsaint Shadow Step: the cut appears along the path a beat after the dash (big: the Iaido finisher, combos.js)
+        case 'iai_flash': { // Kensei Shadow Step: the cut appears along the path a beat after the dash (big: the Iaido finisher, combos.js)
             if (p < 0.12) return true;
             const q = (p - 0.12) / 0.88;
             if (!ef.burstDone) {
@@ -405,7 +405,7 @@ function drawSpaceEffect(ef, p, k) {
             return true;
         }
 
-        case 'spatial_swap': { // Swordsaint Spatial Swap: two rifts linked by a twisting helix of light
+        case 'spatial_swap': { // Kensei Spatial Swap: two rifts linked by a twisting helix of light
             if (!ef.burstDone) {
                 ef.burstDone = true;
                 for (const [x, y] of [[ef.x0, ef.y0], [ef.x1, ef.y1]]) burst(x, y, 0, Math.PI * 2, 10, { kind: 'spark', color: '#84ffff', size: 2, life: 0.3, speed: [120, 300], drag: 5 });

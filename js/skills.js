@@ -5,7 +5,7 @@
 // Every attack-speed source, as one bonus (+0.3 = 30% faster). The Tab sheet (hud.js) shows the same number.
 function attackSpeedBonus() {
     let bonus = equipment.gloves ? equipment.gloves.val : 0;
-    if (activeClass.name === 'Swordsaint' && player.stance === 'airborne') bonus += (player.flow / player.maxFlow) * 0.5; // up to +50% in airborne
+    if (activeClass.name === 'Kensei' && player.stance === 'airborne') bonus += (player.flow / player.maxFlow) * 0.5; // up to +50% in airborne
     if (activeClass.name === 'Dragonknight') bonus += player.frenzyStacks * 0.02; // Frenzy: +2% per stack
     return bonus;
 }
@@ -86,9 +86,9 @@ function markForDeathTarget() {
     return best;
 }
 
-// Swordsaint Airborne blade hit (main.js): Flow adds up to +50%, Empowered x1.25. Steered hits land ~12/s, so they hit light
+// Kensei Airborne blade hit (main.js): Flow adds up to +50%, Empowered x1.25. Steered hits land ~12/s, so they hit light
 // Razor's Edge (high risk, high reward): Flow adds up to +150% damage (was +50%) to the slashes and the blade, and every hit
-// you take costs 25 Flow (10 with the Saint's Silk Shroud; combat.js takeDamage)
+// you take costs 25 Flow (10 with the Ronin's Silk Shroud; combat.js takeDamage)
 const BLADE_STEER_MULT = 0.4, BLADE_FLOW_BONUS = 1.5, BLADE_EMPOWER = 1.25, EDGE_FLOW_LOSS = 25, EDGE_SHROUD_LOSS = 10;
 function bladeAttackSpeed() { return hasItem('Aether Grips') ? 1 + equipment.gloves.val : 1; } // the Aether Grips quicken the airborne blade too
 function bladeHitDmg(mult) { return calcDmg(activeClass.basicDmg) * mult * (1 + BLADE_FLOW_BONUS * player.flow / player.maxFlow) * (player.empoweredAirborne ? BLADE_EMPOWER : 1); }
@@ -117,9 +117,10 @@ function steerShot(p, dt) {
 // Rank effects for skills whose ranks would otherwise do nothing (the level-up cards read these too, ui.js RANK_STATS)
 function blinkReach(level) { return calcUtility(350, level); }                                  // Spellweaver Blink: 350 → 560 px
 function vaultReach(sk) { return sk.selectedUpg === 'B' ? 500 : 300 + 40 * (sk.level - 1); }  // Ranger Vault: 300 → 420 px (Acrobatics 500)
-function shadowStepReach(level) { return 300 + 40 * (level - 1) + (hasItem('Windwalker Steps') ? 100 : 0); } // Swordsaint Shadow Step: 300 → 420 px
+function shadowStepReach(level) { return 300 + 40 * (level - 1) + (hasItem('Windwalker Steps') ? 100 : 0); } // Kensei Shadow Step: 300 → 420 px
 function grappleMissPenalty(level) { return Math.max(0, 2.5 - 0.5 * level); }                  // Machinist: +2 → +0.5 s for grappling open ground
-function airborneDrain(level) { return 1 - 0.1 * (Math.max(1, level) - 1); }                    // Swordsaint E: the airborne blade drains Flow 10% slower per rank
+const FLOW_GRACE = 3, FLOW_DECAY = 8; // Kensei in hand (main.js): Flow holds 3 s after the last gain, then fades 8/s (was 1.5 s and 15/s: dodging a crowd drained the bar before the blade could go out)
+function airborneDrain(level) { return 1 - 0.1 * (Math.max(1, level) - 1); }                    // Kensei E: the airborne blade drains Flow 10% slower per rank
 
 // Dragonknight Shield Throw: the shield came back to hand (main.js). Aegis Catch doubles the shield.
 function catchShield(sk) {
@@ -569,7 +570,7 @@ var SkillRegistry = {
             }
         }
     },
-    'Swordsaint': {
+    'Kensei': {
         1: (sk, dmg) => { // Blade Sweep / Blade Surge
             if (galeReady()) { releaseHurricane(); return; } // combos.js Gathering Gale: Q releases the gathered blades as a hurricane
             if (player.stance === 'handheld') {
@@ -579,6 +580,7 @@ var SkillRegistry = {
                 player.parryTimer = 0.3; // Parry window: hits taken at the start of the sweep are parried (see takeDamage)
                 
                 // Destroy Enemy Projectiles
+                let deflected = null;
                 for(let i = projectiles.length - 1; i >= 0; i--) {
                     let p = projectiles[i];
                     if (p.isEnemy) {
@@ -587,11 +589,12 @@ var SkillRegistry = {
                             while(diff < -Math.PI) diff += Math.PI*2; while(diff > Math.PI) diff -= Math.PI*2;
                             if (Math.abs(diff) <= Math.PI/3) { // inside slash cone
                                 effects.push({ type: 'sparkle_poof', x: p.x, y: p.y, color: '#00e5ff' });
-                                p.life = 0; 
+                                p.life = 0; deflected = deflected || p;
                             }
                         }
                     }
                 }
+                if (deflected) parrySuccess({ proj: deflected }); // combat.js: a shot cut out of the air is a parry too (once per sweep), Flawless Execution included
                 
                 let hitAnything = false;
                 for(let e of enemies) {
@@ -692,7 +695,7 @@ var SkillRegistry = {
                         x: startX, y: startY,
                         vx: Math.cos(dashAngle) * moveDist / dur, vy: Math.sin(dashAngle) * moveDist / dur,
                         radius: 85, color: '#00e5ff',
-                        life: dur, // keeps pace with the swordsaint for exactly the length of the dash
+                        life: dur, // keeps pace with the kensei for exactly the length of the dash
                         type: 'pierce',
                         shape: 'phantom_blade_proj',
                         damage: dmg * 2.0,

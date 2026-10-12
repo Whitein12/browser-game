@@ -290,7 +290,7 @@ function drawRmbEffect(ef, p, k) {
             return true;
         }
 
-        case 'gale_crescent': { // Swordsaint Phantom Wind: a huge crescent of wind with ghost katanas riding it
+        case 'gale_crescent': { // Kensei Phantom Wind: a huge crescent of wind with ghost katanas riding it
             const R = ef.radius, a0 = ef.angle - Math.PI / 2, a1 = a0 + Math.PI * easeOut(Math.min(1, el / 0.12));
             if (!ef.burstDone) {
                 ef.burstDone = true;

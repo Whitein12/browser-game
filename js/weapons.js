@@ -11,7 +11,7 @@ const weaponAnim = {
 
 const GLOVES = {
     dragonknight: '#616161', ranger: '#6d4c41', machinist: '#424242', spellweaver: '#0d47a1', nightblade: '#212121',
-    swordsaint: '#e0e0e0', cleric: '#fff8e1', druid: '#5d4037', paladin: '#b0bec5'
+    kensei: '#e0e0e0', cleric: '#fff8e1', druid: '#5d4037', paladin: '#b0bec5'
 };
 
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -352,7 +352,7 @@ const WEAPON_DRAW = {
         ctx.restore();
     },
 
-    // Swordsaint: phantom blade (three-step combo in hand, autonomous in Airborne stance)
+    // Kensei: phantom blade (three-step combo in hand, autonomous in Airborne stance)
     phantom_blade(A) {
         const ab = player.airborneBlade, rare = isRareWeapon();
         let ang, bx, by, thrustExt = 0;
@@ -510,7 +510,7 @@ const WEAPON_DRAW = {
 };
 
 // ==========================================
-// Swordsaint spectral katana
+// Kensei spectral katana
 // ==========================================
 // Drawn in the current local frame: pommel at x=0, tip at x=95, blade curving toward -y.
 
@@ -579,7 +579,7 @@ function drawKatana({ charged = false, empowered = false, rare = false, hilt = t
     ctx.restore();
 }
 
-// Trail color for the Swordsaint's combo: brighter as Flow builds
+// Trail color for the Kensei's combo: brighter as Flow builds
 function flowTrailColor() { return player.flow >= player.maxFlow ? '#84ffff' : '#eceff1'; } // steel below a full bar (the rare weapon's trail was cyan at any Flow)
 
 function drawPlayerWeapon(aimAngle) {
@@ -749,7 +749,7 @@ function drawPlayerProjectile(p) {
         ctx.restore();
         return true;
     }
-    if (p.shape === 'phantom_blade_proj') { // Swordsaint dash: an oversized spectral katana with motion blur
+    if (p.shape === 'phantom_blade_proj') { // Kensei dash: an oversized spectral katana with motion blur
         ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(ang); ctx.scale(1.15, 1.15);
         for (let i = 3; i >= 1; i--) { ctx.save(); ctx.translate(-60 - i * 16, 0); drawKatanaGhost('#00e5ff', 0.1 * (4 - i)); ctx.restore(); }
         ctx.translate(-60, 0);

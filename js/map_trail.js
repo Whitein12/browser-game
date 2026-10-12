@@ -9,7 +9,7 @@
 // surface are live.
 
 STAGE_MAPS.trail = {
-    w: 5400, h: 1800, cell: 25, zoom: 1.25,
+    w: 5400, h: 1800, cell: 25,
     bounds: { left: 30, top: 30, right: 5370, bottom: 1770 },
     start: { x: 260, y: 900 },
     exit: { x: 5150, y: 900 }, exitTo: { x: 5350, y: 900 }, exitR: 90, arrow: '#ffab40',
@@ -19,7 +19,7 @@ STAGE_MAPS.trail = {
 };
 
 const trl = { built: false, ground: null, canopy: null, view: null, grid: null, riverL: null, riverR: null, jam: [], jamCells: [[], []],
-    gateCells: [], spawns: [], lastSpawn: null, nearTrees: null, clumps: [], open: 0, gateOpen: false, gateK: 0, promptAt: 0 };
+    gateCells: [], spawns: [], lastSpawn: null, nearTrees: null, clumps: [], open: 0, gateOpen: false, gateK: 0, promptAt: 0, guard: null };
 
 const TR_ROAD = [[-40, 900], [600, 960], [1200, 840], [1800, 920], [2400, 900], [3200, 880], [3900, 900], [4500, 900], [5440, 900]];
 const TR_JAM = [{ x0: 1975, x1: 2025 }, { x0: 3875, x1: 3925 }]; // the logjams' columns (25 px cells)
@@ -70,7 +70,7 @@ function resetTrail() {
     for (const cells of trl.jamCells) for (const i of cells) trl.grid.data[i] = T_SEAL;
     for (const i of trl.gateCells) trl.grid.data[i] = T_SEAL;
     for (const J of trl.jam) J.k = 0;
-    trl.open = 0; trl.gateOpen = false; trl.gateK = 0; trl.promptAt = 0; trl.lastSpawn = null;
+    trl.open = 0; trl.gateOpen = false; trl.gateK = 0; trl.promptAt = 0; trl.lastSpawn = null; trl.guard = null;
 }
 
 // Calls fn(i) for every cell whose centre lies within r of (x, y)
@@ -550,6 +550,7 @@ function updateTrail(dt) {
     const barX = trl.open === 0 ? TR_JAM[0].x0 : trl.open === 1 ? TR_JAM[1].x0 : trl.gateOpen ? Infinity : TR_GATE.x0;
     if (player.x > barX - player.radius) player.x = barX - player.radius;
     player.wallHit = null; for (const e of enemies) e.wallHit = null;
+    trailGuardCheck(); // the Beastmaster rises when you come near or strike
     if (trl.promptAt && fxTime - trl.promptAt > 4) { trl.promptAt = 0; showStagePrompt(false); } // the 'way is clear' note fades
 }
 
@@ -576,34 +577,70 @@ function updateLogjamBreak(ev, dt) {
         burst(jx, cy, 0, Math.PI * 2, 14, { kind: 'debris', color: '#5d4330', size: 4, speed: [80, 260], life: 0.7, drag: 3 });
         for (let k = 0; k < 8; k++) spawnParticle({ kind: 'smoke', color: 'rgba(90, 80, 66, 0.6)', x: jx + jitter(40), y: cy + jitter(160), vx: WIND_X * 40 + jitter(40), vy: jitter(40) + WIND_Y * 30, size: 22, grow: 40, life: 1.4, drag: 1.5, spin: 0, rot: 0 });
         showStagePrompt(true, 'The way is clear &middot; press on'); trl.promptAt = fxTime;
+        if (ev.i === 1) placeBeastmaster(); // the riverbank opens with him already guarding the bridge
     }
     if (t > 2.6) camera.tx = camera.ty = null;
     if (t > 3.0) stageEvent = null;
 }
 
-// The Beastmaster: waits on the bridge beyond the gate, sounds his horn, leaps over the gate onto the hero's bank
-function startBeastmasterIntro(b) {
-    b.x = 4620; b.y = 900; b.state = 'intro'; b.introZ = 0; b.airborne = false;
-    stageEvent = { type: 'beast_intro', t: 0, boss: b, blocking: true, horn: false, landed: false, card: false };
+// The Beastmaster keeps the bridgehead: from the moment the riverbank opens he's there in front of the gate, crouched between
+// two of his hounds and scratching one behind the ears while the other watches the road. Nothing happens until the hero
+// comes within BEAST_WAKE_R or anything hits him or a hound (updateTrail); then he stands, sounds his horn and the
+// hounds spring up (beast_intro). The two fight beside him (ai.js beastHounds: they die with him).
+const BEAST_GUARD = { x: 4370, y: 900, face: Math.PI }, BEAST_WAKE_R = 330;
+const BEAST_PETS = [[-30, 62, Math.PI], [-55, -72, Math.PI + 0.25]]; // [dx, dy, facing]: the one he strokes lies at his left hand, the other keeps watch
+function startBeastmasterIntro(b) { // stage.js startBossIntro: no cutscene yet, he's just there
+    b.x = BEAST_GUARD.x; b.y = BEAST_GUARD.y; b.state = 'guard'; b.facingAngle = BEAST_GUARD.face; b.petK = 1;
+    const n0 = enemies.length;
+    beastHounds(b, BEAST_PETS.map(([dx, dy]) => [b.x + dx, b.y + dy]), 0); // ai.js
+    b.pets = enemies.slice(n0);
+    b.pets.forEach((h, k) => { h.state = 'rest'; h.restK = 1; h.restFace = h.facingAngle = BEAST_PETS[k][2]; h.petted = k === 0; });
+    trl.guard = b;
 }
 
+// After wave 9 he doesn't wait for wave 10 to appear (he used to pop in after the logjam and the breather, once the hero
+// was already at the bridge): he's placed at wave 10's strength as soon as the riverbank opens, and main.js
+// startNextWave counts him into that wave
+function placeBeastmaster() {
+    if (trl.guard || isEndlessMode || activeDungeonId !== 'bandit_bastion' || !activeDungeon.stage2_boss) return;
+    startBeastmasterIntro(pushBoss(activeDungeon.stage2_boss, 10, BEAST_GUARD.x, BEAST_GUARD.y)); // main.js
+}
+
+// Per frame while he keeps guard (updateTrail): too close, or a hit on him or a hound, and he rises
+function trailGuardCheck() {
+    const b = trl.guard;
+    if (!b || stageEvent) return;
+    if (b.dead || b.state !== 'guard') { trl.guard = null; return; }
+    if (Math.hypot(player.x - b.x, player.y - b.y) < BEAST_WAKE_R || b.hp < b.maxHp || b.pets.some(h => h.dead || h.hp < h.maxHp)) {
+        if (wave === 9) startNextWave(); // still the breather after wave 9: going for him starts his wave now
+        trl.guard = null; b.state = 'waking';
+        stageEvent = { type: 'beast_intro', t: 0, boss: b, blocking: true, a0: b.facingAngle, up: false, horn: false, card: false };
+    }
+}
+
+const angTo = (a, b, k) => { let d = b - a; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return a + d * k; };
 function updateBeastmasterIntro(ev, dt) {
-    const b = ev.boss, t = ev.t;
-    camera.tx = TR_GATE.x0 + 30; camera.ty = TR_GATE.y;
-    if (!ev.horn && t > 0.4) { ev.horn = true; addShake(4); effects.push({ type: 'slime_shock', x: b.x, y: b.y, radius: 170, color: '#c8a060', life: 0.6, maxLife: 0.6 }); }
-    if (t > 1.0 && t < 1.8) { // the leap: an arc over the gate
-        const k = clamp01((t - 1.0) / 0.8);
-        b.airborne = true; b.x = lerp(4620, 4330, k); b.introZ = Math.sin(Math.PI * k) * 60;
+    const b = ev.boss, t = ev.t, pets = b.pets.filter(h => !h.dead);
+    camera.tx = lerp(player.x, b.x, 0.6); camera.ty = lerp(player.y, b.y, 0.6);
+    b.petK = 1 - easeOut(t / 0.5); // he stops scratching and straightens up
+    b.facingAngle = angTo(ev.a0, Math.atan2(player.y - b.y, player.x - b.x), easeOut((t - 0.2) / 0.5));
+    for (const h of pets) { // the hounds spring up and turn on the hero
+        h.restK = 1 - easeOut((t - 0.35) / 0.3);
+        h.facingAngle = angTo(h.restFace, Math.atan2(player.y - h.y, player.x - h.x), easeOut((t - 0.35) / 0.4));
     }
-    if (t >= 1.8 && !ev.landed) {
-        ev.landed = true; b.airborne = false; b.introZ = 0; b.x = 4330; addShake(6);
-        burst(4330, 900, Math.PI, 2.2, 16, { kind: 'debris', color: '#8d8478', size: 4, speed: [80, 260], life: 0.6, drag: 3 });
-        for (let i = 0; i < 6; i++) spawnParticle({ kind: 'smoke', color: 'rgba(120, 110, 96, 0.55)', x: 4330 + jitter(30), y: 900 + jitter(40), vx: jitter(60), vy: jitter(40), size: 18, grow: 30, life: 1.1, drag: 1.5, spin: 0, rot: 0 });
-        effects.push({ type: 'slime_shock', x: 4330, y: 900, radius: 150, color: '#c8a060', life: 0.5, maxLife: 0.5 });
+    if (!ev.up && t > 0.35) { ev.up = true; for (const h of pets) burst(h.x, h.y, 0, Math.PI * 2, 6, { kind: 'debris', color: '#8d8478', size: 2.5, speed: [40, 120], life: 0.4, drag: 4 }); }
+    b.hornK = t < 0.7 ? 0 : t < 0.95 ? easeOut((t - 0.7) / 0.25) : t < 1.75 ? 1 : 1 - clamp01((t - 1.75) / 0.25); // the war horn up to his mouth and down
+    if (!ev.horn && t > 0.95) { // the blast: two rings rolling out across the bank
+        ev.horn = true; addShake(4);
+        effects.push({ type: 'slime_shock', x: b.x, y: b.y, radius: 200, color: '#c8a060', life: 0.6, maxLife: 0.6 });
     }
-    if (t > 2.0 && !ev.card) { ev.card = true; showBossCard(BOSS_NAMES[b.type] || 'The Beastmaster', 'Keeper of the Crossing'); }
-    if (t > 3.0) camera.tx = camera.ty = null;
-    if (t > 3.4) { b.state = 'idle'; b.stateTimer = 1.5; b.airborne = false; b.introZ = 0; stageEvent = null; }
+    if (!ev.horn2 && t > 1.2) { ev.horn2 = true; effects.push({ type: 'slime_shock', x: b.x, y: b.y, radius: 300, color: '#c8a060', life: 0.7, maxLife: 0.7 }); }
+    if (t > 1.4 && !ev.card) { ev.card = true; showBossCard(BOSS_NAMES[b.type] || 'The Beastmaster', 'Keeper of the Crossing'); }
+    if (t > 2.3) camera.tx = camera.ty = null;
+    if (t > 2.6) {
+        b.state = 'idle'; b.stateTimer = 1.0; b.petK = 0; b.hornK = 0; stageEvent = null;
+        for (const h of pets) { h.state = 'circle'; h.restK = 0; h.stateTimer = 0.4 + Math.random() * 0.6; }
+    }
 }
 
 // The Beastmaster is dead: the chain snaps, the barrier falls aside, the bridge is open and the exit appears
@@ -640,9 +677,6 @@ function drawTrailGround() {
     if (cavIn(F.x, F.y, V)) {
         ctx.save(); ctx.globalCompositeOperation = 'lighter'; glow(ctx, F.x, F.y, 140, '#ff8f00', 0.32 + 0.08 * Math.sin(t * 9) + 0.04 * Math.sin(t * 23)); ctx.restore();
         drawFlame(ctx, F.x, F.y, 30, t, 4.2, 1); // bandits.js: the cached flame sprite
-    }
-    for (const e of enemies) if (e.airborne && e.type === 'boss_beastmaster' && !e.dead) { // his shadow while he leaps
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.35)'; ctx.beginPath(); ctx.ellipse(e.x + 10, e.y + 12, 50, 36, 0, 0, Math.PI * 2); ctx.fill();
     }
     if (currentMap.caveOpen) { // chevrons and a ring marking the way on
         const E = STAGE_MAPS.trail.exit, p = 0.5 + 0.5 * Math.sin(t * 3);
@@ -736,20 +770,37 @@ function drawTrailGate(t, V) {
     ctx.restore();
 }
 
-// Above the fighters: the campfire's smoke, the canopy (see-through around the hero), drifting pollen
+// Where the leaves turn see-through, as [x, y, r, strength]: round the hero, and round every bandit, enemy shot and
+// ground mark (landing spots, traps) near the tree line. A bot run found 37% of the enemies on the forest road hidden
+// under the crowns, a fifth of their shots and over a quarter of the marks.
+function trailCanopyHoles(cx, cy, cw, ch) {
+    const out = [], seen = (x, y, r) => x + r > cx && x - r < cx + cw && y + r > cy && y - r < cy + ch && trNear(x, y);
+    if (trNear(player.x, player.y)) out.push([player.x, player.y, 120, 0.75]);
+    for (const e of enemies) if (!e.dead && !e.prop && !e.pod && out.length < 40) { const r = e.size / 2 + 45; if (seen(e.x, e.y, r)) out.push([e.x, e.y, r, 0.75]); }
+    for (const p of projectiles) if (p.isEnemy && out.length < 40 && seen(p.x, p.y, 34)) out.push([p.x, p.y, 34, 0.7]);
+    for (const ef of effects) if ((ef.type === 'slam_warn' || ef.type === 'bear_trap') && out.length < 40) { const r = (ef.radius || 20) + 30; if (seen(ef.x, ef.y, r)) out.push([ef.x, ef.y, r, 0.75]); }
+    return out;
+}
+
+// Above the fighters: the campfire's smoke, the canopy (see-through round the hero and every threat near the trees), drifting pollen
 function drawTrailAbove() {
     const c = ctx, t = fxTime, F = TR_CAMP.fire;
     if (cavIn(F.x, F.y, cavView(400))) drawSmokeColumn(F.x, F.y, t, 3.1, 0.6, 0.3); // map_village.js: a soft column
     const cw = Math.ceil(viewW()), ch = Math.ceil(viewH()), cx = Math.floor(camera.x), cy = Math.floor(camera.y), sx = Math.max(0, cx), sy = Math.max(0, cy);
-    if (!trNear(player.x, player.y)) c.drawImage(trl.canopy, sx, sy, cw, ch, sx, sy, cw, ch); // no trees near the hero: no hole needed
+    const holes = trailCanopyHoles(cx, cy, cw, ch);
+    if (!holes.length) c.drawImage(trl.canopy, sx, sy, cw, ch, sx, sy, cw, ch); // nothing near the trees: no hole needed
     else {
         if (!trl.view || trl.view.width !== cw || trl.view.height !== ch) trl.view = cavCanvas(cw, ch);
+        if (!trl.holeSpr) { // one soft hole, stretched to each size: clear out to a quarter of its radius, then fading
+            trl.holeSpr = cavCanvas(128, 128); const k = trl.holeSpr.getContext('2d'), g = k.createRadialGradient(64, 64, 0, 64, 64, 64);
+            g.addColorStop(0, '#000'); g.addColorStop(0.25, '#000'); g.addColorStop(1, 'rgba(0, 0, 0, 0)'); k.fillStyle = g; k.fillRect(0, 0, 128, 128);
+        }
         const v = trl.view.getContext('2d');
-        v.globalCompositeOperation = 'source-over'; v.clearRect(0, 0, cw, ch);
+        v.globalCompositeOperation = 'source-over'; v.globalAlpha = 1; v.clearRect(0, 0, cw, ch);
         v.drawImage(trl.canopy, sx, sy, cw, ch, Math.max(0, -cx), Math.max(0, -cy), cw, ch);
-        const px = player.x - cx, py = player.y - cy, hole = v.createRadialGradient(px, py, 30, px, py, 120);
-        hole.addColorStop(0, 'rgba(0, 0, 0, 0.75)'); hole.addColorStop(1, 'rgba(0, 0, 0, 0)');
-        v.globalCompositeOperation = 'destination-out'; v.fillStyle = hole; v.fillRect(px - 120, py - 120, 240, 240);
+        v.globalCompositeOperation = 'destination-out';
+        for (const [x, y, r, a] of holes) { v.globalAlpha = a; v.drawImage(trl.holeSpr, x - cx - r, y - cy - r, r * 2, r * 2); }
+        v.globalAlpha = 1;
         c.drawImage(trl.view, cx, cy);
     }
     // pollen and leaves drifting through the air around the hero

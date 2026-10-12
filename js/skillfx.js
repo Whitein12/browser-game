@@ -489,7 +489,7 @@ function drawSkillEffect(ef) {
             ctx.restore();
             return true;
         }
-        case 'precision_slash': { // Swordsaint sweep (basic combo and Q): a spectral crescent with speed lines
+        case 'precision_slash': { // Kensei sweep (basic combo and Q): a spectral crescent with speed lines
             const big = ef.radius >= 170, sweep = Math.PI / 3.5, R = ef.radius;
             if (big && !ef.burstDone) {
                 ef.burstDone = true;
@@ -514,7 +514,7 @@ function drawSkillEffect(ef) {
             ctx.restore();
             return true;
         }
-        case 'storm_cyclone': { // Swordsaint Blade Surge: ghost katanas whirling around the airborne blade
+        case 'storm_cyclone': { // Kensei Blade Surge: ghost katanas whirling around the airborne blade
             ctx.save();
             ctx.globalAlpha = 1;
             ctx.translate(ef.x, ef.y);
@@ -552,7 +552,7 @@ function drawSkillEffect(ef) {
             ctx.restore();
             return true;
         }
-        case 'parry_flash': { // Swordsaint successful parry
+        case 'parry_flash': { // Kensei successful parry
             ctx.save();
             ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = k;
             ctx.translate(ef.x, ef.y); ctx.rotate(ef.angle);
@@ -658,10 +658,10 @@ function drawDivineRay(ef) {
 }
 
 // ==========================================
-// Swordsaint parry
+// Kensei parry
 // ==========================================
 
-// While the parry window is open, a glint of guard light sits in front of the Swordsaint
+// While the parry window is open, a glint of guard light sits in front of the Kensei
 function drawParryGuard(aimAngle) {
     const k = clamp01(player.parryTimer / 0.3);
     ctx.save();

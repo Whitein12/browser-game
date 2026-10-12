@@ -33,6 +33,6 @@
     ],
     "stage2_boss": { "id": "beastmaster", "size": 60, "color": "#3e2723", "baseSpeed": 90, "speedVar": 0, "baseHp": 3500, "hpScale": 510, "baseDmg": 22, "dmgScale": 3, "baseXp": 450, "xpScale": 0, "type": "boss_beastmaster", "stateTimer": 3.0 },
     "stage3_minions": [],
-    "stage3_boss": { "id": "boss_valerius", "size": 40, "color": "#4e342e", "baseSpeed": 90, "hpScale": 670, "baseHp": 5600, "baseDmg": 25, "dmgScale": 5, "baseXp": 1000, "type": "boss_valerius", "stateTimer": 2.0 }
+    "stage3_boss": { "id": "boss_valerius", "size": 52, "color": "#4e342e", "baseSpeed": 165, "hpScale": 840, "baseHp": 7000, "baseDmg": 25, "dmgScale": 5, "baseXp": 1000, "type": "boss_valerius", "stateTimer": 2.0 }
   }
 }

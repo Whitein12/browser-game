@@ -234,7 +234,7 @@ const SKILL_GLYPHS = {
             for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; icEll(c, 32 + Math.cos(a) * 23, 32 + Math.sin(a) * 23, 3.5, 3.5, '#616161', 1.5); }
         },
     },
-    swordsaint: {
+    kensei: {
         1(c) { // Parry Thrust / Blade Surge
             icSword(c, 8, 56, 50, 14, 3.5, '#e0f7fa', '#263238', '#ffd54f');
             icGlow(c, 52, 12, 14, '#00e5ff', 0.8); icStar(c, 52, 12, 9, '#ffffff');

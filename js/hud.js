@@ -117,7 +117,7 @@ function updateHUD() {
 // ---------- class gauge (right orb): each class's own resource or signature mechanic ----------
 // Each entry returns { name, f (0..1 fill), big, small, light, dark, glow?, warn? }
 const GAUGES = {
-    Swordsaint: () => ({ name: 'Flow', f: player.flow / player.maxFlow, big: Math.floor(player.flow), small: player.stance === 'airborne' ? 'Airborne' : 'Handheld', light: '#4dd0e1', dark: '#003640' }),
+    Kensei: () => ({ name: 'Flow', f: player.flow / player.maxFlow, big: Math.floor(player.flow), small: player.stance === 'airborne' ? 'Airborne' : 'Handheld', light: '#4dd0e1', dark: '#003640' }),
     Cleric: () => { // the small line is what the next Divine Ray would hit for (skills.js RAY_ZEAL_MULT)
         const z = buffs.zealLocked && buffs.aspectOfReaper <= 0 ? 100 : (player.zeal || 0);
         let tier = z >= 100 ? 3 : z >= 50 ? 2 : z >= 10 ? 1 : 0, blood = false;
@@ -275,7 +275,7 @@ function renderTabSheet() {
     for (const [k, v, temp] of powerParts()) h += row(k, k === 'Class base' ? Math.round(v * 100) : `+${Math.round(v * 100)}`, temp ? 'sub temp' : 'sub');
     if (buffs.weakened > 0) h += row('Weakened', '-30% damage', 'sub bad');
     const glove = equipment.gloves ? equipment.gloves.val : 0;
-    const stance = n === 'Swordsaint' && player.stance === 'airborne' ? (player.flow / player.maxFlow) * 0.5 : 0;
+    const stance = n === 'Kensei' && player.stance === 'airborne' ? (player.flow / player.maxFlow) * 0.5 : 0;
     const frenzy = n === 'Dragonknight' ? player.frenzyStacks * 0.02 : 0;
     const interval = 0.15 + activeClass.basicAttackCD / (1 + attackSpeedBonus()); // skills.js
     h += row('Basic attack', `${Math.round(hitDmg(activeClass.basicDmg))} dmg &middot; ${(1 / interval).toFixed(1)}/s`);

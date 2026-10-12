@@ -33,7 +33,7 @@ function addShake(amount) { shakeAmount = Math.min(8, Math.max(shakeAmount, amou
 
 const HIT_COLORS = {
     dragonknight: '#ff8a65', ranger: '#dcedc8', machinist: '#ffcc80', spellweaver: '#81d4fa', nightblade: '#ea80fc',
-    swordsaint: '#84ffff', cleric: '#fff59d', druid: '#ccff90', paladin: '#fff59d'
+    kensei: '#84ffff', cleric: '#fff59d', druid: '#ccff90', paladin: '#fff59d'
 };
 
 // Called from applyDamage: sparks at the impact point, a white flash on the enemy, and shake on heavy hits
@@ -57,7 +57,7 @@ function spawnHitFx(enemy, source, projAngle) {
 
     // Heavy hits shake the camera a little
     if (source === 'melee_basic' && selectedClassId === 'paladin' && !hammerAway()) addShake(3);
-    else if (source === 'slash' && selectedClassId === 'swordsaint' && player.stance === 'handheld' && player.lastAttackStep === 2) addShake(3);
+    else if (source === 'slash' && selectedClassId === 'kensei' && player.stance === 'handheld' && player.lastAttackStep === 2) addShake(3);
     else if (selectedClassId === 'machinist' && source === 'ranged' && Math.hypot(enemy.x - player.x, enemy.y - player.y) < 140) addShake(2);
 }
 

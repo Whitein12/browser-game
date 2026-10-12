@@ -5,7 +5,7 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-const STATE = { MENU: 0, PLAYING: 1, PAUSED: 2, LEVELUP: 3, EVOLVE: 4, INTERMISSION: 5, INVENTORY: 6, SHOP: 7, DEAD: 8, VICTORY: 9, DEV: 10, LETTER: 11 };
+const STATE = { MENU: 0, PLAYING: 1, PAUSED: 2, LEVELUP: 3, EVOLVE: 4, INTERMISSION: 5, INVENTORY: 6, SHOP: 7, DEAD: 8, VICTORY: 9, DEV: 10, LETTER: 11, DIALOGUE: 12 };
 let gameState = STATE.MENU;
 
 let lastTime = performance.now();
@@ -39,4 +39,4 @@ const buffs = { rapidFire: 0, msBoost: 0, slowed: 0, dragonfire: 0, rooted: 0, w
 const enemies = []; const projectiles = []; const effects = []; const drops = [];
 const el = (id) => document.getElementById(id);
 
-let currentMap = { type: 'open', left: 0, right: 0, top: 0, bottom: 0, valeriusTriggered: false };
+let currentMap = { type: 'open', left: 0, right: 0, top: 0, bottom: 0 };

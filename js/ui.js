@@ -226,7 +226,7 @@ const RANK_STATS = {
         3: (r, sk) => [['Open-ground penalty', `+${grappleMissPenalty(r).toFixed(1)}s`], ...(sk.selectedUpg === 'A' ? [['Shield', Math.round(RU(100, r))], ['Shield time', RS(RU(4, r))]] : [])],
         4: (r, sk) => [['Duration', RS(RU(6, r))]],
     },
-    Swordsaint: {
+    Kensei: {
         1: (r, sk) => [['Parry Thrust', RH(sk.baseDmg, r, 1.5)], ['Blade Surge', RH(sk.baseDmg, r, 1.8)]],
         2: (r, sk) => [['Airborne flight', RS(100 / (15 * airborneDrain(r)))]],
         3: (r, sk) => [['Step distance', RP(shadowStepReach(r))], ['Guardian Orbit', RS(RU(ORBIT_TIME, r))], ...(sk.selectedUpg === 'A' ? [['Path of Blades', RH(sk.baseDmg, r, 2)]] : [])],

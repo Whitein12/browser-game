@@ -9,26 +9,60 @@ A snapshot of every number that matters for the balance patch: classes, skills, 
 Everything in this log is the v1.9 Balance Patch, on top of v1.8 (the Slime Caves). In short:
 
 - **Numbers:** core formulas (armor %, Power as one additive stat, rank +20%, CDR cap 60%), enemy and boss scaling, every class brought into one damage band around the Ranger, then boss HP set from in-engine bot fights (King 1600 + 400/wave, Amalgam 4650 + 700, Queen 12 600 + 1400; Bandit Bastion bosses by the same factors). The economy: fewer drops, 20% resale, dearer rares.
-- **Class reworks:** the Druid became the Wildcaller (an autonomous wolf or black jaguar), the Dragonknight's heavy greatsword (hold to charge, release to slam) and Dragonfire Blade, the Paladin's Divine Tether, the Nightblade as the boss-killer (Mark for Death), the Swordsaint's Razor's Edge (+150% at full Flow, hits cost Flow), the Cleric and Swordsaint band-pass reworks, armor HP scaled by class.
+- **Class reworks:** the Druid became the Wildcaller (an autonomous wolf or black jaguar), the Dragonknight's heavy greatsword (hold to charge, release to slam) and Dragonfire Blade, the Paladin's Divine Tether, the Nightblade as the boss-killer (Mark for Death), the Kensei's Razor's Edge (+150% at full Flow, hits cost Flow), the Cleric and Kensei band-pass reworks, armor HP scaled by class.
 - **Items:** every class has its own five rares; the rare weapon awakens a little each wave.
 - **Combos** ([combos.js](js/combos.js), all nine classes, 3 to 6 each): round one, a Space → LMB finisher per class; round two, skill-into-skill combos chosen class by class with the user (listed under "Second combos" and each class's "round two" below), each needing a deliberate press, aim, timing or risk.
 - **Ranks** all do something now, and the level-up cards list every value a rank changes (ui.js `RANK_STATS`). The ultimate can no longer be the starting pick (the Lv.1 testing bypass is gone; the Training Room covers testing).
 - **Training Room** (training.js): dummies, a DPS meter and a panel for ranks, evolutions, the late-game kit and cheats.
 - **Enemies and maps:** the Amalgam's Undertow, brood pods counting toward the wave, leaps that never land inside a body.
 
-In-engine DPS on a boss dummy with every round-one finisher (late gear, see "DPS comparison with every finisher"): Nightblade ~494, Ranger ~502 (bot-inflated), Spellweaver ~491, Swordsaint ~476, Dragonknight ~453, Druid ~411, Cleric ~360, Paladin ~309, Machinist ~304; in real boss fights the Cleric, Machinist and Paladin land at 84-100% of the Ranger. The round-two combos come on top only when played well (most add ~+4-8% when kept up; the top classes got choices or utility instead), so the bot numbers above don't include them.
+In-engine DPS on a boss dummy with every round-one finisher (late gear, see "DPS comparison with every finisher"): Nightblade ~494, Ranger ~502 (bot-inflated), Spellweaver ~491, Kensei ~476, Dragonknight ~453, Druid ~411, Cleric ~360, Paladin ~309, Machinist ~304; in real boss fights the Cleric, Machinist and Paladin land at 84-100% of the Ranger. The round-two combos come on top only when played well (most add ~+4-8% when kept up; the top classes got choices or utility instead), so the bot numbers above don't include them.
 
 **Open after v1.9** (worth watching in play, not blocking):
 - The Cleric is weak against the Slime King early (~80 DPS against ~130 for the others with an early build); Prism (Divine Ray through Hallowed Ground) may help.
 - The Paladin bot stalls in the Queen's guard phase in some fights (chasing the orbiting guards); a player cuts across.
 - Boss fight lengths with real play (targets King ~40 s, Amalgam ~65 s, Queen ~120 s), now that skilled players also have the round-two combos.
 
+### Bandit Bastion bot runs (2026-10-12)
+
+After the Swordsaint became the **Kensei** (its rare armor is now the Ronin's Silk Shroud) and the Bandit Bastion maps went back to zoom 1. A bot played waves 1-10 four times per class from a fresh start: it levels by the v1.9 "mid" builds, buys at the shop, takes the letter, walks the exits, kites (casters) or closes in (melee), steps out of lanes, wedges, landing marks and shots, and is revived when it dies (deaths are counted). It's a steady but mechanical player: compare the classes with each other, not with real play.
+
+| Class | Run (s) | Warchief (s) | Beastmaster (s) | Deaths S1 / S2 |
+|---|---|---|---|---|
+| Kensei | 347 | 30 | 53 | 2.2 / 4.0 |
+| Cleric | 372 | 41 | 65 | 1.0 / 3.5 |
+| Nightblade | 373 | 18 | 45 | 4.0 / 7.8 |
+| Paladin | 378 | 27 | 48 | 0.5 / 2.8 |
+| Dragonknight | 380 | 34 | 52 | 0.0 / 0.5 |
+| Druid | 386 | 36 | 60 | 0.0 / 1.8 |
+| Spellweaver | 402 | 40 | 73 | 3.2 / 10.0 |
+| Ranger | 414 | 41 | 60 | 0.5 / 1.2 |
+| Machinist | 472 | 50 | 85 | 0.2 / 2.5 |
+
+- Regular waves take 16-45 s; every class reaches Lv. 10 by the Beastmaster and buys its rare weapon at the first shop.
+- **The Beastmaster deals ~52% of all damage taken over both stages**, 55% of it from the joust, 27% the whip, 18% contact. The joust lane is drawn 50 px wide but rides down anything within 56 px of his centre (his 30 + the hero's 18 + 8), so a hero standing visibly clear of the lane still gets hit; the horse rider's lane is drawn 26 px wide against a 42 px reach. His second and third runs lock 0.2 s before a 950 px/s charge. **Fixed:** both lanes are now drawn as wide as the hit (`e.size + 16` = 76 px for the joust, `e.size + 12` = 48 px for the rider).
+- **Forest visibility** (share of on-screen enemies under the canopy, outside the hero's see-through hole): forest road 37% (22% within 350 px of the hero), 21% of enemy shots and 28% of landing marks and traps; the camp clearing 5%, the riverbank 5% (landing marks 18%), the village 3%. **Fixed:** on the trail the leaves turn see-through round every bandit, enemy shot and landing mark near the trees, as they do round the hero (`trailCanopyHoles`); in a software-rendered test it cost no more than the hero's own hole.
+- **Moving around** (how much of the intended speed the hero actually gets, and pin-ups against something for 0.6 s+ per 10 minutes of walking): the camp clearing 92% / 19, the riverbank 87% / 36, the forest road 84% / 42 (mostly the tree line), the village 79% / 68 (house walls and garden fences). No pocket on either map is walled off from the start. One near-miss in the village: the garden at x 790-1010, y 260-430 has a gap between its fence and the house corner that looks open but is one 25 px cell (the hero needs 36).
+
+**Fixes after the bot runs** (2026-10-12): the Kensei's Parry Thrust counts shots its sweep cuts out of the air as a parry (once per sweep: +20 Flow, Counter Step, and Flawless Execution's full Flow and Q reset; before, the sweep destroyed them before they could land in the 0.3 s window, so parrying a shot never counted; combat.js `parrySuccess`). The Kensei's Flow in hand holds 3 s after the last gain and then fades 8/s (was 1.5 s and 15/s: dodging a crowd drained the bar before the blade could go out; skills.js `FLOW_GRACE` / `FLOW_DECAY`). The Beastmaster is placed at the bridgehead when the second logjam opens instead of after the breather.
+
+### Bandit Bastion stage 3: the duel with Valerius (2026-10-12)
+
+Wave 11 on its own bridge map (map_bridge.js); his moves are ai.js `ValeriusAI` (`VAL_*`). Damage multipliers on his hit (25 + 5/wave, so 80 at wave 11, then the global ×0.6): Spear Lunge ×1.6, Hook & Haul ×0.8 plus the kick ×0.6, Sweeping Arc ×1.3, Spear Toss ×1.0 each way, Chain Lasso ×1.4, Chain Cyclone ×1.3 (at most once per 0.6 s), Skewer Leap ×1.8, contact ×0.7; the archers' volley marks ×0.55. The intro's kick takes a quarter of max HP, never the last of it.
+
+- **HP:** 5600 + 670/wave became **7000 + 840/wave** (12 970 → 16 240 at wave 11, ×1.25). Bot duels before it averaged 64 s (46-78 by class), below the bot target of 70-90 s (real 90-120 s).
+- **Bot check after it** (full runs from wave 1, so each class has the gear it would have; 3 runs each): duel 80 s on average. Nightblade 59 s, Cleric 57, Paladin 75, Druid 79, Machinist 84, Ranger 87, Kensei 87, Spellweaver 93, Dragonknight 94. Deaths per duel: Spellweaver 5.0, Nightblade 4.0, Kensei 3.3, Cleric 2.0, Ranger 1.3, Paladin 1.3, Machinist 1.0, Druid 0.3, Dragonknight 0.
+- **What hurts:** Chain Cyclone 19% of the HP lost, contact while he circles 18%, Sweeping Arc 12%, the lunge 11%, Hook & Haul 14% (the hook and the haul's kick). The archers' volleys are pressure more than damage (1%).
+- **After the first look (2026-10-13): faster and heavier.** Size 44 → 52, speed 90 → 165 (+2/wave: 187 at wave 11), the gaps between moves 1.0 / 0.9 / 0.6 s → 0.55 / 0.5 / 0.35 s by phase, quick side-steps between moves and a pole-vault on his spear from more than 430 px away (×0.8 if he lands on you), the lunge faster (1100 → 1400 px/s, 380 → 420 px). The wind-ups and locks are unchanged, so every telegraph gives the same warning. Bot duels after it: 83 s on average; Cleric 57, Nightblade 59, Paladin 78, Ranger 79, Druid 80, Kensei 81, Dragonknight 97, Spellweaver 106 (7 deaths per duel), Machinist 113. The kiting and turret classes suffer most from a boss who closes in fast.
+- **Then (2026-10-13): he dodges.** Between moves, when his dodge is ready (every 2.6 / 2.2 / 1.7 s by phase), the next hit is evaded with a blurred side-step (not DoTs, not Nightblade weak points); his random side-steps between moves are rarer (every 1.6-2.8 s, was 0.9-1.8). From far off he sprints (×2.2 speed) instead of vaulting again and again: the vault is now only at 430-650 px, at most every 4 s, and flatter (80 px high, was 130). Test: ~10% of a steady stream of hits evaded (9 of 90 in 30 s). Bot duels not rerun yet: expect them a little longer.
+
 ### Playtest checklist
 
 - **Cinderholt (Bandit Bastion stage 1, new):** do the bandits read at a glance (thief, archer, shieldbearer)? Do fences and houses make good cover without trapping you? Kegs: worth luring bandits to, or just a hazard? The Warchief's Torch Toss and Keg Kick (does the warning give enough time?), the intro out of the longhall, and the barricade burning down.
 
-- **The Raiders' Trail (Bandit Bastion stage 2, new):** do the riders' lanes give enough warning? Are the traps fair? Do bannermen read as priority targets? Do hound packs feel like the Druid's wolf? The Beastmaster's mount and Kennel Call; does advancing section by section feel like a journey?
+- **The Raiders' Trail (Bandit Bastion stage 2, new):** do the riders' lanes give enough warning? Are the traps fair? Do bannermen read as priority targets? Do hound packs feel like the Druid's wolf? The Beastmaster's arrival (crouched with his hounds at the bridgehead, rising when you come close or strike), his mount and Kennel Call; does advancing section by section feel like a journey?
 
+- **The bridge (Bandit Bastion stage 3, new):** the walk across and the intro (the drop, the hook, the kick: does losing a quarter of your HP feel fair?); can you read each of Valerius's moves in time (lunge and hook lanes, the arc, the lasso ring, the cyclone, the leap)? Is the Hook & Haul's punish window worth taking? The archers in phase 2; his escape and the dialogue box.
 - **Bosses:** do the fights land near the targets (Slime King ~40 s, Amalgam ~65 s, Hive Queen ~120 s) with combos? Does the Queen's 60-30% guard phase still get skipped by strong AoE? The Queen's bullet hell.
 - **Amalgam:** the Undertow with its 0.65 s warning. Is the fight winnable for single-target classes?
 - **Economy:** shop 2 with ~1000 gold: does choosing what to skip feel good or stingy? Is shop 1 a real choice with the rare weapon starting at +50%?
@@ -37,7 +71,7 @@ In-engine DPS on a boss dummy with every round-one finisher (late gear, see "DPS
 - **Spellweaver:** Blink Lance on a single boss; Frostfire's 0.25 s window; whether the Ice Wall holds too much or too little.
 - **Nightblade:** bosses fast enough to feel like its specialty, swarms hard but fair; Shadow Daggers, Shadow Strike and Smoke Step.
 - **Machinist:** grapple-to-turret as the core loop; Tesla Turret, Conductive Net and Lightning Rod.
-- **Swordsaint:** Razor's Edge (+150% at full Flow vs −25 Flow per hit); Iaido, Guardian Orbit, Counter Step, Return Cut, Whirling and Gale Orbit, Gathering Gale; the blade glow (in hand at 100 Flow, the whole Airborne flight).
+- **Kensei:** Razor's Edge (+150% at full Flow vs −25 Flow per hit); Iaido, Guardian Orbit, Counter Step, Return Cut, Whirling and Gale Orbit, Gathering Gale; the blade glow (in hand at 100 Flow, the whole Airborne flight).
 - **Cleric:** the Zeal-scaled ray vs Hallowed Ground's Zeal cost; Radiant Burst into Divine Ray; Prism, Sanctified Arrival, Twilight Eclipse; the early game.
 - **Druid:** the companion hunting with you (prey choice, Scent, Bond pace); Pounce Strike, Pincer (the 120° angle with a beast that moves on its own), Thorn Rake, Barkburst.
 - **Paladin:** Divine Tether in both modes; Judgment Smash, Flail Sweep, Ring the Hammer, Zealous Charge.
@@ -64,7 +98,7 @@ In-engine DPS on a boss dummy with every round-one finisher (late gear, see "DPS
 - Now scaled through `calcDmg`:
   - Nightblade weak points: `calcDmg(3 × basicDmg)` true damage (~54 at the start, ~140 late) instead of a flat 60.
   - Death Mark Chain Reaction: `calcDmg(50, R rank)` instead of a flat 50.
-  - Swordsaint: the Airborne blade and Phantom Wind use `calcDmg(basicDmg)`; Shatter Storm mini-blades hit for 5% of R's damage.
+  - Kensei: the Airborne blade and Phantom Wind use `calcDmg(basicDmg)`; Shatter Storm mini-blades hit for 5% of R's damage.
   - Cleric: Desecration, Raven Flight and the 100-Zeal Hallowed Ground damage use the skill's real damage. Hallowed Ground heals scale with rank. Twilight Repulse is `calcDmg(30)`.
   - Druid Savage Blooms: 0.4× the transform's damage per second instead of a flat 50.
   - Spellweaver Arcane Arrival: 1.2× Blink's damage (was unranked `calcDmg(30)`).
@@ -74,9 +108,9 @@ In-engine DPS on a boss dummy with every round-one finisher (late gear, see "DPS
 
 **Pass 4: leftover bugs:**
 - Iron Bulwark now braces you: 50% less damage for 2 s after the cast (`buffs.ironBulwark`), with a HUD chip. The shield is unchanged.
-- Level-up cards and the Tab sheet only show a cooldown change for skills whose cooldown actually shrinks with rank (Space, Swordsaint E), via `skillBaseCd` in combat.js.
+- Level-up cards and the Tab sheet only show a cooldown change for skills whose cooldown actually shrinks with rank (Space, Kensei E), via `skillBaseCd` in combat.js.
 - Dragonknight Frenzy now also gives +2% attack speed per stack. All attack-speed sources go through `attackSpeedBonus()` in skills.js.
-- Rare items match their text: the Cleric's censer says +100% DMG, Saint's Silk Shroud says +240 HP, and a class rare can set its own `val` in classes.json (Windwalker Steps +60, Aether Grips +30%).
+- Rare items match their text: the Cleric's censer says +100% DMG, Ronin's Silk Shroud says +240 HP, and a class rare can set its own `val` in classes.json (Windwalker Steps +60, Aether Grips +30%).
 
 ### Class passes
 
@@ -126,11 +160,11 @@ In-engine DPS on a boss dummy with every round-one finisher (late gear, see "DPS
 - Shadowstrike Daggers RMB: Execute (a teleport stab, the same job as Phantom Dash and Death Mark) → **Expose**: every enemy in a 300 px, 120° cone in front of you gets a weak point on the side facing you. Watch in playtest: Expose followed by Fan of Knives can pop several weak points at once.
 
 **Newer classes, damage comparison** (same model: target always in range, everything on cooldown, no amulet, no evolutions; final damage per second, early / mid / late, single target):
-- Swordsaint 359 / 678 / 796 (pack 1709 late). The steered blade alone was 467 late, Shatter Storm 228; the blade was out 80% of the time.
+- Kensei 359 / 678 / 796 (pack 1709 late). The steered blade alone was 467 late, Shatter Storm 228; the blade was out 80% of the time.
 - Paladin 65 / 124 / 156 (Handheld Purity 170). Druid 42 / 111 / 131 in wolf form, 114 in caster form. Cleric 46 / 86 / 102 (Void Spike 118, plus Desecration 177).
 - For reference, the older classes late: Dragonknight 225, Spellweaver 223, Ranger 194, Nightblade 185.
 
-**Swordsaint** (3.5× everyone else; pass 3 making the blade scale with gear and orbs made it worse):
+**Kensei** (3.5× everyone else; pass 3 making the blade scale with gear and orbs made it worse):
 - Airborne blade: Flow adds up to +50% (was +100%), Empowered ×1.25 (was ×1.5). A steered hit is ×0.4 of the basic (was ×1.2): it still lands ~12 times a second, so the blender feel stays and each hit is lighter. Tuning lives in `BLADE_STEER_MULT` / `BLADE_FLOW_BONUS` / `BLADE_EMPOWER` and `bladeHitDmg` in skills.js.
 - Flow drains 15/s in Airborne (was 10/s): a full bar keeps the blade out ~6.7 s instead of 10.
 - Shatter Storm shards hit every 0.5 s (was 0.25 s) for a flat 5% of R's damage (no more Flow and Empowered multipliers).
@@ -166,7 +200,7 @@ In-engine DPS on a boss dummy with every round-one finisher (late gear, see "DPS
 
 **Druid rework: the Wildcaller** (2026-10-10, after the playtest; it replaces the shapeshift weave above):
 - Why: the weave played as a chore (seed, shift, claw, revert every 3 s, with no real decisions), each form was half a kit, the wolf's 100 px melee put the Druid in the worst spot against spitters and the Queen, and the spore pops were hard to see.
-- New identity: a nature caster with a wolf that hunts at their side. You don't steer it (that's the Swordsaint's blade); you influence it. It goes after what you hit (Scent), pounces on what you snare, and you pour magic into it. Details in section 4.
+- New identity: a nature caster with a wolf that hunts at their side. You don't steer it (that's the Kensei's blade); you influence it. It goes after what you hit (Scent), pounces on what you snare, and you pour magic into it. Details in section 4.
 - Evolutions fork into **Alpha** (one stronger wolf, single target, Bond) and **Pack** (more wolves, area), like the Cleric's Holy/Shadow.
 - Gone: the forms, Spores, and every old skill and evolution (Bramble Core, Vine Whip, Barkskin Shift, Spore Burst, Feral Pounce, Aspect of the Wild...), plus the visuals nothing uses any more.
 - Reused: the wolf sprite (now the companion; spirit wolves are a pale green ghost of it), the Bite fang FX, the pounce claw marks, the bark shell, thorn patches, the spirit paw, the totem wand and its seed bolt.
@@ -182,7 +216,7 @@ In-engine DPS on a boss dummy with every round-one finisher (late gear, see "DPS
 
 **Class rare sets** (2026-10-10, after the playtest): every class now has its own five rares instead of three shared ones; the full table is in section 5.
 - Gone: Amulet of Power (+5% damage per cast, ×5), Ethereal Treads (half damage while moving, no collision) and Vampiric Grips (2% lifesteal). Treads were the best item for every class.
-- 24 new items: an amulet (gauge or spell), boots (the Space skill) and gloves (the basics) for eight classes; the Swordsaint already had its set.
+- 24 new items: an amulet (gauge or spell), boots (the Space skill) and gloves (the basics) for eight classes; the Kensei already had its set.
 - Reworked armors: Dragon Scale Plate (was 5 HP per kill), Robes of the Magi (was piercing basics, which switched off charged explosions), Windrunner Tunic (was a plain +30% move speed).
 - Every amulet's `val` is now its CDR (getCDR no longer checks names); rare amulets compare with commons in the tooltip.
 - Headless test: every class fought 15 s with its full set, and each new effect was checked on its own and behaved as described.
@@ -193,7 +227,7 @@ In-engine DPS on a boss dummy with every round-one finisher (late gear, see "DPS
 **Band pass** (2026-10-11). A new model counted the rare sets, evolutions, amulet CDR and Space ranks, and tried every way to spend 13 skill points. With those, the late spread was 236-500 plus the Machinist at 652, and the rare weapon was the only sensible shop-1 buy (+35-77% at wave 10, mostly from its +100% stat). Goal: damage dealers within about ±10% of the Ranger late, the Paladin at ~85% as the tank, boss HP raised to match.
 
 - **Awakening rare weapon** (`rareWeaponItem` / `awakenWeapon` in [items.js](js/items.js)): bought at **+50% DMG**, +4% for every wave cleared after it was bought, up to **+90%**. A T4 common is +45%, so shop 1 is a real choice; the rare still ends above the T8 common (+85%). The tooltip shows the current % and a floating text announces each step. The class texts no longer start with "+100% DMG"; the shop adds the line.
-- **Swordsaint reworks** (the old E and R-B evolutions did nothing):
+- **Kensei reworks** (the old E and R-B evolutions did nothing):
   - E-A **Riposte Recall** (was Aegis Return): recalling sends the blade back through everything between it and you for 2× basic damage, and you keep 30% Flow.
   - E-B **Early Deploy** (was Instant Flow, whose +30% Flow on deploy was always capped away since Deploy needs a full bar): deploy from 70% Flow; the bar fills and the blade launches Empowered.
   - R-B **Tempest Shards** (was Piercing Shrapnel, which only kept a shard on its target): shards strike every 0.3 s (was 0.5) and cut every enemy within 60 px of the strike.
@@ -222,12 +256,12 @@ Modelled single-target damage per second after the band pass (target always in r
 | Ranger | 88 | 227 | **393** | 915 |
 | Nightblade | 94 | 233 | 394 | 1161 |
 | Machinist | 98 | 223 | 409 (was 606-652) | 955 |
-| Swordsaint | 123 | 251 | 378 | 1166 |
+| Kensei | 123 | 251 | 378 | 1166 |
 | Cleric | 84 | 338 (254 without the Reaper) | 550 (423 without) | 2004 |
 | Druid | 105 | 236 | 393 | 1072 |
 | Paladin | 97 | 206 | 323 (82%) | 1177 |
 
-The Cleric's Reaper numbers are a burst window paid for in HP. In-engine check (a bot that never dies and casts everything on cooldown, full set, wave 15): the Queen went down in 77-108 s (Ranger 77, Machinist 87, Swordsaint 89, Spellweaver 91, Nightblade 97, Dragonknight 102, Cleric 108), against the ~120 s target; a real fight with dodging should land near it.
+The Cleric's Reaper numbers are a burst window paid for in HP. In-engine check (a bot that never dies and casts everything on cooldown, full set, wave 15): the Queen went down in 77-108 s (Ranger 77, Machinist 87, Kensei 89, Spellweaver 91, Nightblade 97, Dragonknight 102, Cleric 108), against the ~120 s target; a real fight with dodging should land near it.
 
 **Dragonknight playtest** (2026-10-11, played after the band pass). Feedback: the shield had no cap (2000+ against the Queen); most of the damage came from Q and R, while the fantasy should be big, heavy basic attacks; Iron Bulwark only gave a shield. Also: "x% damage" isn't clear, the Amalgam's Assimilate decides the fight for slow-clearing classes, popping the Queen's-room eggs didn't count toward the wave, and selling drops after wave 10 bought the whole shop.
 
@@ -258,7 +292,7 @@ The Cleric's Reaper numbers are a burst window paid for in HP. In-engine check (
 
 **Nightblade combo** (2026-10-11; it sits at the low end, so this comes on top with no trim): first **Exposing Path** (the dash marked everything it passed through for the next thrust to pop). Dropped after one try: "it takes away from the skill expression that makes the Nightblade a master assassin; you can just swish through everything with the dash." Then **Vanish** (every dash landed in 1 s of shadow, the next thrust an ambush), dropped too: "Vanish is not a combo. It just happens after every dash." The rule since: nothing happens on the dash itself; the payoff is only in what you do with the basic after it. Final: **Shadow Daggers**, the thrust after Phantom Dash becomes three daggers thrown in a tight fan toward the cursor, each a full basic (3× the whole attack). They're Fan of Knives daggers, so they pop a weak point only if they hit its marked side: dash out to the right angle, then throw back. It keeps your distance, which is how the user already plays Phantom Dash. Tested at 200 px on a small slime: 32.4 (3 × 10.8) unmarked, 86.4 with the weak side facing you (popped), 32.4 with it facing away (the mark stays).
 
-**Swordsaint finishers** (2026-10-11), one per stance. Handheld, **Iaido**: the slash after Shadow Step is a draw-cut; a beat later everything you dashed through is split for 2× a slash, +20 Flow each. Airborne, first **Blade Rush** (the blade rushing through the cursor), now **Impale** (below). On top, no trim: the Swordsaint sits ~4% under the Ranger (378 vs 393 late), and the Ranger got its finisher on top too. Tested: two enemies on a 300 px Shadow Step each took 17.3 (2 × 8.6) and Flow went 0 → 40. **Every class now has its Space finisher**, so the band has moved up ~10-12% overall: boss HP needs a look before release.
+**Kensei finishers** (2026-10-11), one per stance. Handheld, **Iaido**: the slash after Shadow Step is a draw-cut; a beat later everything you dashed through is split for 2× a slash, +20 Flow each. Airborne, first **Blade Rush** (the blade rushing through the cursor), now **Impale** (below). On top, no trim: the Kensei sits ~4% under the Ranger (378 vs 393 late), and the Ranger got its finisher on top too. Tested: two enemies on a 300 px Shadow Step each took 17.3 (2 × 8.6) and Flow went 0 → 40. **Every class now has its Space finisher**, so the band has moved up ~10-12% overall: boss HP needs a look before release.
 - Fix after the playtest ("Iaido sometimes acts like it wants you to hit something"): a click during the dash itself (Shadow Step is 0.18 s) fired a plain slash before the window opened and lost the combo. Now, for every class, a basic pressed while a combo-opening dash or pull is still moving waits for the landing and fires as the finisher (`comboQueued` in combos.js; the Dragonknight's swing too). And Iaido's cut is drawn twice as wide as Shadow Step's own flash, with a ring and a small shake, so it reads as triggered even when it cuts nothing. Tested: a click 2 frames into the dash fired Iaido; a Dragonknight tap mid-leap fired the whirl.
 - Blade Rush didn't land: first it fired by itself (LMB is held to steer), and with a fresh-click requirement it still didn't feel right. Replaced by **Impale**: a click after Spatial Swap drives the blade into the enemy nearest the cursor (within 150 px of it); it sticks there for 1.2 s, cutting it 5 times for 0.6× an Empowered hit each (~3× in total), then pulls free and you steer again. Pure single target, unlike the airborne Q's spin (Thousand Cuts was turned down for that reason). With nobody near the cursor the click is a plain press and the window stays open. Tested: held through a swap, no impale; a fresh click, 5 cuts of 9.5, then free. Then Impale was dropped too: the dummy test showed it cut slower than plain steering (the combo cost ~12%). Final: **Guardian Orbit**, the click after the swap whirls the blade round you for 1.2 s at the steering rate (1.5× a steered hit on everything within reach), nudging non-bosses away and shredding enemy shots: a defensive buzzsaw after swapping into danger.
 - **Every combo needs a press after Space** (playtest: "if you simply hold down LMB while pressing Space that activates the combo without any user skill, in any class"): a finisher only counts if LMB was pressed after the Space cast (`comboPressOk`: the last mousedown vs `comboCastAt`). A button held through the dash gives a plain attack; a click during the dash still counts. Tested on the Dragonknight and the Ranger: held through Space, no finisher; a fresh click after it, one.
@@ -272,14 +306,14 @@ The Cleric's Reaper numbers are a burst window paid for in HP. In-engine check (
 | Spellweaver | 438 | 491 | +12% |
 | Dragonknight | 390 | 453 | +16% |
 | Druid | 386 | 411 | +6% |
-| Swordsaint | 336 | 393 | +17% (Guardian Orbit; 398 / 476 after Razor's Edge, below) |
+| Kensei | 336 | 393 | +17% (Guardian Orbit; 398 / 476 after Razor's Edge, below) |
 | Cleric | ~353 | ~360 | ~+3% (this build has Phase Shift at rank 1: 9 combos in 40 s; runs vary ±15) |
 | Paladin | 286 | 309 | +8% |
 | Machinist (Scrap kept full) | 259 | 304 | +17% |
 
 Changes from it: **Sentry Turret 8 → 10** (it measured ~60% of the Ranger; earlier, in a real Queen fight, ~89%); **Radiant Burst ×2.5 → ×5**, and the violet (Shadow) ring now siphons 2% max HP per enemy (up to 3) instead of giving Zeal, since Void Spike fires its blood ray at empty Zeal; **Guardian Orbit** replaces Impale (which cut slower than steering, so the combo cost ~12%), at 1.5× a steered hit.
 
-**Swordsaint, Razor's Edge** (2026-10-11; "the Swordsaint's damage seems low; I want it to be a high-risk, high-reward class"): Flow now adds up to **+150%** damage (was +50%) to the handheld slashes, the blade, Iaido and Guardian Orbit, and **every hit you take costs 25 Flow** (continuous damage doesn't; in Airborne an empty bar drops the blade back to your hand). The Saint's Silk Shroud softens it: hits cost 10, and Airborne it dodges 10%. On the dummy (never hit, so the reward without the risk): 367 / 434 at +100%, **398 / 476 at +150%** (without / with combos), near the top. A sloppy Swordsaint bleeds Flow and falls well behind.
+**Kensei, Razor's Edge** (2026-10-11; "the Kensei's damage seems low; I want it to be a high-risk, high-reward class"): Flow now adds up to **+150%** damage (was +50%) to the handheld slashes, the blade, Iaido and Guardian Orbit, and **every hit you take costs 25 Flow** (continuous damage doesn't; in Airborne an empty bar drops the blade back to your hand). The Ronin's Silk Shroud softens it: hits cost 10, and Airborne it dodges 10%. On the dummy (never hit, so the reward without the risk): 367 / 434 at +100%, **398 / 476 at +150%** (without / with combos), near the top. A sloppy Kensei bleeds Flow and falls well behind.
 
 **Boss-fight check for the trailing classes** (2026-10-11). The dummy can't show what the Machinist's hands-free turrets are worth while others dodge, or how the Paladin's hammer copes with a moving boss, so: real Amalgam (wave 10) and Hive Queen (wave 15) fights, full late gear, an immortal bot that chases its target, uses everything on cooldown and combos after each Space. First pass (one fight each): Amalgam Ranger 423, Dragonknight 391, Machinist 329, Cleric 310, Paladin 269; Queen Ranger 377, Machinist 365, Dragonknight 346, Paladin 326, Cleric 326. Changes: **Cleric** Divine Ray at 100 Zeal back to ×2.5 (Radiant Burst turned out too small to pay for the trim) and **Desecration ×1.2 → ×1.4** per tick; **Paladin** Judgment Hammer **42 → 50** and Divine Tether pulses **×0.4 → ×0.5**; **Machinist** Overclock **×1.5 → ×1.75** fire rate. After (three fights each, averaged):
 
@@ -312,7 +346,7 @@ Bandit Bastion's bosses by the same factors: Warlord 1200 + 240w, Beastmaster 35
 - **Weak points ×1.5 on bosses.**
 - **Fan of Knives 6 → 5**, the main swarm tool.
 - Estimate (late): ~+30-35% boss damage, swarm clearing well down (R no longer hits a pack).
-- **Armor HP scales with the class** (playtest: "the Nightblade gets +240 HP from the rare armor, and from T1+ armors as well"): every armor's HP is × (class base HP / 130), capped at ×1 so the tanks' 240 is the most (the user's call: scaling up would make the shielded Dragonknight unkillable). Rare armor: Nightblade 148 (base 80 → 228 max HP, was 320), Spellweaver and Swordsaint 185, Ranger, Cleric and Druid 222, Machinist, Paladin and Dragonknight 240. Commons scale the same way (T8: 135 for the Nightblade). The item's own value and text are scaled when it's made, so tooltips and comparisons show the real number. Tested at rank 1: one R put 583 into its target with six weak points (745 on a boss), and the enemy beside it only took the usual weak-point splash (66).
+- **Armor HP scales with the class** (playtest: "the Nightblade gets +240 HP from the rare armor, and from T1+ armors as well"): every armor's HP is × (class base HP / 130), capped at ×1 so the tanks' 240 is the most (the user's call: scaling up would make the shielded Dragonknight unkillable). Rare armor: Nightblade 148 (base 80 → 228 max HP, was 320), Spellweaver and Kensei 185, Ranger, Cleric and Druid 222, Machinist, Paladin and Dragonknight 240. Commons scale the same way (T8: 135 for the Nightblade). The item's own value and text are scaled when it's made, so tooltips and comparisons show the real number. Tested at rank 1: one R put 583 into its target with six weak points (745 on a boss), and the enemy beside it only took the usual weak-point splash (66).
 
 **Cleric finisher** (2026-10-11): **Radiant Burst**. The censer pulse after Phase Shift becomes a ring of light around you, ×2.5 to everything within 160 px and double Zeal per enemy (gold after a Holy spell, violet after a Shadow one), so Space → basic → Divine Ray is the Cleric's chain. Paid for by **Divine Ray at 100 Zeal ×2.5 → ×2.25** (Void Spike's blood ray too) (undone later, after the boss-fight check: the finisher turned out too small to pay for it): a Cleric who doesn't combo drops ~5%, one who does ends about where it was. Tested: enemies in front and behind each took 21.0 (2.5 × an 8.4 pulse), and Zeal went 0 → 60 from two enemies.
 
@@ -322,17 +356,17 @@ Bandit Bastion's bosses by the same factors: Warlord 1200 + 240w, Beastmaster 35
 
 **Leaping over enemies** (2026-10-11, playtest): a Vault over a boss used to land on top of it. The body push that keeps the hero and enemies apart ran mid-leap, so the hero carried the boss along the whole jump. Tested over each Slime Caves boss: 300 px vaults ended 48-78 px from its centre, inside the Queen every time. Now enemies aren't pushed during a dash, and a leap that still comes down inside a body slides on along the leap until clear (up to 160 px; walls stop it). The same vaults now land 130-220 px from the centre. Dash i-frames also start the instant the dash does (a puddle could tick in the first frame).
 
-**Ranks that did nothing, and the level-up cards** (2026-10-11). A review of what each rank changes (damage ×1.2 per rank past 1, `calcUtility` values ×1.2, cooldowns only on Space and the Swordsaint's E) found ranks that did almost nothing; the user chose utility for the Space skills and a longer Ascension:
+**Ranks that did nothing, and the level-up cards** (2026-10-11). A review of what each rank changes (damage ×1.2 per rank past 1, `calcUtility` values ×1.2, cooldowns only on Space and the Kensei's E) found ranks that did almost nothing; the user chose utility for the Space skills and a longer Ascension:
 - **Blink** range 350 → 420 / 490 / 560 px. **Vault** 300 → 340 / 380 / 420 px (Acrobatics stays 500). **Shadow Step** 300 → 340 / 380 / 420 px (+100 with the Windwalker Steps) and **Guardian Orbit** 1.2 → 1.44 / 1.68 / 1.92 s. **Magnetic Grapple**'s open-ground penalty +2 → +1.5 / +1 / +0.5 s. All keep the shorter cooldown.
-- **Ascension** 6 → 7.2 / 8.4 / 9.6 s (Avatar of Renewal and Aspect of the Reaper 8 → 12.8 s). **Swordsaint E**: the airborne blade drains Flow 10% slower per rank (a full flight 6.7 → 9.5 s). **Call of the Wild**: spirit animals bite ×0.4 → ×0.48 / 0.56 / 0.64 of your companion. **Feral Surge** lasts 5 → 6 / 7 / 8 s (the shell already grew 120 → 180).
+- **Ascension** 6 → 7.2 / 8.4 / 9.6 s (Avatar of Renewal and Aspect of the Reaper 8 → 12.8 s). **Kensei E**: the airborne blade drains Flow 10% slower per rank (a full flight 6.7 → 9.5 s). **Call of the Wild**: spirit animals bite ×0.4 → ×0.48 / 0.56 / 0.64 of your companion. **Feral Surge** lasts 5 → 6 / 7 / 8 s (the shell already grew 120 → 180).
 - Tested: Blink 350 / 560, Vault 300 / 420, Shadow Step 300 / 420, Orbit 1.2 / 1.93 s, flight 6.7 / 9.5 s, grapple miss 7 / 3.25 s, Ascension 6 / 9.6 s, Surge 5 / 8 s, spirit bites 0.40 / 0.64.
 - **Level-up cards** ("most of the levelling-up tooltips don't really say much: the Dragonknight's Q rank-up only shows the damage, not the shield"): every skill now lists each value its rank sets (ui.js `RANK_STATS`), and a rank-up shows each one that changes as before → after, with real numbers at your current Power: shields and their time, heals, durations, distances, turret cap, per-flame / per-arrow / per-tick hits, Dragonfire's bonus. Skills whose base damage only an evolution uses (Blink, Vault, Shadow Step) no longer show a misleading "Hit". The Evolve card adds what rank 4 brings under the two names. Small hits keep a decimal so the change shows.
 
 **Training Room** (2026-10-11, the user's request: "a test room... place down (possibly immortal) target dummies to practice combos and to bugfix"): a card in the top-left sea of the dungeon map leads to a sand yard with no waves, loot or XP (training.js). Straw dummies at the cursor (1 target, 2 boss, 3 sparring: a telegraphed swing in reach every 2.4 s, a slow bolt from further), each showing its damage over the last 5 s and in total; immortal by default (they refill below half), mortal ones die and come back after 2 s. A panel (T) sets each skill's rank and evolution, the late-game kit of the DPS tests (rare set, +80 Power), god mode (on), no cooldowns and a gauge fill (G).
 
-**Cosmetic fixes** (2026-10-11): the Swordsaint's blade is plain steel and only glows at 100 Flow (it glowed all the time). Second pass (playtest: "it still has an afterglow when they attack, move, but at full Flow + Airborne it doesn't glow"): the cyan afterimages behind a moving blade now only show while it glows, the swing trail below full Flow is steel-white (the rare weapon's was cyan at any Flow), and Airborne the blade glows for its whole flight (only a full bar deploys it, and it drains from the first frame, so "exactly 100" never glowed there and a fade from 100 to 50 was gone in ~3 s; playtest: "it still doesn't glow"). Then "it's coloured blue now, but still misses the glow outwards": the glow was only a canvas shadow on a 5 px blade, which barely shows, so a lit blade now has an additive cyan aura round it (three soft widths, slowly pulsing). Class-select difficulty tags on one scale: Easy (Dragonknight, Ranger), Easy / Medium (Paladin), Medium (Machinist, Spellweaver, Cleric, Druid; they used two colours), Hard (Nightblade), Expert (Swordsaint; Hard and Expert shared one red). The arrows that land in Arrow Trail and Volley were drawn head-up; they now stick head-down, leaning the way they fell.
+**Cosmetic fixes** (2026-10-11): the Kensei's blade is plain steel and only glows at 100 Flow (it glowed all the time). Second pass (playtest: "it still has an afterglow when they attack, move, but at full Flow + Airborne it doesn't glow"): the cyan afterimages behind a moving blade now only show while it glows, the swing trail below full Flow is steel-white (the rare weapon's was cyan at any Flow), and Airborne the blade glows for its whole flight (only a full bar deploys it, and it drains from the first frame, so "exactly 100" never glowed there and a fade from 100 to 50 was gone in ~3 s; playtest: "it still doesn't glow"). Then "it's coloured blue now, but still misses the glow outwards": the glow was only a canvas shadow on a 5 px blade, which barely shows, so a lit blade now has an additive cyan aura round it (three soft widths, slowly pulsing). Class-select difficulty tags on one scale: Easy (Dragonknight, Ranger), Easy / Medium (Paladin), Medium (Machinist, Spellweaver, Cleric, Druid; they used two colours), Hard (Nightblade), Expert (Kensei; Hard and Expert shared one red). The arrows that land in Arrow Trail and Volley were drawn head-up; they now stick head-down, leaning the way they fell.
 
-**Second combos, skill into skill** (2026-10-11; "they make the game way more fun and challenging"). Every class has its Space finisher, so each now gets a second pair, built from the "Ideas for later" list above. Same rules: nothing fires by itself, and each needs aim, timing, placement or risk. Trailing classes get real damage from theirs; the top ones (Nightblade, Ranger, Spellweaver) get a choice or utility. The Dragonknight and the Ranger come first (the user's pick); the other seven are proposed: Shatter (Spellweaver, E → Q), Smoke Step (Nightblade, E → Space), Arc Link (Machinist, turret + coil), Riposte Step (Swordsaint, parry → Space), Prism (Cleric, E → Q), Thorn Leap (Druid, Q → Space), Chain Recall (Paladin, tether → Q recall).
+**Second combos, skill into skill** (2026-10-11; "they make the game way more fun and challenging"). Every class has its Space finisher, so each now gets a second pair, built from the "Ideas for later" list above. Same rules: nothing fires by itself, and each needs aim, timing, placement or risk. Trailing classes get real damage from theirs; the top ones (Nightblade, Ranger, Spellweaver) get a choice or utility. The Dragonknight and the Ranger come first (the user's pick); the other seven are proposed: Shatter (Spellweaver, E → Q), Smoke Step (Nightblade, E → Space), Arc Link (Machinist, turret + coil), Riposte Step (Kensei, parry → Space), Prism (Cleric, E → Q), Thorn Leap (Druid, Q → Space), Chain Recall (Paladin, tether → Q recall).
 - **Dragonknight, Skyfall Catch** (Q → Space): a Thunder Leap that meets its own flying Shield Throw (within 30 px of the hero, out or coming back) catches it in mid-air, and the landing becomes a slam: ×2.5 in 160 px (not ×1 in 120) and a 1 s stun on non-bosses, plus the catch shield. Only shields already flying when you leapt count, so a Q pressed mid-leap can't catch itself. The landing still opens Wyrm Whirl: Q → Space → LMB. Model: +30 base per leap, ~+7% late if every leap catches (Q's 4 s cooldown allows it), ~+3-4% in real play. Tested: leaping after the outgoing shield, or into the returning one, 30.6 at 60 and at 150 px (a plain landing 12.2, nothing at 150), stun 1 s, +50 shield; a Q thrown mid-leap or a leap away from the shield, a plain landing.
   - Playtest: "I jump to catch the shield but the jump finishes without a slam." On its way out the shield runs from the leap at 600 px/s, so a leap aimed at it always landed 70-200 px short; only the returning shield (which homes onto you) could be caught. Now a leap aimed at an outgoing shield (cursor within 100 px of it, landing within 220 px) stops it in mid-air and it drifts to where you land. Tested: leaping at the shield's position 0.1-1.5 s after the throw, out or back, gives a Skyfall every time.
 - **Dragonknight, Rebound** (Q → E → held LMB; the user's design, kept alongside Skyfall, with strict timing by the user's choice): a full Dragonfire slam whose reach and arc (200 px, ±50° plus a little) take in the returning shield bats it back out along the swing, burning and faster (1100 px/s). It ricochets between enemies for 4 hits of a Shield Throw each and sets them burning (off a lone boss it glances away and comes back), then flies home and is caught as usual. First the slam fired itself when full, so the hold had to start about 0.8 s before the shield arrived (a ~0.2 s window to start the hold); playtest: "really almost impossible to pull off". Now the slam strikes on release and a full charge waits, so you charge early and release as the shield comes into reach (~0.2 s while it crosses 200 px, but you can watch it come). Tested: 4 batted hits of 18-19 (one Shield Throw hit each) bouncing between two slimes, or all 4 on a lone one; no Dragonfire, no bat. Model: +4 Shield Throw hits per Dragonfire (12 s), ~+5% when you land it.
@@ -362,14 +396,14 @@ Bandit Bastion's bosses by the same factors: Warlord 1200 + 240w, Beastmaster 35
   - **Prism** (E → Q): Divine Ray crossing your own Hallowed Ground refracts where it leaves the zone: two smaller rays (the ray's own look, 60% as wide) fan out from that point ±30°, 450 px, at half a tick each; Holy ones blind, Shadow ones slow. They start at the zone's far edge, not its centre, so a boss standing in the zone doesn't simply take double. Available from the first levels, which helps the Cleric's weak start. Tested: an enemy on a side beam 41.3 (half the main ray's 82.7), nothing without the zone; an enemy at the zone's centre 82.7 either way.
   - **Sanctified Arrival** (E → Space): Phase Shift landing inside your own Hallowed Ground makes it erupt, once per zone. Holy and the plain zone: heals 10% max HP and throws non-bosses out of it. Shadow (Desecration): a nova for ×2 a Desecration tick that blinds for 1 s. Tested: healed 12 (10%) and the enemy thrown to 192 px from the centre; Shadow 25.2 and blinded; a second arrival in the same zone nothing.
   - **Twilight Eclipse** (RMB → Q): enemies Twilight Repulse stunned take ×1.5 from Divine Ray for 1.6 s, so a ray cast right after is eclipsed for its whole channel (the 1 s stun alone covered two thirds of it, ~+19%). Bosses aren't stunned by the Repulse, so they don't count. Tested: a ray alone 124, right after the Repulse 186 (the Repulse's own hit included).
-- **Nightblade and Swordsaint, round two** ("really hard to design even more: they already got very heavy skill expression"): these deepen what the classes already ask for instead of adding a layer.
+- **Nightblade and Kensei, round two** ("really hard to design even more: they already got very heavy skill expression"): these deepen what the classes already ask for instead of adding a layer.
   - **Nightblade, Shadow Strike** (R + Space): while Mark for Death runs, a Phantom Dash straight through the marked target is an extra clone strike: ×0.6 the Mark from a fresh weak side facing where you came in, so it always pops; up to twice per Mark (Bloodlust heals 2% for it, like a clone's). You weave your strikes between the clones' and pass through the boss to do it. Tested on a boss dummy: the Mark alone 745, with three dashes through 1007 (two counted).
   - **Nightblade, Smoke Step** (E → Space): a Phantom Dash that starts inside your Smoke Bomb carries the cloud to where you land (it glides after you). Swarm survival, no damage. Tested: the cloud ended on the hero after the dash; a dash from outside it left it in place.
-  - **Swordsaint, Counter Step** (parry → Space → LMB; it was going to be Riposte Step, renamed because the E evolution is Riposte Recall): a successful parry readies Shadow Step at once, and a Shadow Step within 1.5 s makes its Iaido cut ×1.5. Tested: Shadow Step's cooldown 4 → 0 on the parry, Iaido 17.3 → 25.9.
-  - **Swordsaint, Return Cut** (Airborne E, the recall): every recall now cuts back through everything between the blade and you, for ×3 a basic times the Flow it spends (nothing at empty). **Riposte Recall** (E-A), which used to be the only recall that cut (a flat ×2 basic), now cuts as if your Flow were full and still keeps 30%; its text says so. Tested: 25.9 at 100 Flow, 13.0 at 50, nothing at 0.
-  - **Swordsaint, Whirling Orbit** (Guardian Orbit → Q, the user's idea): Q during the orbit spins it twice as fast for the rest of it and 0.3 s longer, instead of Blade Surge, so press it early. Measured on a boss dummy at full Flow: a plain orbit 344, whirled 664 (+320), a Blade Surge 264. (+0.6 s made it +458, ~70% over a Surge; no extension +183, less than a Surge.)
-  - **Swordsaint, Gale Orbit** (Guardian Orbit → RMB, the user's pick over Hammer & Anvil and Wind Step): Phantom Wind during the orbit flings it wide: the circle grows to 250 px for the rest of the orbit and cuts a ring rather than the whole disc; shots entering the circle are still cut down. Tested: radius 250, an enemy 220 px out cut for 115.
-  - **Swordsaint, Gathering Gale** (Shadow Step → R → Q, in hand; the user's design and pick of the three readings): R cast in Shadow Step's window doesn't storm round you, the blades gather in front of you (ghost katanas wheeling); Q within 1 s releases them: you dash forward 260 px and a hurricane flies on ahead down that line for 650 px, cutting what it passes every 0.15 s for ×0.5 the R, carrying non-bosses along, +10 Flow per enemy it catches, and bursting at the end (×0.8 in 160 px). No Q in time: the storm breaks round you as a plain Blade Whirlwind. Tested in the Training Room: a target dummy on the line took 143 and was carried 408 px; a boss dummy at the end 99 (a plain whirlwind on it: 65); no Q: the plain storm; R outside the window: the plain storm.
+  - **Kensei, Counter Step** (parry → Space → LMB; it was going to be Riposte Step, renamed because the E evolution is Riposte Recall): a successful parry readies Shadow Step at once, and a Shadow Step within 1.5 s makes its Iaido cut ×1.5. Tested: Shadow Step's cooldown 4 → 0 on the parry, Iaido 17.3 → 25.9.
+  - **Kensei, Return Cut** (Airborne E, the recall): every recall now cuts back through everything between the blade and you, for ×3 a basic times the Flow it spends (nothing at empty). **Riposte Recall** (E-A), which used to be the only recall that cut (a flat ×2 basic), now cuts as if your Flow were full and still keeps 30%; its text says so. Tested: 25.9 at 100 Flow, 13.0 at 50, nothing at 0.
+  - **Kensei, Whirling Orbit** (Guardian Orbit → Q, the user's idea): Q during the orbit spins it twice as fast for the rest of it and 0.3 s longer, instead of Blade Surge, so press it early. Measured on a boss dummy at full Flow: a plain orbit 344, whirled 664 (+320), a Blade Surge 264. (+0.6 s made it +458, ~70% over a Surge; no extension +183, less than a Surge.)
+  - **Kensei, Gale Orbit** (Guardian Orbit → RMB, the user's pick over Hammer & Anvil and Wind Step): Phantom Wind during the orbit flings it wide: the circle grows to 250 px for the rest of the orbit and cuts a ring rather than the whole disc; shots entering the circle are still cut down. Tested: radius 250, an enemy 220 px out cut for 115.
+  - **Kensei, Gathering Gale** (Shadow Step → R → Q, in hand; the user's design and pick of the three readings): R cast in Shadow Step's window doesn't storm round you, the blades gather in front of you (ghost katanas wheeling); Q within 1 s releases them: you dash forward 260 px and a hurricane flies on ahead down that line for 650 px, cutting what it passes every 0.15 s for ×0.5 the R, carrying non-bosses along, +10 Flow per enemy it catches, and bursting at the end (×0.8 in 160 px). No Q in time: the storm breaks round you as a plain Blade Whirlwind. Tested in the Training Room: a target dummy on the line took 143 and was carried 408 px; a boss dummy at the end 99 (a plain whirlwind on it: 65); no Q: the plain storm; R outside the window: the plain storm.
 - **Ranger, Skyline Shot** (Space → Q): Q pressed during Vault or in the window after it looses Storm Arrow fully drawn at once, ×1.25 (its follow-up strike too), skipping the 1.2 s slowed draw. It spends the window, so it's Arrow Trail or Skyline, never both: ~+37 base on the arrow plus ~30 of basics in the saved draw, against Arrow Trail's ~60 on a boss you vault away from (3 arrows) and much more on a pack you jump over. Single target from the air, or the pack. `COMBO_SKILLS` in combos.js (main.js keydown, before the hold-to-draw starts). Tested: 125 + 62.5 raw against 100 + 50 for a normal full draw, no window after a mid-air one, no trail after a Q in the window, and a Q with no window still starts the normal draw.
 
 Sections:
@@ -393,7 +427,7 @@ Since the Dragonknight playtest every damage source adds into one number, **Powe
 
 ```
 scaledBase = baseDmg × (1 + 0.2 × (rank − 1))          rank 1/2/3/4 = ×1.0 / 1.2 / 1.4 / 1.6
-Power      = class dmgMult                              (100 for most classes; Spellweaver/Swordsaint 120, Paladin 110, Nightblade 150)
+Power      = class dmgMult                              (100 for most classes; Spellweaver/Kensei 120, Paladin 110, Nightblade 150)
            + weapon.val                                 common weapon = 0.05 + tier × 0.10, rare weapon = 0.50 → 0.90 (awakening)
            + Dragonknight: 0.02 × Frenzy stacks         (max +0.20, +0.30 with the Wyrmheart Pendant)
            + Ranger: momentum                           (max +0.20)
@@ -419,21 +453,21 @@ Since pass 3, every damaging skill goes through `calcDmg`. Right-click abilities
 
 Order of operations:
 1. **×0.6 global enemy-damage reduction.**
-2. Swordsaint parry window: blocks the hit completely.
+2. Kensei parry window: blocks the hit completely.
 3. i-frames, Evade (Nightblade's Cowl), Smoke Bomb (50% evade while inside).
 4. Class armors (`itemsDamageTaken`): Dragon Scale Plate ×0.85 while shielded, Robes of the Magi ×0.75 while holding Resonance, Windrunner Tunic dodges a hit at full Momentum.
 5. Hazard Suit: ignores continuous damage and any hit below 5.
 6. Cleric Vestments (Holy): ×0.85 on projectiles and reflects them.
 7. Paladin: ×0.8 inside Bastion Dome, Gilded Plate up to −25%, armor ×1.15 while the hammer is away.
-8. **Armor: `max(1, amount × (1 − armor / (armor + 20)))`, hits only.** Continuous damage (puddles, wading, links, tethers) ignores armor. By class: Paladin 6 = 23% (6.9 = 26% with the hammer away), Dragonknight 5 = 20%, Machinist/Druid 3 = 13%, Ranger/Cleric 2 = 9%, Nightblade/Swordsaint 1 = 5%, Spellweaver 0%.
+8. **Armor: `max(1, amount × (1 − armor / (armor + 20)))`, hits only.** Continuous damage (puddles, wading, links, tethers) ignores armor. By class: Paladin 6 = 23% (6.9 = 26% with the hammer away), Dragonknight 5 = 20%, Machinist/Druid 3 = 13%, Ranger/Cleric 2 = 9%, Nightblade/Kensei 1 = 5%, Spellweaver 0%.
 9. Shield absorbs, then HP. Every shield goes through `addShield` ([combat.js](js/combat.js)): stacked shields stop at **50% of max HP**, but a single shield bigger than that still lands whole (Feral Surge, Ice Barrier on a low-HP class). It refreshes the timer to the longer of the two.
 
 ### Cooldowns
 
 - Skill cooldown = `maxCd × getCDR()`.
-- **Only slot 3 (Space) and the Swordsaint's E** also get rank scaling: `maxCd × max(0.4, 1 − 0.15 × (rank − 1))` → rank 2/3/4 = ×0.85 / 0.70 / 0.55 (`skillBaseCd` in [combat.js](js/combat.js)).
+- **Only slot 3 (Space) and the Kensei's E** also get rank scaling: `maxCd × max(0.4, 1 − 0.15 × (rank − 1))` → rank 2/3/4 = ×0.85 / 0.70 / 0.55 (`skillBaseCd` in [combat.js](js/combat.js)).
 - `getCDR()` = 1 − the amulet's val (commons 6-20%, class rares 20%) − 0.50 (Cleric Aspect of the Reaper), **floored at 0.4** (60% max CDR).
-- **Basic attack cooldown** = `0.15 + basicAttackCD / (1 + gloves.val [+ Swordsaint airborne Flow bonus up to 0.5])`. CDR doesn't affect it.
+- **Basic attack cooldown** = `0.15 + basicAttackCD / (1 + gloves.val [+ Kensei airborne Flow bonus up to 0.5])`. CDR doesn't affect it.
 - Right-click (rare weapon) cooldown: **4 s × getCDR()** for every class.
 
 ### Healing sources (all classes)
@@ -526,7 +560,7 @@ Price `tier × 25`, sells for a fifth (`SELL_RATE` in ui.js; was half). Base mov
 - Stock: 3 common items at `generateItem(wave + 2)` (T4 at wave 5, T6 at wave 10), plus all 5 of the class's rares every visit.
 - Rare prices: weapon 250, armor 250, amulet 250, boots 200, gloves 200 (1150 for the set; was 950).
 - Gold model (Slime Caves, regular kills + boss gold + selling every drop): ~295 at shop 1 and ~1000 in total by shop 2, so a run buys the weapon and about three more rares and has to choose what to skip. Before: ~460 and ~1900 (≈1100 from selling ~25 drops), enough for the whole set.
-- Shop rares carry fixed `val`s: weapon 0.5 (+50% damage, awakening +4% per wave cleared after purchase, up to +90%), armor 240 HP, amulet 0.20, boots 50, gloves 0.25. Boots and gloves can be overridden per class with `val` in classes.json (the Swordsaint's are).
+- Shop rares carry fixed `val`s: weapon 0.5 (+50% damage, awakening +4% per wave cleared after purchase, up to +90%), armor 240 HP, amulet 0.20, boots 50, gloves 0.25. Boots and gloves can be overridden per class with `val` in classes.json (the Kensei's are).
 
 ---
 
@@ -541,7 +575,7 @@ Basic DPS = `basicDmg × dmgMult × hits per attack / (basicAttackCD + 0.15)`, s
 | Ranger | 120 | 2 | 1.0 | 10 | 0.25 | 25.0 (30.0 with Momentum) | arrow, 1000 speed, 9 px, aim assist |
 | Nightblade | 80 | 1 | 1.5 | 12 | 0.30 | 40.0 (2 thrusts × 0.5) | double thrust, 90 px |
 | Machinist | 140 | 3 | 1.0 | 10 | 0.40 | 40.9 point-blank (9 pellets × 0.25) | scattergun, short range |
-| Swordsaint | 100 | 1 | 1.2 | 12 | 0.30 | 37.3 (56 at full Flow) | 3-hit combo, cone |
+| Kensei | 100 | 1 | 1.2 | 12 | 0.30 | 37.3 (56 at full Flow) | 3-hit combo, cone |
 | Cleric | 120 | 2 | 1.0 | 14 | 0.40 | 25.5, pierces | censer pulse, ~400 px |
 | Druid | 120 | 3 | 1.0 | 12 | 0.35 | 24, plus the wolf's 18.75 (15 per bite every 0.8 s) | seed bolt; the wolf bites on its own |
 | Paladin | 170 | 6 | 1.1 | 14 | 0.35 | 30.8, cone + stagger | 140 px 120° smash |
@@ -552,7 +586,7 @@ Passives at a glance:
 - **Ranger, Fleetfoot:** +10% damage and move speed per second of movement, max +20%. Standing still keeps it 1 s, then it drains over 2 s.
 - **Nightblade, Expose Weakness:** every 3 s, marks 1-3 unmarked enemies within 400 px with a weak-point side, the biggest first (a boss always gets one). Weak points on a boss deal ×1.5 (`BOSS_WEAK_MULT`).
 - **Machinist, Salvage Economy:** 25% Scrap per kill; Scrap heals 5 HP and is stored (max 20). Holding Q spends it: 0.4 s → Heavy Turret (5, ×1.5), 0.9 s → Siege Turret (10, ×2).
-- **Swordsaint, Flow & Stance:** Handheld builds Flow, Airborne spends it.
+- **Kensei, Flow & Stance:** Handheld builds Flow, Airborne spends it.
 - **Cleric, Zeal:** basics build Zeal, spells spend it and get stronger at 50 and 100 (Divine Ray ×1.75 / ×2.5 damage).
 - **Druid, Wild Bond:** a wolf hunts at your side, going after what you hit (Scent) and pouncing on what you snare. Its bites on Scented prey build Bond; at 100 the next bite is a Maul (×4, stun).
 - **Paladin, Celestial Anchor:** the hammer is either in hand or planted, and the skills change with it.
@@ -694,7 +728,7 @@ Rares:
 - **Underbarrel Net Gun:** +50→90%, Net Shot.
 - **Hazard Suit:** +240 HP; immune to slows, continuous damage and hits under 5, and keeps you dry in the lakes.
 
-### Swordsaint
+### Kensei
 
 The stance decides which half of each skill you get.
 
@@ -722,7 +756,7 @@ Upgrades:
 
 Rares (all different from the shared set):
 - **Shattered Reality:** +50→90%, Phantom Wind.
-- **Saint's Silk Shroud:** +185 HP (the class's armor factor). Hits cost only 10 Flow instead of 25 (Razor's Edge), and in Airborne you dodge 10% of hits. (It used to give Flow when you were hit, the opposite of Razor's Edge.)
+- **Ronin's Silk Shroud:** +185 HP (the class's armor factor). Hits cost only 10 Flow instead of 25 (Razor's Edge), and in Airborne you dodge 10% of hits. (It used to give Flow when you were hit, the opposite of Razor's Edge.)
 - **Prismatic Core:** 20% CDR, airborne Flow drains 30% slower (a full bar lasts ~9.5 s).
 - **Windwalker Steps:** +60 move speed, Shadow Step 400 px.
 - **Aether Grips:** +30% attack speed (the airborne blade too), +10% Flow from basics.
@@ -833,7 +867,7 @@ Rares:
 ## 5. Class rare items
 
 Every class has its own five rares ([classes.json](data/classes.json); the effects that aren't inside one skill's code live in [items.js](js/items.js)). Shop prices: weapon 250, armor 200, amulet 200, boots 150, gloves 150, all five every visit.
-- **Base stats by slot:** weapon +50% damage, awakening +4% per wave cleared up to +90%, armor +240 HP × the class factor (`armorHpMult`: base HP / 130, at most 1, so Nightblade 148, Spellweaver/Swordsaint 185, Ranger/Cleric/Druid 222, the rest 240), amulet `val` as CDR (20%), boots +50 move speed, gloves +25% attack speed. A class rare can override the stat with `val` (the Swordsaint's boots and gloves).
+- **Base stats by slot:** weapon +50% damage, awakening +4% per wave cleared up to +90%, armor +240 HP × the class factor (`armorHpMult`: base HP / 130, at most 1, so Nightblade 148, Spellweaver/Kensei 185, Ranger/Cleric/Druid 222, the rest 240), amulet `val` as CDR (20%), boots +50 move speed, gloves +25% attack speed. A class rare can override the stat with `val` (the Kensei's boots and gloves).
 - **The pattern:** the weapon brings the RMB ability, the armor a defensive effect, the amulet feeds the class gauge or a spell, the boots upgrade the Space skill, and the gloves upgrade the basics.
 - The old shared trio (Amulet of Power, Ethereal Treads, Vampiric Grips) is gone.
 
@@ -844,7 +878,7 @@ Every class has its own five rares ([classes.json](data/classes.json); the effec
 | Ranger | **Eye of the Storm:** a full-draw Storm Arrow cuts 2 s off Volley | **Trailblazer Boots:** Momentum builds ×2 as fast, Vault fills it | **Fletcher's Grips:** every 4th arrow splits into three (±0.15 rad, the side arrows don't home) |
 | Nightblade | **Sigil of the Hunt:** Expose Weakness marks 2-4 per pulse (was 1-3), weak points +25% | **Shadowstep Boots:** Phantom Dash leaves an 80 px smoke for 1.5 s at its start (50% evade, enemies lose you) | **Serrated Grips:** basic thrusts bleed for `calcDmg(basicDmg)`/s for 3 s (refreshes) |
 | Machinist | **Overclock Regulator:** Overclock +2 s; a tapped turret during it is a free Heavy Turret | **Mag-Lock Boots:** grappling onto a turret or coil refreshes its lifetime and gives +40 shield (3 s) | **Salvager's Gauntlets:** every 25 pellet hits give 1 Scrap (no heal) |
-| Swordsaint | **Prismatic Core:** 20% CDR, airborne Flow drains 30% slower | **Windwalker Steps:** +60 move speed, Shadow Step 400 px | **Aether Grips:** +30% attack speed (the airborne blade too), +10% Flow from basics |
+| Kensei | **Prismatic Core:** 20% CDR, airborne Flow drains 30% slower | **Windwalker Steps:** +60 move speed, Shadow Step 400 px | **Aether Grips:** +30% attack speed (the airborne blade too), +10% Flow from basics |
 | Cleric | **Reliquary of Dawn and Dusk:** a spell cast at 100 Zeal leaves you at 25 Zeal (not while Zeal is locked) | **Pilgrim's Sandals:** Phase Shift leaves an 80 px Hallowed Ground for 2 s at its start, healing `5 + 2% max HP` (E-rank scaled) per 0.5 s | **Thurible Chains:** 20 Zeal per censer hit (was 15) |
 | Druid | **Elder Grove Seed:** spirit animals stay 4 s longer | **Pathfinder Wraps:** Spirit Leap's landing +15 Bond (stacks with Alpha Leap: 40) | **Packbond Bracers:** seed bolts Scent for 6 s; one that hits your companion's prey gives +3 Bond |
 | Paladin | **Seal of Judgment:** a clean catch resets Righteous Charge / Iron Pull, and that charge hits +50% | **Crusader Sabatons:** Righteous Charge stuns 0.8 s (was 0.3); Iron Pull stuns 0.5 s | **Gauntlets of Devotion:** hammer-in-hand smashes deal +30% and heal 1% max HP per enemy hit (max 3%) |
@@ -1014,7 +1048,7 @@ Rough example, Spellweaver at the Amalgam (wave 10), rank-4 Meteor:
 
 ### Classes that fall off or don't scale
 
-All fixed in pass 3: the Swordsaint's Airborne blade, Shatter Storm and Phantom Wind; the Cleric's Desecration, Raven Flight, Avatar bolts and Twilight Repulse; the Druid's Savage Blooms; the Nightblade's weak points and Chain Reaction now all scale.
+All fixed in pass 3: the Kensei's Airborne blade, Shatter Storm and Phantom Wind; the Cleric's Desecration, Raven Flight, Avatar bolts and Twilight Repulse; the Druid's Savage Blooms; the Nightblade's weak points and Chain Reaction now all scale.
 
 ### Survivability
 
@@ -1040,11 +1074,11 @@ None of these are fixed. Each one changes balance numbers, so it's worth decidin
 |---|---|---|
 | 1 | [combat.js:182](js/combat.js#L182) | **Fixed in pass 4** (50% less damage for 2 s). Iron Bulwark's 50% damage reduction is never set (`buffs.ironBulwark` is never written). Already in CLAUDE.md. |
 | 2 | [combat.js:138](js/combat.js#L138) | **Fixed in pass 3.** `activeClass.skills[1].selectedUpg === 'B'` for the Ranger is **Barbed Tips** (Q). It gives a hidden ×1.2 to every non-magic, non-DoT Ranger hit, basics included. It was probably meant to be the bleed and nothing more, or it was meant for another skill. |
-| 3 | [ui.js:192](js/ui.js#L192) | **Fixed in pass 4.** The level-up card shows a cooldown reduction for every skill, but only Space (and the Swordsaint's E) actually get rank-based cooldown scaling. |
+| 3 | [ui.js:192](js/ui.js#L192) | **Fixed in pass 4.** The level-up card shows a cooldown reduction for every skill, but only Space (and the Kensei's E) actually get rank-based cooldown scaling. |
 | 4 | [skills.js:374](js/skills.js#L374) | **Fixed in pass 3.** Avatar of Renewal's 6 cast bolts deal `dmg × 1.5`, but Ascension has base 0, so they deal **0**. |
 | 5 | [skills.js:351](js/skills.js#L351) | **Fixed in pass 3.** Base Phase Shift at 100 Zeal deals `dmg` = **0** to stunned enemies (base 0). Raven Flight falls back to a flat 20 and Desecration to a flat 15 via `dmg ‖ X`. |
 | 6 | [skills.js:903](js/skills.js#L903) | **Fixed in pass 3.** Toxic Fumes poison uses Smoke Bomb's `dmg` = `calcDmg(0)` = **0**, so the "heavy continuous poison damage" does nothing. |
-| 7 | [ui.js:156](js/ui.js#L156) | **Fixed in pass 4.** Every rare weapon gets `val: 1.0` (+100%), including the Cleric's censer, whose description doesn't promise it. Rare armor is always +240 HP (Saint's Silk Shroud doesn't mention HP). Windwalker Steps gives +50, not the +60 it describes. |
+| 7 | [ui.js:156](js/ui.js#L156) | **Fixed in pass 4.** Every rare weapon gets `val: 1.0` (+100%), including the Cleric's censer, whose description doesn't promise it. Rare armor is always +240 HP (Ronin's Silk Shroud doesn't mention HP). Windwalker Steps gives +50, not the +60 it describes. |
 | 8 | [skills.js:5](js/skills.js#L5) | **Fixed in pass 4.** Dragonknight Frenzy promises +2% attack speed per stack; only the damage part exists. |
 | 9 | [skills.js:39](js/skills.js#L39) | **Fixed in pass 3.** Laser Optics is described as "piercing" but hits a single target, and its 1.5/s rate gives less DPS than the base turret (2.5/s). |
 | 10 | [combat.js:76](js/combat.js#L76) | **Fixed in pass 2.** The Slime Warden's `invulnTimer` was set on every orb hit but never checked, so orbs could be stripped in a single frame. |

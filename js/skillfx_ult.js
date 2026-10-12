@@ -274,10 +274,10 @@ function drawUltAuraFront(facing) {
 }
 
 // ==========================================
-// Swordsaint: Blade Whirlwind spin
+// Kensei: Blade Whirlwind spin
 // ==========================================
 
-// While the whirlwind spins, the swordsaint (and their katana) spin with it
+// While the whirlwind spins, the kensei (and their katana) spin with it
 function ultFacing() {
     for (const ef of effects) if (ef.type === 'katana_tornado' && !ef.hurricane) return ef.startAngle + ultElapsed(ef) * 16; // (the Gathering Gale's hurricane flies off on its own)
     return null;
@@ -684,7 +684,7 @@ function drawUltEffect(ef, p, k) {
             return true;
         }
 
-        case 'shatter_burst': { // Swordsaint Shatter Storm: the airborne blade bursts into shards
+        case 'shatter_burst': { // Kensei Shatter Storm: the airborne blade bursts into shards
             if (!ef.burstDone) {
                 ef.burstDone = true;
                 burst(ef.x, ef.y, 0, Math.PI * 2, 16, { kind: 'spark', color: '#84ffff', size: 2.5, life: 0.35, speed: [200, 480], drag: 5 });

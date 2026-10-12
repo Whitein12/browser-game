@@ -469,8 +469,8 @@
       }
     }
   },
-  "swordsaint": {
-    "name": "Swordsaint",
+  "kensei": {
+    "name": "Kensei",
     "color": "#00bcd4",
     "weapon": "phantom_blade",
     "baseMaxHp": 100,
@@ -485,7 +485,7 @@
       "rmbSkill": "Phantom Wind"
     },
     "rareArmor": {
-      "name": "Saint's Silk Shroud",
+      "name": "Ronin's Silk Shroud",
       "desc": "+240 Max HP | Hits cost only 10 Flow instead of 25, and in Airborne you dodge 10% of hits."
     },
     "rareAmulet": {

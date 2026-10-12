@@ -191,9 +191,9 @@
                             <p class="card-meta">Weapon: Daggers | Very Low HP | Extreme Single Target</p>
                             <div class="card-details"></div>
                         </div>
-                        <div class="class-card" data-class="swordsaint" style="--cc:#00bcd4;">
-                            <canvas class="class-portrait" data-class="swordsaint"></canvas>
-                            <div class="class-title">Swordsaint</div>
+                        <div class="class-card" data-class="kensei" style="--cc:#00bcd4;">
+                            <canvas class="class-portrait" data-class="kensei"></canvas>
+                            <div class="class-title">Kensei</div>
                             <div class="diff-tag" style="--dc:#e53935;">Difficulty: Expert</div>
                             <p class="card-desc">High-skill tactician and glass cannon. Swap between melee parry and autonomous Airborne Blade to control space.</p>
                             <p class="card-meta">Weapon: Phantom Blade | Stance Dancer | Low HP</p>
@@ -262,6 +262,15 @@
                 </div>
                 <canvas id="letter-map" width="520" height="300"></canvas>
                 <button class="btn btn-primary letter-btn" onclick="closeLetter()">Follow the map</button>
+            </div>
+        </div>
+
+        <div id="dialogue-screen" class="hidden" onclick="dialogueAdvance()">
+            <canvas id="dialogue-portrait"></canvas>
+            <div class="dialogue-box panel">
+                <div class="dialogue-plate"><div class="dialogue-name" id="dialogue-name"></div><div class="dialogue-title" id="dialogue-title"></div></div>
+                <div class="dialogue-text" id="dialogue-text"></div>
+                <div class="dialogue-more hidden" id="dialogue-more">Enter &#9662;</div>
             </div>
         </div>
 
@@ -341,6 +350,7 @@
     <script src="js/map_hive.js"></script>
     <script src="js/map_village.js"></script>
     <script src="js/map_trail.js"></script>
+    <script src="js/map_bridge.js"></script>
     <script src="js/enemysprites.js"></script>
     <script src="js/bandits.js"></script>
     <script src="js/fx.js"></script>
@@ -353,6 +363,7 @@
     <script src="js/menu.js"></script>
     <script src="js/combos.js"></script>
     <script src="js/training.js"></script>
+    <script src="js/dialogue.js"></script>
     <script src="js/main.js"></script>
 </body>
 </html>

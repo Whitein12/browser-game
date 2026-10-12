@@ -11,7 +11,7 @@
 const T_FENCE = T_RAVINE; // a low fence works like a ravine: it stops walkers, not leaps or shots
 
 STAGE_MAPS.village = {
-    w: 2800, h: 1800, cell: 25, zoom: 1.25, // drawn a bit closer in than the Slime Caves: the details are small (stage.js camZoom)
+    w: 2800, h: 1800, cell: 25,
     bounds: { left: 30, top: 30, right: 2770, bottom: 1770 },
     start: { x: 300, y: 965 },
     exit: { x: 2700, y: 900 }, exitTo: { x: 2880, y: 900 }, exitR: 90, arrow: '#ffab40',

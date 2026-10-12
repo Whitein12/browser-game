@@ -2,7 +2,7 @@
 // stage.js - Stage maps, camera, solid terrain, enemy pathing, spawn points, scripted stage events
 // ==========================================
 // Maps listed in STAGE_MAPS are bigger than the screen and scroll with a camera (map_village.js and training.js add
-// their own). Every other map type ('open', 'bridge') is still exactly the window, so the camera stays at 0,0 there.
+// their own). Every other map type ('open') is still exactly the window, so the camera stays at 0,0 there.
 // mouseX / mouseY are world coordinates: the screen-space mouse plus the camera offset.
 
 const STAGE_MAPS = {
@@ -43,7 +43,7 @@ const STAGE_MAPS = {
     },
 };
 
-const camera = { x: 0, y: 0, tx: null, ty: null }; // top-left of the view in world space; tx/ty: a point to look at instead of the player
+const camera = { x: 0, y: 0, tx: null, ty: null, speed: 0 }; // top-left of the view in world space; tx/ty: a point to look at instead of the player; speed: a cutscene's own pan rate
 let mouseScreenX = window.innerWidth / 2, mouseScreenY = window.innerHeight / 2;
 let stageEvent = null; // scripted sequence { type, t, blocking, ... }; blocking ones freeze the fight
 
@@ -76,6 +76,7 @@ function setStageMap(type) {
     if (changed && type === 'hive') buildHive(); // map_hive.js
     if (changed && type === 'village') buildVillage(); // map_village.js
     if (changed && type === 'trail') buildTrail(); // map_trail.js
+    if (changed && type === 'bridge') buildBridge(); // map_bridge.js
     updateMapBounds();
     if (changed) {
         for (const e of enemies) if (e.prop) e.dead = true; // props (the village's powder kegs) belong to their map
@@ -87,6 +88,7 @@ function setStageMap(type) {
         if (type === 'hive') resetHive(); // the brood pods are enemies, so they go in after the map is set
         if (type === 'village') resetVillage(); // so are the powder kegs
         if (type === 'trail') resetTrail(); // map_trail.js: the logjams and the gate shut again
+        if (type === 'bridge') resetBridge(); // map_bridge.js: nobody on the bridge yet
         updateNav(true);
         updateCamera(0, true);
     }
@@ -99,7 +101,7 @@ function updateCamera(dt, snap) {
     if (camera.tx === null && currentMap.type === 'hive') { const q = enemies.find(e => e.onThrone && !e.dead); if (q) { fx += (q.x - fx) * 0.4; fy += (q.y - fy) * 0.4; } } // her last stand: keep the throne in view
     const tx = W <= cw ? (W - cw) / 2 : Math.max(0, Math.min(W - cw, fx - cw / 2));
     const ty = H <= ch ? (H - ch) / 2 : Math.max(0, Math.min(H - ch, fy - ch / 2));
-    const k = snap ? 1 : 1 - Math.exp(-dt * (camera.tx !== null ? 3 : 10)); // cutscene pans are slower than player follow
+    const k = snap ? 1 : 1 - Math.exp(-dt * (camera.tx !== null ? camera.speed || 3 : 10)); // cutscene pans are slower than player follow (unless the scene asks)
     camera.x += (tx - camera.x) * k; camera.y += (ty - camera.y) * k;
     mouseX = mouseScreenX / camZoom() + camera.x; mouseY = mouseScreenY / camZoom() + camera.y;
 }
@@ -373,6 +375,8 @@ function updateStageEvent(dt) {
     else if (ev.type === 'logjam_break') updateLogjamBreak(ev, dt); // map_trail.js
     else if (ev.type === 'beast_intro') updateBeastmasterIntro(ev, dt);
     else if (ev.type === 'gate_open') updateGateOpen(ev, dt);
+    else if (ev.type === 'valerius_intro') updateValeriusIntro(ev, dt); // map_bridge.js
+    else if (ev.type === 'valerius_escape') updateValeriusEscape(ev, dt);
     else if (ev.type === 'cave_exit') {
         player.dash = null; player.grappleTarget = null;
         const [dx, dy, dd] = getVector(player.x, player.y, d.exitTo.x, d.exitTo.y);
@@ -388,7 +392,7 @@ function updateStage(dt) {
     const d = mapDef();
     if (currentMap.grid) { // map_hive.js / map_village.js / map_cavern.js
         updateNav();
-        if (currentMap.type === 'hive') updateHive(dt); else if (currentMap.type === 'village') updateVillage(dt); else if (currentMap.type === 'trail') updateTrail(dt); else updateCavern(dt);
+        if (currentMap.type === 'hive') updateHive(dt); else if (currentMap.type === 'village') updateVillage(dt); else if (currentMap.type === 'trail') updateTrail(dt); else if (currentMap.type === 'bridge') updateBridge(dt); else updateCavern(dt);
     }
     if (d && currentMap.caveOpen && !stageEvent && Math.hypot(player.x - d.exit.x, player.y - d.exit.y) < d.exitR) {
         if (currentMap.type === 'hive') startTrophyClaim(); else startCaveExit();
@@ -414,7 +418,7 @@ function drawStageScreen() {
     if (!stageVignette || stageVignette.key !== key) { // painted once per map and window size, not every frame
         stageVignette = document.createElement('canvas'); stageVignette.width = cw; stageVignette.height = ch; stageVignette.key = key;
         const vc = stageVignette.getContext('2d'), v = vc.createRadialGradient(cw / 2, ch / 2, Math.min(cw, ch) * (cave ? 0.35 : 0.45), cw / 2, ch / 2, Math.max(cw, ch) * 0.75);
-        const edge = currentMap.type === 'hive' ? 'rgba(14, 0, 8, 0.6)' : currentMap.type === 'village' ? 'rgba(20, 7, 0, 0.55)' : currentMap.type === 'trail' ? 'rgba(8, 14, 2, 0.45)' : cave ? 'rgba(0, 3, 8, 0.6)' : 'rgba(0, 12, 4, 0.45)';
+        const edge = currentMap.type === 'hive' ? 'rgba(14, 0, 8, 0.6)' : currentMap.type === 'village' ? 'rgba(20, 7, 0, 0.55)' : currentMap.type === 'trail' ? 'rgba(8, 14, 2, 0.45)' : currentMap.type === 'bridge' ? 'rgba(20, 8, 24, 0.5)' : cave ? 'rgba(0, 3, 8, 0.6)' : 'rgba(0, 12, 4, 0.45)';
         v.addColorStop(0, 'rgba(0, 10, 0, 0)'); v.addColorStop(1, edge); vc.fillStyle = v; vc.fillRect(0, 0, cw, ch);
     }
     ctx.drawImage(stageVignette, 0, 0);

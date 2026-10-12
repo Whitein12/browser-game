@@ -57,17 +57,14 @@ window.startNextWave = function() {
     enemiesToSpawn = isBossWave ? 4 : 3 + Math.floor(wave * 2.5); 
     
     if (activeDungeonId === 'bandit_bastion' && wave === 11 && !isEndlessMode) { isBossWave = true; enemiesToSpawn = 0; }
-    if (activeDungeonId === 'bandit_bastion' && wave === 10 && !isEndlessMode) enemiesToSpawn = 1; // the Beastmaster comes straight away (map_trail.js)
+    if (activeDungeonId === 'bandit_bastion' && wave === 10 && !isEndlessMode) { // the Beastmaster alone (map_trail.js)
+        if (trl.guard && !trl.guard.dead && enemies.includes(trl.guard)) { enemiesToSpawn = 0; bossSpawned = true; activeEnemies++; } // already at the bridgehead since the logjam opened (his hounds counted themselves)
+        else { enemiesToSpawn = 1; enemySpawnTimer = 0; } // a jump straight to wave 10: he's there at once
+    }
     setStageMap(mapTypeForWave(wave)); // stage.js
     if (currentMap.type === 'trail') trailEnter(wave); // map_trail.js: a jump to wave 8 / 10 starts in the right section with the logjams open
     player.exitFade = 0; player.fadeOut = 0;
     if (fresh) { player.dash = null; player.z = 0; player.grappleTarget = null; player.charge = null; player.heavy = null; } // never carry a dash or a charge across a map change
-
-    if (activeDungeonId === 'bandit_bastion' && wave === 11 && !isEndlessMode) {
-        currentMap.valeriusTriggered = false;
-        player.x = currentMap.left + 80;
-        player.y = (currentMap.top + currentMap.bottom) / 2;
-    }
 
     if (fresh) resetDruidState(); // druid.js: the companion comes back to heel (spirits stay through a regular wave)
     if (wave > 1) awakenWeapon(); // items.js: the last wave was cleared, so the rare weapon grows
@@ -118,15 +115,19 @@ function recalcStats() {
     if (typeof updateHUD === "function") updateHUD();
 }
 
+// A boss from its enemies.json entry at wave w's strength (spawnEnemy; map_trail.js places the Beastmaster ahead of his wave)
+function pushBoss(b, w, x, y) {
+    const hp = b.baseHp + w * b.hpScale;
+    const e = { x, y, size: b.size, color: b.color, speed: b.baseSpeed + w * 2.0, hp, maxHp: hp, type: b.type, dmg: b.baseDmg + w * b.dmgScale, xp: b.baseXp, attackTimer: b.attackTimer, meleeTimer: 0, frozenTimer: 0, state: 'idle', stateTimer: b.stateTimer || 2.0, facingAngle: 0, puddleTimer: 0, bleedTimer: 0, bleedDmg: 0 };
+    enemies.push(e); return e;
+}
+
 function spawnEnemy() {
     enemiesToSpawn--; activeEnemies++;
     
     let ex, ey, spawnFrom;
     if (mapDef()) { const sp = pickSpawnPoint(); ex = sp.x; ey = sp.y; spawnFrom = sp.from; } // stage.js: tree line or cave mouth
-    else if (currentMap.type === 'bridge') {
-        ex = Math.random() < 0.5 ? currentMap.left - 50 : currentMap.right + 50;
-        ey = currentMap.top + Math.random() * (currentMap.bottom - currentMap.top);
-    } else {
+    else {
         if (Math.random() < 0.5) { 
             ex = Math.random() < 0.5 ? currentMap.left - 30 : currentMap.right + 30; 
             ey = currentMap.top + Math.random() * (currentMap.bottom - currentMap.top); 
@@ -147,12 +148,8 @@ function spawnEnemy() {
         bossSpawned = true; 
         let bList = [activeDungeon.stage1_boss, activeDungeon.stage2_boss, activeDungeon.stage3_boss].filter(b=>b);
         let b = isEndlessMode ? bList[Math.floor(Math.random()*bList.length)] : (activeDungeon[`stage${stage}_boss`] || activeDungeon.stage1_boss);
-        const bossHp = b.baseHp + (wave * b.hpScale);
-        const bossSpeed = b.baseSpeed + (wave * 2.0);
-        let bx = currentMap.type === 'bridge' ? currentMap.right - 150 : (currentMap.left+currentMap.right)/2;
-        let by = currentMap.type === 'bridge' ? (currentMap.top+currentMap.bottom)/2 : currentMap.top + 100;
-        enemies.push({ x: bx, y: by, size: b.size, color: b.color, speed: bossSpeed, hp: bossHp, maxHp: bossHp, type: b.type, dmg: b.baseDmg + (wave * b.dmgScale), xp: b.baseXp, attackTimer: b.attackTimer, meleeTimer: 0, frozenTimer: 0, state: 'idle', stateTimer: b.stateTimer || 2.0, facingAngle: 0, puddleTimer: 0, bleedTimer: 0, bleedDmg: 0 });
-        if (mapDef()) startBossIntro(enemies[enemies.length - 1]); // stage.js: out of the cave / out of the lakes
+        const boss = pushBoss(b, wave, (currentMap.left + currentMap.right) / 2, currentMap.top + 100);
+        if (mapDef()) startBossIntro(boss); // stage.js: out of the cave / out of the lakes
         updateHUD(); return;
     }
 
@@ -211,7 +208,7 @@ window.addEventListener('keydown', e => {
         let i = keyMap[k];
         if (player.charge && player.charge.slot === i) return; // key auto-repeat while a charge is held
         if ((cooldowns[`s${i}`] <= 0 || devNoCooldowns) && activeClass.skills[i].level > 0) {
-            if (activeClass.name === 'Swordsaint' && i === 2 && player.stance === 'handheld' && player.flow < player.maxFlow * (activeClass.skills[2].selectedUpg === 'B' ? 0.7 : 1)) { // Early Deploy: from 70%
+            if (activeClass.name === 'Kensei' && i === 2 && player.stance === 'handheld' && player.flow < player.maxFlow * (activeClass.skills[2].selectedUpg === 'B' ? 0.7 : 1)) { // Early Deploy: from 70%
                 effects.push({ type: 'text', text: 'Not Enough Flow!', x: player.x, y: player.y - 40, color: '#ff5252', life: 0.6, maxLife: 0.6 });
                 return;
             }
@@ -381,7 +378,7 @@ function update(dt) {
         }
     }
 
-    if (activeClass && activeClass.name === 'Swordsaint') {
+    if (activeClass && activeClass.name === 'Kensei') {
         if (player.comboTimer > 0) {
             player.comboTimer -= dt;
             if (player.comboTimer <= 0) player.comboStep = 0;
@@ -392,8 +389,8 @@ function update(dt) {
 
         if (player.stance === 'handheld') {
             player.flowGainTimer += dt;
-            if (player.flowGainTimer >= 1.5) {
-                player.flow = Math.max(0, player.flow - (15 * dt)); // Decay 15 flow per second
+            if (player.flowGainTimer >= FLOW_GRACE) {
+                player.flow = Math.max(0, player.flow - (FLOW_DECAY * dt)); // in hand, Flow fades once you stop landing hits
             }
             // Reposition blade to player (and drop a Guardian Orbit cut short by a recall)
             player.airborneBlade.x = player.x;
@@ -662,14 +659,6 @@ function update(dt) {
         if (player.stillTime > 1.0) player.momentum = Math.max(0, player.momentum - 0.10 * dt);
     }
 
-    if (currentMap.type === 'bridge' && wave === 11 && !currentMap.valeriusTriggered && player.x > currentMap.right - 200) {
-        currentMap.valeriusTriggered = true; bossSpawned = true; let b = activeDungeon.stage3_boss;
-        const bossHp = b.baseHp + (wave * b.hpScale); const bossSpeed = b.baseSpeed + (wave * 2.0);
-        let bx = (currentMap.left + currentMap.right) / 2; let by = (currentMap.top + currentMap.bottom) / 2;
-        enemies.push({ x: bx, y: currentMap.top - 300, size: b.size, color: b.color, speed: bossSpeed, hp: bossHp, maxHp: bossHp, type: b.type, dmg: b.baseDmg + (wave * b.dmgScale), xp: b.baseXp, attackTimer: b.attackTimer, meleeTimer: 0, frozenTimer: 0, state: 'jump_in', stateTimer: 1.0, facingAngle: 0, puddleTimer: 0, bleedTimer: 0, bleedDmg: 0, targetY: by });
-        activeEnemies++; updateHUD();
-    }
-
     for (let i = drops.length - 1; i >= 0; i--) {
         const d = drops[i]; d.life -= dt; if (d.life <= 0) { drops.splice(i, 1); continue; }
         if (Math.hypot(player.x - d.x, player.y - d.y) < player.radius + d.radius) {
@@ -767,11 +756,6 @@ function update(dt) {
                 burst(p.x, p.y, 0, Math.PI * 2, 6, { kind: 'debris', color: '#9e9e9e', size: 3, speed: [60, 180], life: 0.45, drag: 3 });
             }
             if (p.type === 'spore') { effects.push({ type: 'spore_cloud', x: p.x, y: p.y, radius: 100, color: 'rgba(205, 220, 57, 0.4)', life: 3.0, maxLife: 3.0 }); }
-            if (p.type === 'chain_hook' && p.sourceBoss) { 
-                p.sourceBoss.state = 'hook_pull'; 
-                p.sourceBoss.pullTargetX = Math.max(currentMap.left + 20, Math.min(currentMap.right - 20, p.x)); 
-                p.sourceBoss.pullTargetY = Math.max(currentMap.top + 20, Math.min(currentMap.bottom - 20, p.y)); 
-            }
             if (p.type === 'turret' && p.volatile) {
                 effects.push({ type: 'fiery_explosion', x: p.x, y: p.y, radius: 150, life: 0.5, maxLife: 0.5 });
                 for(let e of enemies) { if (Math.hypot(e.x - p.x, e.y - p.y) < e.size/2 + 150) applyDamage(e, p.damage * 3, 'magic'); }
@@ -789,12 +773,6 @@ function update(dt) {
 
             if (p.type !== 'trap_throw' && p.type !== 'spore' && p.type !== 'sling_stone' && Math.hypot(p.x - player.x, p.y - player.y) < player.radius + p.radius) { 
                 takeDamage(p.damage, false, { isProjectile: true, proj: p }); 
-                if (p.type === 'chain_hook') {
-                    buffs.rooted = 1.0;
-                    let [bx, by, bdist] = getVector(player.x, player.y, p.sourceBoss.x, p.sourceBoss.y);
-                    player.x += (bx/bdist)*(bdist - 50); player.y += (by/bdist)*(bdist - 50); clampToBounds(player, player.radius);
-                    p.sourceBoss.state = 'idle'; p.sourceBoss.stateTimer = 1.5; 
-                }
                 if (p.type === 'boss_slimeball') { effects.push({ type: 'puddle', x: p.x, y: p.y, radius: 30, color: '#009688', life: 1.5, maxLife: 1.5 }); }
                 if (p.type === 'bolas') { 
                     buffs.rooted = 0.6; const boss = enemies.find(e => e.type === 'boss_beastmaster');
@@ -958,7 +936,7 @@ function update(dt) {
 
         if (edist > 0) {
             let targetAngle = Math.atan2(edy, edx);
-            if (e.type === 'shield' || e.type === 'boss_valerius') {
+            if (e.type === 'shield') {
                 let diff = targetAngle - (e.facingAngle || 0); while(diff < -Math.PI) diff += Math.PI*2; while(diff > Math.PI) diff -= Math.PI*2; e.facingAngle = (e.facingAngle || 0) + diff * 3.0 * dt; 
             } else { e.facingAngle = targetAngle; }
         }
@@ -1003,10 +981,7 @@ function draw() {
     } else if (currentMap.type === 'training') {
         drawTrainingGround(); // training.js: the sand yard
     } else if (currentMap.type === 'bridge') {
-        ctx.fillStyle = '#2c2c2c'; ctx.fillRect(currentMap.left, currentMap.top, currentMap.right - currentMap.left, currentMap.bottom - currentMap.top);
-        ctx.fillStyle = '#3e2723'; 
-        ctx.fillRect(currentMap.left, currentMap.top - 10, canvas.width, 10);
-        ctx.fillRect(currentMap.left, currentMap.bottom, canvas.width, 10);
+        drawBridgeGround(); // map_bridge.js: the span, its braziers and the gatehouse
     } else {
         ctx.fillStyle = '#1e1e1e'; ctx.fillRect(-10, -10, canvas.width + 20, canvas.height + 20); // overscan for camera shake
         ctx.strokeStyle = '#2a2a2a'; ctx.lineWidth = 1; const gridSize = 100;
@@ -1280,15 +1255,6 @@ function draw() {
             ctx.lineWidth = 2 * (ef.life/ef.maxLife);
             ctx.beginPath(); ctx.arc(ef.x, ef.y, currentRadius * 0.85, 0, Math.PI*2); ctx.stroke();
         }
-        else if (ef.type === 'valerius_chain') {
-            ctx.strokeStyle = '#757575'; ctx.lineWidth = 2;
-            ctx.beginPath(); ctx.moveTo(ef.x1, ef.y1); ctx.lineTo(ef.x2, ef.y2); ctx.stroke();
-            let ang = Math.atan2(ef.y2 - ef.y1, ef.x2 - ef.x1);
-            ctx.save(); ctx.translate(ef.x2, ef.y2); ctx.rotate(ang);
-            ctx.fillStyle = '#bdbdbd';
-            ctx.beginPath(); ctx.moveTo(20, 0); ctx.lineTo(0, -10); ctx.lineTo(0, 10); ctx.closePath(); ctx.fill();
-            ctx.restore();
-        }
         else if (ef.type === 'grapple_chain') {
             ctx.strokeStyle = ef.color; ctx.lineWidth = 2;
             let [dx, dy, dist] = getVector(ef.x1, ef.y1, ef.x2, ef.y2);
@@ -1512,7 +1478,7 @@ function draw() {
         const sprite = drawEnemySprite(e); // enemysprites.js
         
         if (sprite) {}
-        else if (e.type === 'shield' || e.type === 'boss_valerius') {
+        else if (e.type === 'shield') {
             ctx.beginPath(); ctx.arc(e.x, e.y, e.size/2, 0, Math.PI*2); ctx.fill();
             if (e.shieldHp > 0) {
                 ctx.save(); ctx.translate(e.x, e.y); ctx.rotate(e.facingAngle);
@@ -1730,6 +1696,7 @@ function draw() {
     if (currentMap.type === 'hive') drawHiveAbove(); // map_hive.js: drifting spores
     if (currentMap.type === 'village') drawVillageAbove(); // map_village.js: roof fires, smoke, the canopy, ash
     if (currentMap.type === 'trail') drawTrailAbove(); // map_trail.js: the canopy, the campfire's smoke, pollen
+    if (currentMap.type === 'bridge') drawBridgeAbove(); // map_bridge.js: banners, the castle's archers, mist off the gorge
     drawEnemyOverlay(); // enemysprites.js: lightning coming down from above
     drawFx(); // fx.js particles
     drawUltOverlay(); // skillfx_ult.js: things in the air above everything

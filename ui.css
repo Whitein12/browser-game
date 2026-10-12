@@ -334,6 +334,19 @@ kbd { display: inline-block; min-width: 14px; padding: 1px 5px; border: 1px soli
 #training-panel .tr-name { color: var(--text); }
 #training-panel .tr-exit { width: 100%; color: var(--bad); }
 
+/* dialogue.js: the speaker painted large in the bottom-left corner, the text box overlapping their side, a name plate on top of it */
+#dialogue-screen { position: absolute; inset: 0; z-index: 25; cursor: pointer; background: linear-gradient(90deg, rgba(0, 0, 0, 0.72) 0%, rgba(0, 0, 0, 0.25) 45%, rgba(0, 0, 0, 0) 70%), linear-gradient(180deg, rgba(0, 0, 0, 0) 50%, rgba(0, 0, 0, 0.55) 100%); }
+#dialogue-portrait { position: absolute; left: max(-40px, calc(50% - 700px)); bottom: 0; height: min(84vh, 720px); aspect-ratio: 400 / 520; pointer-events: none; filter: drop-shadow(0 0 30px rgba(0, 0, 0, 0.9)); animation: dlg-in 0.4s ease-out both; }
+#dialogue-screen .dialogue-box { position: absolute; left: calc(max(-40px, 50% - 700px) + min(84vh, 720px) * 0.62); right: max(16px, calc(50% - 640px)); bottom: 6vh; min-height: 170px; padding: 46px 40px 34px; animation: dlg-up 0.35s ease-out 0.1s both; }
+.dialogue-plate { position: absolute; left: 26px; top: -28px; padding: 8px 24px 7px; border: 1px solid var(--gold-lo); border-radius: 4px; background: linear-gradient(180deg, #2c211a, #120d0a); box-shadow: 0 0 0 1px #000, 0 6px 18px rgba(0, 0, 0, 0.7); }
+.dialogue-name { font: bold 22px var(--serif); letter-spacing: 5px; text-transform: uppercase; color: var(--gold-hi); text-shadow: 0 2px 0 #000; }
+.dialogue-title { font: italic 13px var(--serif); letter-spacing: 2px; color: #ff6e5a; margin-top: 2px; }
+.dialogue-text { font: 21px/1.6 var(--serif); color: var(--text); min-height: 68px; }
+.dialogue-more { position: absolute; right: 30px; bottom: 14px; font: 11px var(--serif); letter-spacing: 2px; text-transform: uppercase; color: var(--gold); animation: dlg-blink 1.1s ease-in-out infinite; }
+@keyframes dlg-blink { 50% { opacity: 0.25; } }
+@keyframes dlg-in { from { opacity: 0; transform: translateX(-70px); } to { opacity: 1; transform: none; } }
+@keyframes dlg-up { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
+
 /* the Warchief's letter (map_village.js): an aged parchment sheet */
 .letter-panel { width: calc(100% - 32px); max-width: 600px; max-height: calc(100vh - 40px); overflow: auto; box-sizing: border-box; padding: 26px 32px; text-align: center; color: #3b2a17; background: linear-gradient(170deg, #e9dcb8, #d6c08f); border: 1px solid #8a6d3b; border-radius: 3px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6); transform: rotate(-0.6deg); }
 .letter-title { margin: 0 0 10px; font: bold 22px var(--serif); letter-spacing: 3px; text-transform: uppercase; color: #3b2a17; }

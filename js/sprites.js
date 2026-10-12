@@ -245,7 +245,7 @@ const CLASS_SPRITES = {
         c.shadowBlur = 0;
     },
 
-    swordsaint(c, p) {
+    kensei(c, p) {
         sprFeet(c, p, '#a1887f');
         sprCape(c, p, '#00838f', 16, 14, '#e0f7fa');
         sprTails(c, p, ['#ff5252', '#e53935'], 2, 20); // headband ribbons
@@ -349,21 +349,22 @@ const CLASS_SPRITES = {
 
 // The Druid's wolf (druid.js stamps it for the companion and the spirit wolves; pose.bite opens the jaws)
 function sprWolf(c, p) {
-    const g = Math.sin(p.walk * 1.4) * 7 * p.move; // diagonal pairs step together
+    const rest = p.rest || 0, lean = p.lean || 0; // lying down (the Beastmaster's hounds, bandits.js): forepaws out in front, hind legs splayed; lean: into a stroking hand
+    const g = Math.sin(p.walk * 1.4) * 7 * p.move * (1 - rest); // diagonal pairs step together
     for (const s of [-1, 1]) {
         // A claw attack rakes one front paw forward
         const reach = p.swipe && p.swipe.side === s ? Math.sin(p.swipe.q * Math.PI) : 0;
-        const px = 13 - s * g + reach * 13, py = s * (9 - reach * 4);
+        const px = lerp(13 - s * g + reach * 13, 27, rest), py = lerp(s * (9 - reach * 4), s * 7.5, rest); // lying: either side of the muzzle
         if (reach > 0.2) sprStroke(c, '#eeeeee', 1, () => { for (const k of [-2, 0, 2]) { c.moveTo(px + 3, py + k); c.lineTo(px + 7, py + k * 1.4); } });
         sprEllipse(c, px, py, 4.5 + reach, 3.5, '#3e2723');
     }
-    sprEllipse(c, -13 - g, -9, 4.5, 3.5, '#3e2723');
-    sprEllipse(c, -13 + g, 9, 4.5, 3.5, '#3e2723');
-    // Tail
-    const wag = Math.sin(p.t * 8) * 6 + p.trail.y;
-    const tx = Math.min(-26, -36 + p.trail.x * 0.5);
-    sprStroke(c, '#4e342e', 7, () => { c.moveTo(-18, 0); c.quadraticCurveTo(-28, wag * 0.3, tx, wag); });
-    sprEllipse(c, tx - 1, wag, 3, 3, '#a1887f', false);
+    sprEllipse(c, lerp(-13 - g, -8, rest), lerp(-9, -14, rest), 4.5, 3.5, '#3e2723');
+    sprEllipse(c, lerp(-13 + g, -8, rest), lerp(9, 14, rest), 4.5, 3.5, '#3e2723');
+    // Tail: lying, it curls round the left haunch and thumps faster when it's being stroked
+    const wag = Math.sin(p.t * (8 - 5 * rest + 6 * lean)) * (6 - 3 * rest) + p.trail.y;
+    const tx = lerp(Math.min(-26, -36 + p.trail.x * 0.5), -10, rest), ty = lerp(wag, -17 + wag * 0.4, rest);
+    sprStroke(c, '#4e342e', 7, () => { c.moveTo(-18, 0); c.quadraticCurveTo(lerp(-28, -30, rest), lerp(wag * 0.3, -14, rest), tx, ty); });
+    sprEllipse(c, tx - 1, ty, 3, 3, '#a1887f', false);
     // Body
     sprEllipse(c, -2, 0, 21, 12.5, '#5d4037');
     sprEllipse(c, -4, 0, 15, 4.5, '#3e2723', false);
@@ -373,6 +374,7 @@ function sprWolf(c, p) {
     const open = b === undefined || b === null ? 0 : (b < 0.12 ? b / 0.12 : Math.max(0, 1 - (b - 0.12) / 0.1));
     c.save();
     if (b !== undefined && b !== null) c.translate(Math.sin(Math.min(1, b * 2) * Math.PI) * 6, 0);
+    if (lean) { c.translate(10, 0); c.rotate(lean * 0.35); c.translate(-10, 0); } // the head turned up into the hand
     sprEllipse(c, 17, 0, 9, 8.5, '#6d4c41');
     for (const s of [-1, 1]) {
         c.beginPath(); c.moveTo(14, s * 3.5); c.lineTo(7, s * 13); c.lineTo(17, s * 8); c.closePath();
