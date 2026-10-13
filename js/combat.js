@@ -307,9 +307,18 @@ function takeDamage(amount, isContinuous = false, sourceObj = null) {
     }
 
     if (player.hp <= 0 && trainingGod()) player.hp = 1; // training.js: god mode
-    if (player.hp <= 0) { player.hp = 0; gameState = STATE.DEAD; el('death-wave').innerText = wave; el('death-screen').classList.remove('hidden'); }
+    if (player.hp <= 0) playerDied();
     updateHUD();
 }
+
+// The hero falls. If Valerius is there to see it, he has a word first (dialogue.js), then the death screen.
+function playerDied() {
+    player.hp = 0; player.fallen = true; // main.js draws the hero dimmed where they fell
+    const taunt = valeriusTaunt(); // dialogue.js
+    if (taunt) openDialogue({ ...taunt, onClose: showDeathScreen });
+    else showDeathScreen();
+}
+function showDeathScreen() { gameState = STATE.DEAD; el('death-wave').innerText = wave; el('death-screen').classList.remove('hidden'); }
 
 function gainXP(amount) {
     player.xp += amount; let leveledUp = false;
@@ -336,6 +345,7 @@ function checkEnemyDeath(e) {
 
         if ((e.type === 'boss_slime_queen' || e.type === 'boss_valerius') && !isEndlessMode) {
             if (currentMap.type === 'hive') { queenDefeated(e); return; } // map_hive.js: her crown must be claimed first
+            if (currentMap.type === 'castle') { valeriusFall(e); return; } // map_castle.js: his last words, then his crown
             showVictory(); // ui.js
             return; 
         }

@@ -211,6 +211,7 @@ function banditPose(e, face) {
         p.plant = st === 'skewer' || st === 'escape' || st === 'vault_prep';
         p.kneel = Math.max(e.kneelK || 0, st === 'leap_prep' ? 0.5 * k : st === 'skewer' ? 0.4 : 0);
         p.kick = e.kickAt !== undefined && fxTime - e.kickAt < 0.3 ? Math.sin(Math.PI * (fxTime - e.kickAt) / 0.3) : 0;
+        p.helmless = !!(e.helmless || e.king); // map_castle.js: in his own hall the helm is off
     }
     if (e.type === 'slinger') p.sling = e.state === 'windup' ? clamp01(1 - e.stateTimer / (typeof SLING_WINDUP !== 'undefined' ? SLING_WINDUP : 0.6)) : 0; // ai.js: the sling whirls up through the wind-up
     if (e.type === 'trapper') p.throwK = clamp01(1 - e.attackTimer / 0.5); // the arm winds back for a throw
@@ -500,7 +501,7 @@ function drawValeriusBody(c, p) {
     else { banditFeet(c, p, '#1c1a1a'); if (kick) sprEllipse(c, 6 + kick * 15, 5, 5.5, 3.6, '#1c1a1a'); }
     sprCape(c, p, VAL_CLOAK, 26 + kneel * 4, 15, VAL_GOLD); // a dark crimson cloak with a gold edge: his colours read from above
     const sway = Math.sin(p.t * 3) * 2.5 + p.trail.y * 0.6, tx = -24 + Math.min(4, p.trail.x * 0.5); // the horse-tail crest streaming back
-    for (const [col, w, o] of [['#120d0d', 4, 0], ['#5a0f0f', 2.2, 1.2], ['#120d0d', 2, -1.4]]) { c.strokeStyle = col; c.lineWidth = w; c.lineCap = 'round'; c.beginPath(); c.moveTo(-3, o * 0.6); c.quadraticCurveTo(-13, sway * 0.4 + o, tx, sway + o * 2); c.stroke(); }
+    if (!p.helmless) for (const [col, w, o] of [['#120d0d', 4, 0], ['#5a0f0f', 2.2, 1.2], ['#120d0d', 2, -1.4]]) { c.strokeStyle = col; c.lineWidth = w; c.lineCap = 'round'; c.beginPath(); c.moveTo(-3, o * 0.6); c.quadraticCurveTo(-13, sway * 0.4 + o, tx, sway + o * 2); c.stroke(); }
     sprEllipse(c, -1, 0, 10, 15.5, VAL_RED); // the crimson surcoat over his plate, seen across the shoulders
     c.strokeStyle = 'rgba(40, 6, 6, 0.6)'; c.lineWidth = 1; c.beginPath(); c.moveTo(-9, -6); c.lineTo(-6, -2); c.lineTo(-9.5, 1); c.lineTo(-6, 5); c.stroke(); // a rent down its back
     c.strokeStyle = VAL_GOLD; c.lineWidth = 1.1; c.beginPath(); c.arc(-3, 0, 3.4, 0, Math.PI * 2); c.moveTo(-6.4, 3.8); c.lineTo(0.4, -3.8); c.stroke(); // his sigil between the shoulders
@@ -524,11 +525,28 @@ function drawValeriusBody(c, p) {
         arm(1, gx, gy); arm(-1, tk > 0.3 ? 5 : lx, tk > 0.3 ? -6 : ly); coil(tk > 0.3 ? 5 : lx, tk > 0.3 ? -6 : ly);
         drawValChain(c, tk > 0.3 ? 5 : lx, tk > 0.3 ? -6 : ly, bx - 1.8, by, 3, 0.6); // a short slack loop from his fist to the butt ring
     }
-    const hx = 2 + kneel * 3; // the closed helm, bowed when he kneels
-    sprEllipse(c, hx, 0, 7.6, 7.4, VAL_PLATE);
+    const hx = 2 + kneel * 3; // the head, bowed when he kneels
+    if (p.helmless) { valBareHead(c, hx); return; }
+    sprEllipse(c, hx, 0, 7.6, 7.4, VAL_PLATE); // the closed helm
     c.strokeStyle = '#22252a'; c.lineWidth = 1.6; c.beginPath(); c.moveTo(hx - 6, 0); c.lineTo(hx + 6, 0); c.stroke(); // the ridge
     c.fillStyle = '#0d0d0f'; c.fillRect(hx + 5.2, -4, 1.8, 8); // the eye slit
     c.fillStyle = 'rgba(255, 255, 255, 0.25)'; c.beginPath(); c.ellipse(hx - 2, -3, 2.6, 1.6, -0.5, 0, Math.PI * 2); c.fill();
+}
+// Helmless (the castle): close-cropped dark hair gone grey in streaks, the brow and ears catching the light at the front,
+// a scar across the scalp, a stolen iron crown, and the ember eyes he had behind the visor
+function valBareHead(c, hx) {
+    for (const s of [-1, 1]) sprEllipse(c, hx + 0.5, s * 6.6, 1.5, 2.2, '#a87c62'); // ears
+    sprEllipse(c, hx, 0, 7, 6.6, '#1f1a18'); // the hair, cropped close
+    c.strokeStyle = '#7d7771'; c.lineWidth = 0.9; c.lineCap = 'round'; c.beginPath(); // grey streaks combed back
+    for (const o of [-3.4, 0.2, 3.2]) { c.moveTo(hx + 3, o * 0.8); c.lineTo(hx - 5.5, o); }
+    c.stroke();
+    c.beginPath(); c.ellipse(hx + 4.4, 0, 2.6, 4.4, 0, -Math.PI / 2, Math.PI / 2); c.fillStyle = '#b48669'; c.fill(); // the brow
+    c.strokeStyle = '#d98c84'; c.lineWidth = 0.9; c.beginPath(); c.moveTo(hx + 1, -5.4); c.lineTo(hx + 5, -1.6); c.stroke(); // the scar
+    c.strokeStyle = '#26292e'; c.lineWidth = 1.8; c.beginPath(); c.ellipse(hx, 0, 5.6, 5.3, 0, 0, Math.PI * 2); c.stroke(); // the crown's band
+    c.fillStyle = '#26292e';
+    for (let k = 0; k < 7; k++) { const a = k / 7 * Math.PI * 2 + 0.3, ux = Math.cos(a), uy = Math.sin(a); c.beginPath(); c.moveTo(hx + ux * 4.6 - uy * 1.3, uy * 4.4 + ux * 1.3); c.lineTo(hx + ux * 8, uy * 7.6); c.lineTo(hx + ux * 4.6 + uy * 1.3, uy * 4.4 - ux * 1.3); c.fill(); } // its spikes
+    c.fillStyle = VAL_GOLD; for (let k = 0; k < 4; k++) { const a = k / 4 * Math.PI * 2 + 0.75; c.fillRect(hx + Math.cos(a) * 5.6 - 0.7, Math.sin(a) * 5.3 - 0.7, 1.4, 1.4); }
+    c.fillStyle = '#ffab40'; for (const s of [-1, 1]) c.fillRect(hx + 5.6, s * 1.9 - 0.6, 1.4, 1.2); // the embers in his eyes
 }
 
 const BANDIT_SPRITES = {
@@ -1009,7 +1027,7 @@ function drawBanditProjectile(p) {
         const D = Math.hypot(p.targetX - p.ox, p.targetY - p.oy) || 1, k = clamp01(1 - Math.hypot(p.targetX - p.x, p.targetY - p.y) / D), z = Math.sin(Math.PI * k) * 45;
         const a = Math.atan2(p.targetY - p.oy, p.targetX - p.ox), y = p.y - z;
         c.fillStyle = 'rgba(0, 0, 0, 0.28)'; c.beginPath(); c.ellipse(p.x, p.y, 5, 3, 0, 0, Math.PI * 2); c.fill();
-        c.strokeStyle = 'rgba(220, 210, 190, 0.25)'; c.lineWidth = 4; c.lineCap = 'round'; c.beginPath(); c.moveTo(p.x - Math.cos(a) * 18, y - Math.sin(a) * 18 + Math.cos(Math.PI * k) * 6); c.lineTo(p.x, y); c.stroke();
+        c.strokeStyle = currentMap.type === 'castle' ? 'rgba(235, 228, 210, 0.5)' : 'rgba(220, 210, 190, 0.25)'; c.lineWidth = 4; c.lineCap = 'round'; c.beginPath(); c.moveTo(p.x - Math.cos(a) * 18, y - Math.sin(a) * 18 + Math.cos(Math.PI * k) * 6); c.lineTo(p.x, y); c.stroke();
         c.beginPath(); c.arc(p.x, y, 4.5, 0, Math.PI * 2); c.fillStyle = '#8d8a84'; c.fill(); c.strokeStyle = '#2b2a28'; c.lineWidth = 1.3; c.stroke();
         c.fillStyle = 'rgba(255, 255, 255, 0.55)'; c.beginPath(); c.arc(p.x - 1.4, y - 1.6, 1.4, 0, Math.PI * 2); c.fill();
         return true;
@@ -1030,7 +1048,8 @@ function drawBanditProjectile(p) {
     if (p.shape === 'arrow' && own === 'archer') { // ash shaft, iron head, red fletching
         const a = Math.atan2(p.vy, p.vx);
         c.save(); c.translate(p.x, p.y); c.rotate(a);
-        c.strokeStyle = 'rgba(255, 220, 180, 0.18)'; c.lineWidth = 3; c.beginPath(); c.moveTo(-26, 0); c.lineTo(-12, 0); c.stroke(); // motion streak
+        if (currentMap.type === 'castle') { c.strokeStyle = 'rgba(255, 236, 210, 0.45)'; c.lineWidth = 4; c.lineCap = 'round'; c.beginPath(); c.moveTo(-46, 0); c.lineTo(-12, 0); c.stroke(); c.globalCompositeOperation = 'lighter'; glow(c, 6, 0, 22, '#fff3e0', 0.35); c.globalCompositeOperation = 'source-over'; } // at night: a long pale streak and a glint on the head
+        else { c.strokeStyle = 'rgba(255, 220, 180, 0.18)'; c.lineWidth = 3; c.beginPath(); c.moveTo(-26, 0); c.lineTo(-12, 0); c.stroke(); } // motion streak
         c.strokeStyle = '#2b1a10'; c.lineWidth = 3.4; c.beginPath(); c.moveTo(-12, 0); c.lineTo(10, 0); c.stroke();
         c.strokeStyle = '#bcaaa4'; c.lineWidth = 1.8; c.stroke();
         c.beginPath(); c.moveTo(16, 0); c.lineTo(8, -3.6); c.lineTo(9.5, 0); c.lineTo(8, 3.6); c.closePath(); c.fillStyle = '#cfd8dc'; c.fill(); c.strokeStyle = '#263238'; c.lineWidth = 1; c.stroke();

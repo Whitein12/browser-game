@@ -28,11 +28,19 @@
       { "id": "bandit_horse", "size": 36, "color": "#795548", "baseSpeed": 110, "speedVar": 20, "baseHp": 40, "hpScale": 15, "baseDmg": 15, "dmgScale": 2.5, "baseXp": 15, "xpScale": 3, "type": "horse", "weight": 0.30 },
       { "id": "bandit_trapper", "size": 26, "color": "#5d4037", "baseSpeed": 80, "speedVar": 10, "baseHp": 25, "hpScale": 8, "baseDmg": 10, "dmgScale": 1.5, "baseXp": 14, "xpScale": 3, "type": "trapper", "attackTimer": 2.0, "weight": 0.22 },
       { "id": "bandit_bannerman", "size": 28, "color": "#b71c1c", "baseSpeed": 70, "speedVar": 5, "baseHp": 45, "hpScale": 12, "baseDmg": 6, "dmgScale": 1.0, "baseXp": 20, "xpScale": 3, "type": "bannerman", "weight": 0.12 },
-      { "id": "bandit_hound", "size": 22, "color": "#3b2f2a", "baseSpeed": 210, "speedVar": 20, "baseHp": 14, "hpScale": 6, "baseDmg": 6, "dmgScale": 1.2, "baseXp": 6, "xpScale": 1.5, "type": "hound", "weight": 0.16 },
+      { "id": "bandit_hound", "size": 22, "color": "#3b2f2a", "baseSpeed": 180, "speedVar": 20, "baseHp": 14, "hpScale": 6, "baseDmg": 6, "dmgScale": 1.2, "baseXp": 6, "xpScale": 1.5, "type": "hound", "weight": 0.16 },
       { "id": "bandit_slinger", "size": 24, "color": "#a1887f", "baseSpeed": 90, "speedVar": 10, "baseHp": 22, "hpScale": 7, "baseDmg": 9, "dmgScale": 1.4, "baseXp": 12, "xpScale": 2.5, "type": "slinger", "attackTimer": 1.5, "weight": 0.20 }
     ],
     "stage2_boss": { "id": "beastmaster", "size": 60, "color": "#3e2723", "baseSpeed": 90, "speedVar": 0, "baseHp": 3500, "hpScale": 510, "baseDmg": 22, "dmgScale": 3, "baseXp": 450, "xpScale": 0, "type": "boss_beastmaster", "stateTimer": 3.0 },
     "stage3_minions": [],
-    "stage3_boss": { "id": "boss_valerius", "size": 52, "color": "#4e342e", "baseSpeed": 165, "hpScale": 840, "baseHp": 7000, "baseDmg": 25, "dmgScale": 5, "baseXp": 1000, "type": "boss_valerius", "stateTimer": 2.0 }
+    "stage3_boss": { "id": "boss_valerius", "size": 52, "color": "#4e342e", "baseSpeed": 165, "hpScale": 840, "baseHp": 7000, "baseDmg": 25, "dmgScale": 5, "baseXp": 1000, "type": "boss_valerius", "stateTimer": 2.0 },
+    "stage4_minions": [
+      { "id": "garrison_shield", "size": 32, "color": "#78909c", "baseSpeed": 65, "speedVar": 5, "baseHp": 30, "hpScale": 15, "baseDmg": 8, "dmgScale": 1.2, "baseXp": 15, "xpScale": 2.5, "type": "shield", "shieldHp": 35, "shieldMax": 35, "weight": 0.22 },
+      { "id": "garrison_archer", "size": 24, "color": "#8d6e63", "baseSpeed": 75, "speedVar": 10, "baseHp": 15, "hpScale": 6, "baseDmg": 12, "dmgScale": 2.0, "baseXp": 14, "xpScale": 2, "type": "archer", "attackTimer": 1.0, "ammo": 3, "weight": 0.22 },
+      { "id": "garrison_thief", "size": 26, "color": "#ff9800", "baseSpeed": 155, "speedVar": 20, "baseHp": 18, "hpScale": 7, "baseDmg": 10, "dmgScale": 1.8, "baseXp": 12, "xpScale": 2, "type": "thief", "weight": 0.2 },
+      { "id": "garrison_hound", "size": 22, "color": "#3b2f2a", "baseSpeed": 180, "speedVar": 20, "baseHp": 14, "hpScale": 6, "baseDmg": 6, "dmgScale": 1.2, "baseXp": 6, "xpScale": 1.5, "type": "hound", "weight": 0.12 },
+      { "id": "garrison_bannerman", "size": 28, "color": "#b71c1c", "baseSpeed": 70, "speedVar": 5, "baseHp": 45, "hpScale": 12, "baseDmg": 6, "dmgScale": 1.0, "baseXp": 20, "xpScale": 3, "type": "bannerman", "weight": 0.1 },
+      { "id": "garrison_slinger", "size": 24, "color": "#a1887f", "baseSpeed": 90, "speedVar": 10, "baseHp": 22, "hpScale": 7, "baseDmg": 9, "dmgScale": 1.4, "baseXp": 12, "xpScale": 2.5, "type": "slinger", "attackTimer": 1.5, "weight": 0.14 }
+    ]
   }
 }

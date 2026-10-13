@@ -8,15 +8,16 @@
 // the landing behind you, hooks you back with his chained spear and kicks you to the bridgehead (a quarter of your max HP).
 // The duel is ai.js ValeriusAI; in its second phase the castle's archers loose volleys from the battlements (brgVolley).
 // He can't die here: at 0 HP valerius_escape kneels him, he speaks (dialogue.js), then hauls himself up onto the wall on
-// his chain and is gone. For now that ends the run on the Victory screen; stage 4 (the castle) is where he's fought again.
-// buildBridge() lays the terrain grid out and paints one ground layer; braziers, banners, mist and archers are live.
+// his chain and is gone. Then the portcullis grinds up (bridge_gate) and the exit leads into the castle (map_castle.js).
+// buildBridge() lays the terrain grid out and paints one ground layer; braziers, banners, mist, archers and the portcullis are live.
 
 STAGE_MAPS.bridge = {
     w: 4400, h: 1400, cell: 25,
     bounds: { left: 40, top: 215, right: 3990, bottom: 1185 }, // a leap off the side can't land further out than the gorge's near edge
     start: { x: 230, y: 700 },
-    exit: { x: 3960, y: 700 }, exitTo: { x: 4200, y: 700 }, exitR: 80, arrow: '#ffab40', // the gatehouse: stage 4 opens it
+    exit: { x: 3960, y: 700 }, exitTo: { x: 4200, y: 700 }, exitR: 80, arrow: '#ffab40', // the gatehouse: open once he's fled
     prompt: 'Cross the bridge to the Bastion',
+    cleared: { title: 'Stage Cleared', sub: 'The Bridge · Bandit Bastion', next: 'The Bastion' },
     obstacles: [], grid: null,
 };
 
@@ -29,7 +30,7 @@ const BR_TOWERS = [[4110, 700 - 290], [4110, 700 + 290]];
 const BR_ARCHERS = [455, 505, 555, 845, 895, 945]; // where the castle's archers stand on the wall walk (y), phase 2
 const BR_VOLLEY = { every: 4.5, marks: 5, spread: 160, r: 34, warn: 1.0, dmg: 0.55 };
 const brEaseIn = x => { x = clamp01(x); return x * x * x; };
-const brg = { built: false, ground: null, grid: null, triggered: false, archK: 0, archOn: false, volleys: [], volleyT: 0, archerSpr: null, flare: 0, sigil: 0 }; // flare: the braziers leap up; sigil: the landing's brass blazes
+const brg = { built: false, ground: null, grid: null, triggered: false, archK: 0, archOn: false, volleys: [], volleyT: 0, archerSpr: null, flare: 0, sigil: 0, gateK: 0 }; // flare: the braziers leap up; sigil: the landing's brass blazes; gateK: the portcullis raised
 
 // The deck's half-width at x: the trail's narrow bridgehead (70) broadening into the span (260), bulging round the landing
 function bridgeHalf(x) {
@@ -50,7 +51,7 @@ function buildBridge() {
 
 // Every visit: nobody on the bridge yet, the archers off the wall
 function resetBridge() {
-    brg.triggered = false; brg.archK = 0; brg.archOn = false; brg.volleys.length = 0; brg.volleyT = 0; brg.flare = 0; brg.sigil = 0; camera.speed = 0;
+    brg.triggered = false; brg.archK = 0; brg.archOn = false; brg.volleys.length = 0; brg.volleyT = 0; brg.flare = 0; brg.sigil = 0; brg.gateK = 0; camera.speed = 0;
     showStagePrompt(true);
 }
 
@@ -368,10 +369,32 @@ function updateValeriusEscape(ev, dt) {
         b.spear = { x: W.x, y: W.y, a: Math.atan2(W.y - b.y, W.x - b.x) };
     }
     if (t >= t3) { b.spear = null; b.liftZ = 0; b.x = W.x; b.y = W.y; b.facingAngle = Math.PI; b.fadeK = clamp01((t - t3) / VE.fade); } // a last look back, and he drops behind the wall
-    if (t >= t3 + VE.fade + 0.4) {
-        b.dead = true; activeEnemies = Math.max(0, activeEnemies - 1); camera.tx = camera.ty = null; stageEvent = null;
-        showVictory(); // ui.js; stage 4 will open the gate here instead
+    if (t >= t3 + VE.fade + 0.4) { // he's gone: what he dropped as he knelt is yours, and the gate grinds open
+        b.dead = true; activeEnemies = Math.max(0, activeEnemies - 1); camera.tx = camera.ty = null;
+        drops.push({ x: ev.x0 + 20, y: ev.y0, type: 'item', itemData: generateItem(wave + 2), radius: 10, life: 30.0 });
+        for (let i = 0; i < 5; i++) drops.push({ x: ev.x0 - 20 + i * 10, y: ev.y0 + i * 10, type: 'gold', val: 20 + wave * 2, radius: 8, life: 30.0 });
+        startBridgeGate(b.xp);
     }
+}
+
+// ---------- the gate: after his escape the portcullis grinds up and the way into the Bastion is open ----------
+
+function startBridgeGate(xp) { stageEvent = { type: 'bridge_gate', t: 0, blocking: true, rattle: 0, xp }; }
+
+function updateBridgeGate(ev, dt) {
+    const t = ev.t, gx = BR.gate + 10;
+    camera.tx = gx - 260; camera.ty = BR.y;
+    if (t > 0.5 && t < 2.3 && t - ev.rattle > 0.16) { // the chains rattle over the winch, dust off the gatehouse
+        ev.rattle = t; addShake(1.4);
+        burst(gx, BR.y + jitter(150), Math.PI, 1.4, 3, { kind: 'debris', color: '#6e685e', size: 2.5, speed: [40, 130], life: 0.5, drag: 3 });
+    }
+    brg.gateK = easeOut(clamp01((t - 0.5) / 1.8)); // drawBridgeGround lifts it
+    if (t > 2.3 && !ev.open) {
+        ev.open = true; collectAllDrops(); // combat.js
+        openStageExit('#ffab40'); showStagePrompt(true, 'The gate is open &middot; enter the Bastion');
+    }
+    if (t > 2.8) camera.tx = camera.ty = null;
+    if (t > 3.1) { stageEvent = null; gainXP(ev.xp || 0); } // combat.js: after the scene, so a level-up doesn't cover the gate going up
 }
 
 const VALERIUS_ESCAPE_LINES = [
@@ -395,6 +418,16 @@ function drawBridgeGround() {
     if (brg.sigil > 0 && cavIn(BR.plaza.x, BR.y, V)) { // his sigil blazing up in the brass as he lands
         ctx.save(); ctx.globalCompositeOperation = 'lighter'; glow(ctx, BR.plaza.x, BR.y, 200, '#ffb300', 0.55 * brg.sigil); ctx.globalAlpha = brg.sigil; brSigil(ctx, BR.plaza.x, BR.y, 1); ctx.restore();
     }
+    if (brg.gateK > 0 && cavIn(BR.gate, BR.y, V)) drawBridgePortcullis(brg.gateK);
+    if (currentMap.caveOpen && cavIn(BR.gate, BR.y, V)) { // chevrons leading into the gate
+        const E = STAGE_MAPS.bridge.exit;
+        ctx.save(); ctx.strokeStyle = '#ffd180'; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.shadowBlur = 12; ctx.shadowColor = '#ff9100';
+        for (let i = 0; i < 3; i++) {
+            const a = Math.sin(t * 4 - i * 0.9) * 0.5 + 0.5, x = E.x - 190 + i * 34 + Math.sin(t * 3) * 6;
+            ctx.globalAlpha = 0.3 + 0.7 * a; ctx.beginPath(); ctx.moveTo(x - 10, E.y - 16); ctx.lineTo(x + 6, E.y); ctx.lineTo(x - 10, E.y + 16); ctx.stroke();
+        }
+        ctx.restore();
+    }
     for (const m of brg.volleys) if (m.t >= BR_VOLLEY.warn && cavIn(m.x, m.y, V)) { // arrows standing in the deck where a volley came down, fading
         const a = clamp01(1 - (m.t - BR_VOLLEY.warn - 0.8) / 0.8);
         ctx.save(); ctx.globalAlpha = a; ctx.lineCap = 'round';
@@ -404,6 +437,22 @@ function drawBridgeGround() {
             ctx.fillStyle = '#c62828'; ctx.beginPath(); ctx.arc(x - 5, y - 9, 2.2, 0, Math.PI * 2); ctx.fill(); }
         ctx.restore();
     }
+}
+
+// The portcullis going up (k 0 shut, 1 raised): painted over the cached one, the grid sliding up out of the gate's mouth
+// with the torchlit passage showing behind it
+function drawBridgePortcullis(k) {
+    const c = ctx, x = BR.gate, y0 = BR.y - 80;
+    c.save(); c.beginPath(); c.rect(x, y0, 20, 160); c.clip();
+    c.fillStyle = '#3a2e24'; c.fillRect(x, y0, 20, 160); // the passage floor
+    c.fillStyle = 'rgba(255, 170, 80, 0.12)'; for (let y = y0; y < y0 + 160; y += 16) c.fillRect(x, y + 1, 20, 14); // flagstones in the torchlight
+    c.globalCompositeOperation = 'lighter'; glow(c, x + 20, BR.y, 120, '#ff9100', 0.45 * k); c.globalCompositeOperation = 'source-over'; // bandits.js
+    const lift = k * 172; // the grid slides up and out
+    c.strokeStyle = '#4a4f55'; c.lineWidth = 3.2;
+    for (let y = y0 + 4; y <= y0 + 156; y += 14) { c.beginPath(); c.moveTo(x + 4, y - lift); c.lineTo(x + 18, y - lift); c.stroke(); }
+    for (const bx of [x + 6, x + 16]) { c.beginPath(); c.moveTo(bx, y0 - lift); c.lineTo(bx, y0 + 160 - lift); c.stroke(); }
+    c.fillStyle = '#263238'; for (const bx of [x + 6, x + 16]) { c.beginPath(); c.moveTo(bx - 2.5, y0 + 160 - lift); c.lineTo(bx, y0 + 168 - lift); c.lineTo(bx + 2.5, y0 + 160 - lift); c.fill(); } // the spiked foot
+    c.restore();
 }
 
 // Above the fighters: the banners on their poles, the castle's archers on the wall, arrows coming down, mist off the gorge

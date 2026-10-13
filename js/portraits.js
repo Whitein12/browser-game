@@ -583,7 +583,7 @@ const BIG_PORTRAITS = {
             c.fillStyle = g; c.fillRect(0, 0, 400, 520);
             for (let i = 0; i < 26; i++) { const y = 520 - ((t * (20 + ptRand(i) * 30) + ptRand(i + 9) * 560) % 560), x = ptRand(i + 3) * 400 + Math.sin(t * 1.3 + i) * 10; c.fillStyle = `rgba(255, ${110 + (i % 3) * 45}, 50, ${0.2 + 0.6 * y / 520})`; c.fillRect(x, y, 2.4, 2.4); }
         },
-        draw(c, t) {
+        draw(c, t, bare) { // bare: the helm off (valerius_bare)
             const ST = '#4b515a', ST_D = '#2f3338', IRON = '#26292e', RED = '#9a1f1f', GOLD = '#c9a227', H = 520;
             const fl = Math.sin(t * 1.4) * 7, fl2 = Math.sin(t * 1.9 + 1) * 6, sw = Math.sin(t * 2) * 6;
             const shadeRight = (path, a = 0.3) => { c.save(); path(); c.clip(); c.fillStyle = `rgba(0, 0, 0, ${a})`; c.fillRect(200, 0, 200, H); c.restore(); }; // cel shading: the side away from the light
@@ -592,9 +592,10 @@ const BIG_PORTRAITS = {
             cloak(); ptFill(c, '#4a1416', 3);
             c.save(); cloak(); c.clip(); c.strokeStyle = GOLD; c.lineWidth = 10; c.stroke(); c.restore(); cloak(); c.strokeStyle = PT_LINE; c.lineWidth = 3; c.stroke();
             c.strokeStyle = '#2a0a0b'; c.lineWidth = 2.4; c.beginPath(); c.moveTo(96, 250); c.quadraticCurveTo(60 - fl, 380, 48 - fl, H); c.moveTo(304, 250); c.quadraticCurveTo(342 + fl2, 380, 352 + fl2, H); c.moveTo(70, 330); c.quadraticCurveTo(40 - fl, 420, 30 - fl, H); c.stroke(); // folds
-            // the horse-tail crest streaming off the helm
-            ptRibbon(c, '#120d0d', 24, [206, 60], [292, 18 + sw], [352, 96 + sw], [378, 230 + sw]);
-            ptRibbon(c, '#6b1010', 9, [208, 62], [288, 30 + sw], [338, 100 + sw], [360, 214 + sw]);
+            if (!bare) { // the horse-tail crest streaming off the helm
+                ptRibbon(c, '#120d0d', 24, [206, 60], [292, 18 + sw], [352, 96 + sw], [378, 230 + sw]);
+                ptRibbon(c, '#6b1010', 9, [208, 62], [288, 30 + sw], [338, 100 + sw], [360, 214 + sw]);
+            }
             // the faulds and tassets below the belt, behind the tabard
             for (let k = 0; k < 4; k++) { const y = 408 + k * 26; c.beginPath(); c.moveTo(126 - k * 4, y); c.lineTo(274 + k * 4, y); c.lineTo(278 + k * 4, y + 24); c.lineTo(122 - k * 4, y + 24); c.closePath(); ptFill(c, k % 2 ? ST_D : ST, 2.6); }
             // the cuirass, broad at the shoulders
@@ -646,6 +647,7 @@ const BIG_PORTRAITS = {
             c.fillStyle = 'rgba(55, 4, 4, 0.8)'; for (const [x, y, r] of [[128, 196, 6], [118, 206, 3.5], [140, 190, 3]]) { c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill(); }
             // the gorget and the great helm, an iron crown round its top
             ptEll(c, 200, 166, 48, 17, ST_D, 3);
+            if (bare) { valeriusBareFace(c, t, IRON, GOLD); return; }
             const helm = () => { c.beginPath(); c.moveTo(160, 102); c.quadraticCurveTo(160, 56, 200, 53); c.quadraticCurveTo(240, 56, 240, 102); c.lineTo(238, 150); c.quadraticCurveTo(200, 168, 162, 150); c.closePath(); };
             helm(); ptFill(c, ST, 3); shadeRight(helm);
             for (let k = 0; k < 5; k++) { const x = 168 + k * 16, top = 46 - (k === 2 ? 14 : k % 2 ? 6 : 0); ptPoly(c, [[x - 7, 74], [x, top], [x + 7, 74]], IRON, 2.4); } // the crown's spikes
@@ -661,7 +663,53 @@ const BIG_PORTRAITS = {
         },
         fx(c, t) { for (const s of [-1, 1]) ptGlow(c, 200 + s * 16, 107, 30, '#ff5722', 0.3 + 0.1 * Math.sin(t * 3.1)); },
     },
+    // Valerius in his own hall: the helm off. The same armour, spear and cloak; a gaunt, scarred face under a stolen iron crown,
+    // the embers still burning in his eyes
+    valerius_bare: {
+        w: 400, h: 520,
+        bg(c, t) { BIG_PORTRAITS.valerius.bg(c, t); },
+        draw(c, t) { BIG_PORTRAITS.valerius.draw(c, t, true); },
+        fx(c, t) { for (const s of [-1, 1]) ptGlow(c, 200 + s * 17, 110, 26, '#ff5722', 0.32 + 0.1 * Math.sin(t * 3.1)); },
+    },
 };
+
+// His face, bare (valerius_bare): close-cropped black hair gone grey at the temples, a burn scar seared down the left side
+// of his face from brow to jaw, an old sword cut across the right cheek, a short dark beard, heavy brows pulled down, and
+// the crown of spikes that sat on his helm now on his head. Front-facing, lit from the top-left like the rest of him.
+function valeriusBareFace(c, t, IRON, GOLD) {
+    const SKIN = '#ad8268', SKIN_D = '#7d5642', HAIR = '#171312', GREY = '#8a837c';
+    // the hair: black, swept straight back under the crown and falling past his ears onto the gorget, grey at the temples
+    for (const s of [-1, 1]) { c.beginPath(); c.moveTo(200 + s * 30, 70); c.quadraticCurveTo(200 + s * 50, 92, 200 + s * 48, 128); c.quadraticCurveTo(200 + s * 52, 150, 200 + s * 58, 168); c.lineTo(200 + s * 40, 166); c.quadraticCurveTo(200 + s * 38, 130, 200 + s * 30, 96); c.closePath(); ptFill(c, HAIR, 2.6); }
+    c.beginPath(); c.moveTo(158, 84); c.quadraticCurveTo(156, 50, 200, 46); c.quadraticCurveTo(244, 50, 242, 84); c.closePath(); ptFill(c, HAIR, 3); // the crown of the head between the spikes
+    c.strokeStyle = GREY; c.lineWidth = 1.6; for (const s of [-1, 1]) for (let k = 0; k < 3; k++) { c.beginPath(); c.moveTo(200 + s * (34 + k * 3), 84 + k * 4); c.quadraticCurveTo(200 + s * (46 + k * 2), 104, 200 + s * (46 + k * 3), 132 + k * 8); c.stroke(); }
+    ptEll(c, 157, 116, 7, 13, SKIN_D, 2.6); ptEll(c, 243, 116, 7, 13, SKIN_D, 2.6); // ears
+    // the face: long, hard, square in the jaw, the cheeks drawn in
+    const face = () => { c.beginPath(); c.moveTo(163, 82); c.quadraticCurveTo(160, 112, 166, 132); c.lineTo(172, 148); c.quadraticCurveTo(186, 166, 200, 168); c.quadraticCurveTo(214, 166, 228, 148); c.lineTo(234, 132); c.quadraticCurveTo(240, 112, 237, 82); c.quadraticCurveTo(200, 74, 163, 82); c.closePath(); };
+    face(); ptFill(c, SKIN, 3);
+    c.save(); face(); c.clip();
+    let g = c.createLinearGradient(178, 0, 242, 0); g.addColorStop(0, 'rgba(30, 14, 10, 0)'); g.addColorStop(1, 'rgba(30, 14, 10, 0.45)'); c.fillStyle = g; c.fillRect(160, 70, 90, 110); // the side away from the light, soft (no hard split down the nose)
+    c.fillStyle = 'rgba(60, 30, 22, 0.35)'; for (const s of [-1, 1]) { c.beginPath(); c.moveTo(200 + s * 34, 116); c.quadraticCurveTo(200 + s * 22, 128, 200 + s * 26, 142); c.quadraticCurveTo(200 + s * 34, 134, 200 + s * 38, 120); c.closePath(); c.fill(); } // hollow cheeks under the bones
+    c.fillStyle = 'rgba(22, 14, 12, 0.72)'; c.beginPath(); c.moveTo(166, 126); c.quadraticCurveTo(176, 140, 188, 140); c.quadraticCurveTo(200, 136, 212, 140); c.quadraticCurveTo(224, 140, 234, 126); c.lineTo(236, 176); c.lineTo(164, 176); c.closePath(); c.fill(); // the beard, cut short along a hard jaw
+    c.fillStyle = 'rgba(112, 40, 30, 0.8)'; c.beginPath(); c.moveTo(212, 82); c.quadraticCurveTo(240, 92, 238, 120); c.quadraticCurveTo(236, 140, 224, 154); c.quadraticCurveTo(218, 130, 208, 114); c.quadraticCurveTo(204, 96, 212, 82); c.closePath(); c.fill(); // the burn, down his left side through the eye
+    c.strokeStyle = 'rgba(210, 130, 112, 0.6)'; c.lineWidth = 1.8; for (const [y, w] of [[96, 12], [110, 14], [124, 12], [138, 9]]) { c.beginPath(); c.moveTo(218, y); c.quadraticCurveTo(224, y - 4, 218 + w, y + 2); c.stroke(); } // its ridged, puckered skin
+    c.restore();
+    c.fillStyle = 'rgba(36, 18, 14, 0.7)'; for (const s of [-1, 1]) { c.beginPath(); c.ellipse(200 + s * 17, 111, 12, 7.5, 0, 0, Math.PI * 2); c.fill(); } // deep-set sockets
+    c.strokeStyle = 'rgba(60, 30, 22, 0.55)'; c.lineWidth = 1.6; for (const s of [-1, 1]) { c.beginPath(); c.moveTo(200 + s * 8, 119); c.quadraticCurveTo(200 + s * 17, 123, 200 + s * 25, 118); c.stroke(); } // the bags under them
+    c.strokeStyle = HAIR; c.lineWidth = 6; c.lineCap = 'round'; for (const s of [-1, 1]) { c.beginPath(); c.moveTo(200 + s * 4, 106); c.quadraticCurveTo(200 + s * 14, 96, 200 + s * 30, 96); c.stroke(); } // heavy brows, dragged down into a scowl
+    c.strokeStyle = 'rgba(50, 24, 18, 0.7)'; c.lineWidth = 1.8; for (const o of [-3, 3]) { c.beginPath(); c.moveTo(200 + o, 92); c.lineTo(200 + o * 0.6, 104); c.stroke(); } // the creases between them
+    c.strokeStyle = '#5c3a2c'; c.lineWidth = 2.6; c.beginPath(); c.moveTo(202, 108); c.lineTo(197, 130); c.quadraticCurveTo(201, 135, 208, 131); c.stroke(); // a long, broken nose
+    for (const s of [-1, 1]) { c.strokeStyle = 'rgba(50, 26, 18, 0.6)'; c.lineWidth = 1.6; c.beginPath(); c.moveTo(200 + s * 10, 130); c.quadraticCurveTo(200 + s * 16, 140, 200 + s * 15, 150); c.stroke(); } // the lines from nose to mouth
+    c.fillStyle = HAIR; c.beginPath(); c.moveTo(184, 141); c.quadraticCurveTo(200, 134, 216, 141); c.lineTo(214, 146); c.quadraticCurveTo(200, 141, 186, 146); c.closePath(); c.fill(); // the moustache
+    c.strokeStyle = '#2a120c'; c.lineWidth = 2.4; c.beginPath(); c.moveTo(189, 150); c.quadraticCurveTo(200, 147, 211, 151); c.stroke(); // a mouth pulled thin
+    c.strokeStyle = '#c98a7a'; c.lineWidth = 2.2; c.beginPath(); c.moveTo(170, 108); c.lineTo(186, 142); c.stroke(); // the old sword cut across his cheek
+    const blink = 0.85 + 0.15 * Math.sin(t * 3.1); // the embers in his eyes
+    c.save(); c.shadowBlur = 16; c.shadowColor = '#ff3d00'; c.fillStyle = `rgba(255, 171, 64, ${blink})`;
+    for (const s of [-1, 1]) { c.beginPath(); c.ellipse(200 + s * 17, 111, 4.8, 2.4, s * 0.12, 0, Math.PI * 2); c.fill(); }
+    c.restore();
+    for (let k = 0; k < 5; k++) { const x = 168 + k * 16, top = 40 - (k === 2 ? 14 : k % 2 ? 6 : 0); ptPoly(c, [[x - 7, 70], [x, top], [x + 7, 70]], IRON, 2.4); } // the crown's spikes
+    c.beginPath(); c.moveTo(160, 68); c.quadraticCurveTo(200, 60, 240, 68); c.lineTo(240, 80); c.quadraticCurveTo(200, 72, 160, 80); c.closePath(); ptFill(c, IRON, 2.6); // its band, curving round his head
+    c.fillStyle = GOLD; for (let k = 0; k < 5; k++) c.fillRect(165 + k * 16, 69.5 - (k === 2 ? 2 : k % 2 ? 1 : 0), 5, 4);
+}
 
 // Paint a big portrait onto `cv` (sized to its frame's aspect): the aura behind, the figure lit as one layer, the glows on top
 function drawBigPortrait(cv, id, t) {

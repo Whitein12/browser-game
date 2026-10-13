@@ -104,12 +104,14 @@ function updateHUD() {
         hud.lastGold = player.gold;
     }
 
-    const boss = enemies.find(e => !e.dead && e.type.startsWith('boss'));
-    const showBoss = boss && boss.state !== 'death_throes';
+    const boss = enemies.find(e => !e.dead && e.type.startsWith('boss') && !e.champion);
+    const guard = boss ? [] : enemies.filter(e => e.champion && !e.dead); // map_castle.js: the Royal Guard share one bar
+    const showBoss = (boss && boss.state !== 'death_throes') || guard.length > 0;
     el('boss-bar').style.display = showBoss ? 'block' : 'none';
     if (showBoss) {
-        const pct = Math.max(0, boss.hp / boss.maxHp * 100) + '%';
-        el('boss-name').textContent = BOSS_NAMES[boss.type] || `Wave ${wave} Boss`;
+        const hp = boss ? boss.hp : guard.reduce((s, e) => s + Math.max(0, e.hp), 0), max = boss ? boss.maxHp : cst.guardMax || 1;
+        const pct = Math.max(0, hp / max * 100) + '%';
+        el('boss-name').textContent = boss ? (boss.king ? 'Valerius, King of Thieves' : BOSS_NAMES[boss.type] || `Wave ${wave} Boss`) : 'The Royal Guard';
         el('boss-fill').style.width = pct; el('boss-ghost').style.width = pct;
     }
 }

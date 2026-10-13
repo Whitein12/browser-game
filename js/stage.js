@@ -60,7 +60,8 @@ function mapTypeForWave(w) {
     if (isEndlessMode) return 'open';
     if (activeDungeonId === 'bandit_bastion' && w <= 5) return 'village';
     if (activeDungeonId === 'bandit_bastion' && w >= 6 && w <= 10) return 'trail'; // map_trail.js
-    if (activeDungeonId === 'bandit_bastion' && w >= 11) return 'bridge';
+    if (activeDungeonId === 'bandit_bastion' && w === 11) return 'bridge'; // map_bridge.js
+    if (activeDungeonId === 'bandit_bastion' && w >= 12) return 'castle'; // map_castle.js
     if (activeDungeonId === 'slime_caves' && w <= 5) return 'clearing';
     if (activeDungeonId === 'slime_caves' && w <= 10) return 'cavern';
     if (activeDungeonId === 'slime_caves' && w <= 15) return 'hive';
@@ -77,6 +78,7 @@ function setStageMap(type) {
     if (changed && type === 'village') buildVillage(); // map_village.js
     if (changed && type === 'trail') buildTrail(); // map_trail.js
     if (changed && type === 'bridge') buildBridge(); // map_bridge.js
+    if (changed && type === 'castle') buildCastle(); // map_castle.js
     updateMapBounds();
     if (changed) {
         for (const e of enemies) if (e.prop) e.dead = true; // props (the village's powder kegs) belong to their map
@@ -89,6 +91,7 @@ function setStageMap(type) {
         if (type === 'village') resetVillage(); // so are the powder kegs
         if (type === 'trail') resetTrail(); // map_trail.js: the logjams and the gate shut again
         if (type === 'bridge') resetBridge(); // map_bridge.js: nobody on the bridge yet
+        if (type === 'castle') resetCastle(); // map_castle.js: every door barred again, the kegs back
         updateNav(true);
         updateCamera(0, true);
     }
@@ -269,6 +272,7 @@ function pickSpawnPoint() {
     if (currentMap.type === 'hive') return hiveSpawnPoint(); // map_hive.js: hatched from a brood pod
     if (currentMap.type === 'village') return villageSpawnPoint(); // map_village.js: a doorway, the trees, over the barricade
     if (currentMap.type === 'trail') return trailSpawnPoint(); // map_trail.js: the tree line of the open section, the camp's doorways
+    if (currentMap.type === 'castle') return castleSpawnPoint(); // map_castle.js: doorways, wall stairs, the hall's side doors
     const b = currentMap, d = mapDef();
     for (let tries = 0; tries < 14; tries++) {
         let x, y, from = 'forest';
@@ -287,6 +291,7 @@ function onEnemySpawned(e) {
     e.spawnT = e.spawnMax = 0.7; // bubble up out of the ground; AI waits until it's formed
     if (currentMap.type === 'village') { villageOnSpawn(e); return; } // map_village.js: steps in from where it came
     if (currentMap.type === 'trail') { trailOnSpawn(e); return; } // map_trail.js
+    if (currentMap.type === 'castle') { castleOnSpawn(e); return; } // map_castle.js
     if (e.spawnFrom === 'cave') burst(e.x, e.y, Math.PI, 1.6, 8, { kind: 'goo', color: '#8bc34a', size: 4, speed: [60, 160], life: 0.6, drag: 3 });
     if (e.spawnFrom === 'lake') { burst(e.x, e.y, 0, Math.PI * 2, 10, { kind: 'goo', color: '#5fd38d', size: 4, speed: [50, 150], life: 0.6, drag: 3 }); effects.push({ type: 'slime_shock', x: e.x, y: e.y, radius: 50, color: '#69f0ae', life: 0.5, maxLife: 0.5 }); }
     if (e.spawnFrom === 'burrow') burst(e.x, e.y, e.spawnA || 0, 1.4, 8, { kind: 'debris', color: '#5d5a55', size: 3, speed: [60, 170], life: 0.5, drag: 3 });
@@ -311,6 +316,7 @@ function onWaveCleared() {
     if (isBossWave) { showWaveCleared(); return; }
     if (waveBreak > 0) return; // already counting down (a level-up closed during the breather)
     if (currentMap.type === 'trail') trailWaveCleared(); // map_trail.js: a logjam may roll aside before the breather
+    if (currentMap.type === 'castle') castleWaveCleared(); // map_castle.js: the keep's doors are breached, the throne room opens
     gameState = STATE.PLAYING; lastTime = performance.now();
     waveBreak = WAVE_BREAK; // main.js update counts it down; the wave plaque shows it
 }
@@ -377,6 +383,9 @@ function updateStageEvent(dt) {
     else if (ev.type === 'gate_open') updateGateOpen(ev, dt);
     else if (ev.type === 'valerius_intro') updateValeriusIntro(ev, dt); // map_bridge.js
     else if (ev.type === 'valerius_escape') updateValeriusEscape(ev, dt);
+    else if (ev.type === 'bridge_gate') updateBridgeGate(ev, dt);
+    else if (ev.type === 'keep_breach') updateKeepBreach(ev, dt); // map_castle.js
+    else if (ev.type === 'throne_doors') updateThroneDoors(ev, dt);
     else if (ev.type === 'cave_exit') {
         player.dash = null; player.grappleTarget = null;
         const [dx, dy, dd] = getVector(player.x, player.y, d.exitTo.x, d.exitTo.y);
@@ -392,7 +401,7 @@ function updateStage(dt) {
     const d = mapDef();
     if (currentMap.grid) { // map_hive.js / map_village.js / map_cavern.js
         updateNav();
-        if (currentMap.type === 'hive') updateHive(dt); else if (currentMap.type === 'village') updateVillage(dt); else if (currentMap.type === 'trail') updateTrail(dt); else if (currentMap.type === 'bridge') updateBridge(dt); else updateCavern(dt);
+        if (currentMap.type === 'hive') updateHive(dt); else if (currentMap.type === 'village') updateVillage(dt); else if (currentMap.type === 'trail') updateTrail(dt); else if (currentMap.type === 'bridge') updateBridge(dt); else if (currentMap.type === 'castle') updateCastle(dt); else updateCavern(dt);
     }
     if (d && currentMap.caveOpen && !stageEvent && Math.hypot(player.x - d.exit.x, player.y - d.exit.y) < d.exitR) {
         if (currentMap.type === 'hive') startTrophyClaim(); else startCaveExit();
@@ -418,7 +427,7 @@ function drawStageScreen() {
     if (!stageVignette || stageVignette.key !== key) { // painted once per map and window size, not every frame
         stageVignette = document.createElement('canvas'); stageVignette.width = cw; stageVignette.height = ch; stageVignette.key = key;
         const vc = stageVignette.getContext('2d'), v = vc.createRadialGradient(cw / 2, ch / 2, Math.min(cw, ch) * (cave ? 0.35 : 0.45), cw / 2, ch / 2, Math.max(cw, ch) * 0.75);
-        const edge = currentMap.type === 'hive' ? 'rgba(14, 0, 8, 0.6)' : currentMap.type === 'village' ? 'rgba(20, 7, 0, 0.55)' : currentMap.type === 'trail' ? 'rgba(8, 14, 2, 0.45)' : currentMap.type === 'bridge' ? 'rgba(20, 8, 24, 0.5)' : cave ? 'rgba(0, 3, 8, 0.6)' : 'rgba(0, 12, 4, 0.45)';
+        const edge = currentMap.type === 'hive' ? 'rgba(14, 0, 8, 0.6)' : currentMap.type === 'village' ? 'rgba(20, 7, 0, 0.55)' : currentMap.type === 'trail' ? 'rgba(8, 14, 2, 0.45)' : currentMap.type === 'bridge' ? 'rgba(20, 8, 24, 0.5)' : currentMap.type === 'castle' ? 'rgba(10, 6, 14, 0.55)' : cave ? 'rgba(0, 3, 8, 0.6)' : 'rgba(0, 12, 4, 0.45)';
         v.addColorStop(0, 'rgba(0, 10, 0, 0)'); v.addColorStop(1, edge); vc.fillStyle = v; vc.fillRect(0, 0, cw, ch);
     }
     ctx.drawImage(stageVignette, 0, 0);

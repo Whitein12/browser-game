@@ -61,8 +61,13 @@ window.startNextWave = function() {
         if (trl.guard && !trl.guard.dead && enemies.includes(trl.guard)) { enemiesToSpawn = 0; bossSpawned = true; activeEnemies++; } // already at the bridgehead since the logjam opened (his hounds counted themselves)
         else { enemiesToSpawn = 1; enemySpawnTimer = 0; } // a jump straight to wave 10: he's there at once
     }
+    if (activeDungeonId === 'bandit_bastion' && wave >= 12 && !isEndlessMode) { // the castle (map_castle.js): wave 15 is a regular wave, and its waves are a little smaller than the formula
+        isBossWave = false; enemiesToSpawn = CS_COUNT[Math.min(wave, 15) - 12];
+        if (wave >= 16) { isBossWave = true; enemiesToSpawn = 0; } // the throne room: its scenes bring the Royal Guard (16) and Valerius (17)
+    }
     setStageMap(mapTypeForWave(wave)); // stage.js
     if (currentMap.type === 'trail') trailEnter(wave); // map_trail.js: a jump to wave 8 / 10 starts in the right section with the logjams open
+    if (currentMap.type === 'castle') castleEnter(wave); // map_castle.js: the same for a jump to wave 14 / 16
     player.exitFade = 0; player.fadeOut = 0;
     if (fresh) { player.dash = null; player.z = 0; player.grappleTarget = null; player.charge = null; player.heavy = null; } // never carry a dash or a charge across a map change
 
@@ -137,12 +142,13 @@ function spawnEnemy() {
         }
     }
 
-    const stage = isEndlessMode ? Math.floor(Math.random() * 3) + 1 : (wave > 10 ? 3 : (wave > 5 ? 2 : 1));
-    const allMinions = [...(activeDungeon.stage1_minions || []), ...(activeDungeon.stage2_minions || []), ...(activeDungeon.stage3_minions || [])];
+    const stage = isEndlessMode ? Math.floor(Math.random() * (activeDungeon.stage4_minions ? 4 : 3)) + 1 : (wave > 11 && activeDungeon.stage4_minions ? 4 : wave > 10 ? 3 : (wave > 5 ? 2 : 1));
+    const allMinions = [...(activeDungeon.stage1_minions || []), ...(activeDungeon.stage2_minions || []), ...(activeDungeon.stage3_minions || []), ...(activeDungeon.stage4_minions || [])];
     let minionList = activeDungeon[`stage${stage}_minions`];
     // Slime Caves mixes every stage in Endless; any stage without minions (Bandit Bastion stage 3) falls back to the full pool
     if (!minionList || minionList.length === 0 || (isEndlessMode && activeDungeonId === 'slime_caves')) minionList = allMinions;
     if (currentMap.type === 'trail') minionList = trailMinions(minionList); // map_trail.js: the section's mix, riders and hounds capped
+    if (currentMap.type === 'castle') minionList = castleMinions(minionList); // map_castle.js: the bailey's mix, the keep's
 
     if (isBossWave && !bossSpawned && enemiesToSpawn === 0) {
         bossSpawned = true; 
@@ -165,7 +171,7 @@ function spawnEnemy() {
         onEnemySpawned(enemies[enemies.length - 1]); // stage.js
     };
     pushMinion(ex, ey);
-    const packMax = currentMap.type === 'trail' ? Math.min(1, trailRoom('hound')) : 2; // map_trail.js: packs of 2 at most there, never past the cap
+    const packMax = currentMap.type === 'trail' ? Math.min(1, trailRoom('hound')) : currentMap.type === 'castle' ? Math.min(1, castleRoom('hound')) : 2; // map_trail.js / map_castle.js: packs of 2 at most there, never past the cap
     if (m.type === 'hound') for (let k = 0; k < packMax && enemiesToSpawn > (isBossWave ? 1 : 0); k++) { // a pack: up to two more, each one a wave enemy
         enemiesToSpawn--; activeEnemies++; pushMinion(ex, ey + (k ? 30 : -30));
     }
@@ -982,6 +988,8 @@ function draw() {
         drawTrainingGround(); // training.js: the sand yard
     } else if (currentMap.type === 'bridge') {
         drawBridgeGround(); // map_bridge.js: the span, its braziers and the gatehouse
+    } else if (currentMap.type === 'castle') {
+        drawCastleGround(); // map_castle.js: the bailey, the keep's halls, the throne room, torchlight
     } else {
         ctx.fillStyle = '#1e1e1e'; ctx.fillRect(-10, -10, canvas.width + 20, canvas.height + 20); // overscan for camera shake
         ctx.strokeStyle = '#2a2a2a'; ctx.lineWidth = 1; const gridSize = 100;
@@ -1689,7 +1697,11 @@ function draw() {
         // Machinist Decoy Projection hologram
         if (player.phantomDecoy && player.phantomDecoy.life > 0) drawDecoyHologram(player.phantomDecoy, aimAngle); // skillfx_space.js
         ctx.filter = 'none';
-    } 
+    } else if (player.fallen && gameState !== STATE.MENU) { // combat.js playerDied: the hero lies where they fell, dimmed, while the death screen (or a taunt) is up
+        const a = player.fallAngle !== undefined ? player.fallAngle : (player.fallAngle = Math.atan2(mouseY - player.y, mouseX - player.x));
+        ctx.save(); ctx.fillStyle = 'rgba(90, 0, 0, 0.45)'; ctx.beginPath(); ctx.ellipse(player.x + 4, player.y + 6, 26, 16, 0, 0, Math.PI * 2); ctx.fill(); // blood under them
+        ctx.filter = 'grayscale(0.7) brightness(0.55)'; drawPlayerGhost(player.x, player.y, a, 1); ctx.restore(); // sprites.js: a still pose
+    }
 
     if (currentMap.type === 'clearing') drawClearingCanopy(); // map_clearing.js: trees overhang the fight
     if (currentMap.type === 'cavern') drawCavernAbove(); // map_cavern.js: falling stalactites, drips
@@ -1697,6 +1709,7 @@ function draw() {
     if (currentMap.type === 'village') drawVillageAbove(); // map_village.js: roof fires, smoke, the canopy, ash
     if (currentMap.type === 'trail') drawTrailAbove(); // map_trail.js: the canopy, the campfire's smoke, pollen
     if (currentMap.type === 'bridge') drawBridgeAbove(); // map_bridge.js: banners, the castle's archers, mist off the gorge
+    if (currentMap.type === 'castle') drawCastleAbove(); // map_castle.js: banners, the forge's smoke, chandeliers
     drawEnemyOverlay(); // enemysprites.js: lightning coming down from above
     drawFx(); // fx.js particles
     drawUltOverlay(); // skillfx_ult.js: things in the air above everything

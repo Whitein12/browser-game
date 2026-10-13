@@ -3,7 +3,7 @@
 // ==========================================
 // openDialogue({ name, title, portrait, lines, onClose }) pauses the game (STATE.DIALOGUE) and types the lines out one at a time.
 // Enter, Space or a click finishes the line being typed, then moves to the next; after the last one the box closes, the
-// game resumes and onClose runs (map_bridge.js: Valerius's escape carries on). `portrait` is a BIG_PORTRAITS id
+// game resumes and onClose runs (map_bridge.js: Valerius's escape carries on; a death taunt shows the death screen). `portrait` is a BIG_PORTRAITS id
 // (portraits.js), front-facing, head to hips. It animates in real time: the fight is paused underneath.
 
 const DLG_CPS = 45; // letters typed per second
@@ -41,6 +41,37 @@ function dialogueAdvance() {
     if (done) done();
 }
 window.dialogueAdvance = dialogueAdvance;
+
+// ---------- Valerius gloats over a fallen hero (combat.js playerDied) ----------
+// Whenever he's on the field when the hero dies: the bridge duel, watching from his throne while his guard fights (wave 16),
+// and the last fight. A few sets per place, picked at random.
+const VALERIUS_TAUNTS = {
+    bridge: [
+        ['Down you go.', 'All that way from Cinderholt, to die on my bridge. The crows will thank you.'],
+        ['Is that all?', 'I gave you a road out. You should have taken it.'],
+        ['Stay down.', 'I\'ll hang what\'s left of you over the gate, so the next fool knows the way in.'],
+    ],
+    throne: [
+        ['Look at you. Bleeding on my carpet.', 'I didn\'t even have to stand up.'],
+        ['Kneel, then. Ah, you already are.'],
+        ['That\'s what comes of storming a king\'s hall. Drag it out.'],
+    ],
+    king: [
+        ['Every crown in this hall I took from someone who thought they were stronger.', 'You were just one more.'],
+        ['You fought well. It changes nothing.', 'Your blade goes on my wall. Your name goes nowhere.'],
+        ['That\'s the difference between us.', 'I never stay down.'],
+    ],
+};
+
+// The dialogue to open if Valerius saw the hero fall, or null
+function valeriusTaunt() {
+    const v = enemies.find(e => e.type === 'boss_valerius' && !e.dead && !e.escaping);
+    const seated = currentMap.type === 'castle' && typeof cst !== 'undefined' && cst.seated; // map_castle.js: on his throne, watching
+    if (!v && !seated) return null;
+    const where = seated && !v ? 'throne' : v.king ? 'king' : 'bridge', sets = VALERIUS_TAUNTS[where];
+    const bare = where !== 'bridge';
+    return { name: bare ? 'Valerius' : 'Valerius the Vanguard', title: where === 'king' ? 'King of Thieves' : 'Lord of the Bastion', portrait: bare ? 'valerius_bare' : 'valerius', lines: sets[(Math.random() * sets.length) | 0] };
+}
 
 window.addEventListener('keydown', e => {
     if (gameState !== STATE.DIALOGUE || e.repeat) return;
