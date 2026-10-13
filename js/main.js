@@ -64,6 +64,7 @@ window.startNextWave = function() {
     if (activeDungeonId === 'bandit_bastion' && wave >= 12 && !isEndlessMode) { // the castle (map_castle.js): wave 15 is a regular wave, and its waves are a little smaller than the formula
         isBossWave = false; enemiesToSpawn = CS_COUNT[Math.min(wave, 15) - 12];
         if (wave >= 16) { isBossWave = true; enemiesToSpawn = 0; } // the throne room: its scenes bring the Royal Guard (16) and Valerius (17)
+        if (wave === 17 && cst.king && !cst.king.dead && enemies.includes(cst.king)) { bossSpawned = true; activeEnemies++; } // map_castle.js kingArrives: he's already up
     }
     setStageMap(mapTypeForWave(wave)); // stage.js
     if (currentMap.type === 'trail') trailEnter(wave); // map_trail.js: a jump to wave 8 / 10 starts in the right section with the logjams open

@@ -8,7 +8,7 @@
 // (map_village.js) are props: enemies of type 'powder_keg' with `pod` and `prop` set, so any hit sets one off but
 // nothing aims at them, and they never count toward the wave (combat.js hands their death to kegBlown).
 
-const BANDIT_TYPES = { thief: 1, archer: 1, shield: 1, horse: 1, trapper: 1, bannerman: 1, hound: 1, slinger: 1, crossbow: 1, halberd: 1, grenadier: 1, cutpurse: 1, boss_warlord: 1, boss_beastmaster: 1, boss_valerius: 1, powder_keg: 1 };
+const BANDIT_TYPES = { thief: 1, archer: 1, shield: 1, horse: 1, trapper: 1, bannerman: 1, hound: 1, slinger: 1, crossbow: 1, halberd: 1, grenadier: 1, cutpurse: 1, boss_warlord: 1, boss_beastmaster: 1, boss_valerius: 1, boss_champ_warden: 1, boss_champ_blade: 1, boss_champ_captain: 1, powder_keg: 1 };
 const BANDIT_CANVAS = 360; // the mounted Beastmaster is long: his lance and his warhorse
 const banditCanvas = document.createElement('canvas'); banditCanvas.width = banditCanvas.height = BANDIT_CANVAS;
 const banditCtx = banditCanvas.getContext('2d');
@@ -138,6 +138,13 @@ function drawBandit(e) {
         ctx.save(); ctx.globalCompositeOperation = 'lighter'; glow(ctx, tx, ty, 70 + Math.sin(fxTime * 13) * 6, '#ff8f00', 0.42); ctx.restore();
         if (Math.random() < 0.25) spawnParticle({ kind: 'dot', color: '#ffb74d', x: tx, y: ty, vx: WIND_X * 40 + jitter(30), vy: WIND_Y * 40 + jitter(30), size: 2, life: 0.6, drag: 1, grow: 0, spin: 0, rot: 0 });
     }
+    if (e.champion && alpha > 0.3) { // the Royal Guard share one HUD bar, so each wears its name and its own bar (map_castle.js)
+        const w = 64, bx = x - w / 2, by = y - z - e.size / 2 - 22;
+        ctx.save(); ctx.globalAlpha = alpha; ctx.font = 'bold 12px Georgia, serif'; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0, 0, 0, 0.75)'; ctx.fillStyle = e.rally ? '#ffab91' : '#f3e5c8';
+        ctx.strokeText(e.champName, x, by - 5); ctx.fillText(e.champName, x, by - 5);
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.65)'; ctx.fillRect(bx - 1, by - 1, w + 2, 6); ctx.fillStyle = '#c62828'; ctx.fillRect(bx, by, w * Math.max(0, e.hp / e.maxHp), 4);
+        ctx.restore();
+    }
     if (!e.type.startsWith('boss') && e.hp < e.maxHp && !(e.spawnT > 0)) { // bosses have the HUD bar // a small health bar once it's hurt, like the slimes'
         const w = e.size, bx = e.x - w / 2, by = e.y - e.size / 2 - 16;
         ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; ctx.fillRect(bx - 1, by - 1, w + 2, 5);
@@ -218,6 +225,13 @@ function banditPose(e, face) {
         p.kneel = Math.max(e.kneelK || 0, st === 'leap_prep' ? 0.5 * k : st === 'skewer' ? 0.4 : 0);
         p.kick = e.kickAt !== undefined && fxTime - e.kickAt < 0.3 ? Math.sin(Math.PI * (fxTime - e.kickAt) / 0.3) : 0;
         p.helmless = !!(e.helmless || e.king); // map_castle.js: in his own hall the helm is off
+        p.blades = !!e.blades && !e.bladesDown; p.unarmed = !!e.unchained && !p.blades && !e.spear; // ai.js Unchained: two stolen blades, the spear in a pillar
+        if (p.blades) {
+            const sw = e.sweepAt !== undefined ? clamp01((fxTime - e.sweepAt) / 0.14) : 1, s = e.slashSide || 1;
+            p.slash = st === 'flurry_prep' ? -0.8 * s * k : st === 'flurry' || st === 'k_step_in' ? lerp(-0.8 * s, 1 * s, sw) : 0;
+            p.cross = st === 'cross_prep' ? -k : st === 'cross' ? lerp(-1, 1, sw) : 0;
+            p.storm = st === 'storm_prep' ? k : st === 'storm' ? 1 : 0;
+        }
     }
     if (e.type === 'slinger') p.sling = e.state === 'windup' ? clamp01(1 - e.stateTimer / (typeof SLING_WINDUP !== 'undefined' ? SLING_WINDUP : 0.6)) : 0; // ai.js: the sling whirls up through the wind-up
     if (e.type === 'trapper') p.throwK = clamp01(1 - e.attackTimer / 0.5); // the arm winds back for a throw
@@ -229,6 +243,23 @@ function banditPose(e, face) {
         p.thrust = st === 'thrust_prep' ? -k : st === 'thrust' ? 1 : st === 'recover' && !sw ? clamp01(e.stateTimer / HAL_REC) : 0;
     }
     if (e.type === 'grenadier') { p.lob = e.state === 'windup' ? clamp01(1 - e.stateTimer / GREN_WINDUP) : 0; p.threw = e.thrownAt !== undefined && fxTime - e.thrownAt < 0.3 ? Math.sin(Math.PI * (fxTime - e.thrownAt) / 0.3) : 0; }
+    if (e.type === 'boss_champ_warden') { // ai.js WardenAI: the halberd swings like the halberdier's; the shield drives forward in a charge, swings aside when it's down
+        const k = e.prepLen ? clamp01(1 - e.stateTimer / e.prepLen) : 0, st = e.state;
+        p.haft = st === 'sweep_prep' ? lerp(-0.3, 1.3, k) : st === 'sweep' ? lerp(1.3, -1.3, clamp01((fxTime - e.swingAt) / 0.12)) : st === 'recover' && e.swingAt !== undefined && fxTime - e.swingAt < 1 ? -1.3 : -0.3;
+        p.charge = st === 'charge' ? 1 : st === 'charge_prep' ? 0.5 * k : 0;
+        p.guard = e.guarding ? 1 : 0.15; p.daze = st === 'dazed';
+    }
+    if (e.type === 'boss_champ_blade') { // ai.js BladeAI
+        const k = e.prepLen ? clamp01(1 - e.stateTimer / e.prepLen) : 0, st = e.state;
+        p.stab = st === 'cut_prep' ? -0.5 * k : st === 'cut' || st === 'step_in' ? 1 : 0;
+        p.fan = st === 'fan_prep' ? -k : e.threwAt !== undefined && fxTime - e.threwAt < 0.3 ? 1 - (fxTime - e.threwAt) / 0.3 : 0;
+        p.crouch = st === 'step_prep' ? k : 0;
+    }
+    if (e.type === 'boss_champ_captain') { // ai.js CaptainAI
+        p.kneel = e.kneelK || 0; p.reload = e.shotAt === undefined ? 1 : clamp01((fxTime - e.shotAt) / CAPT_RELOAD); p.loaded = p.reload >= 1;
+        p.raise = e.state === 'rain_prep' ? clamp01(1 - e.stateTimer / (e.prepLen || 1)) * 1 : 0;
+        p.lob = e.state === 'windup' ? clamp01(1 - e.stateTimer / CAPT_POT_T) : 0; p.threw = e.thrownAt !== undefined && fxTime - e.thrownAt < 0.3 ? Math.sin(Math.PI * (fxTime - e.thrownAt) / 0.3) : 0;
+    }
     if (e.type === 'cutpurse') { p.loot = e.loot > 0; p.crouch = e.state === 'dash_prep' ? clamp01(1 - e.stateTimer / CUT_WINDUP) : 0; p.stab = e.state === 'dash' ? 1 : e.state === 'recover' ? clamp01(e.stateTimer / 0.45) : 0; }
     if (e.type === 'hound') {
         p.swipe = null; p.bite = e.biteAt !== undefined && fxTime - e.biteAt < 0.22 ? fxTime - e.biteAt : null; // sprWolf's jaws
@@ -238,7 +269,7 @@ function banditPose(e, face) {
 }
 
 // Half-size of the stamp box in local units (default 50): a horse with its lance out needs more room
-const BANDIT_EXTENT = { horse: 72, hound: 48, halberd: 72, crossbow: 56, boss_beastmaster: 60, boss_valerius: 62 }; // a hound's wolf body spans about x -40..+33; the mounted Beastmaster's lance reaches about +50
+const BANDIT_EXTENT = { horse: 72, hound: 48, halberd: 72, crossbow: 56, boss_beastmaster: 60, boss_valerius: 62, boss_champ_warden: 72, boss_champ_captain: 56 }; // a hound's wolf body spans about x -40..+33; the mounted Beastmaster's lance reaches about +50
 function banditExtent(kind, scale) { return Math.min(BANDIT_CANVAS / 2, Math.ceil((BANDIT_EXTENT[kind] || 50) * scale)); }
 
 // Render through the offscreen canvas: light from the top-left, a white hit flash, darkened when fallen
@@ -510,6 +541,7 @@ function drawValChain(c, x0, y0, x1, y1, sag, lw = 1) {
 // His left fist in the world (the chain runs from it when the spear is out)
 function valFist(e) { const sc = e.size / 26, a = e.facingAngle || 0, lx = 16, ly = -6; return { x: e.x + (lx * Math.cos(a) - ly * Math.sin(a)) * sc, y: e.y + (lx * Math.sin(a) + ly * Math.cos(a)) * sc - (e.liftZ > 0 ? e.liftZ : 0) }; }
 function drawValeriusBody(c, p) {
+    if (p.seated) { drawValeriusSeated(c, p); return; }
     const kneel = p.kneel || 0, th = p.thrust || 0, tk = p.throwK || 0, kick = p.kick || 0;
     if (kneel > 0.05) { sprEllipse(c, 5, 7, 5, 3.5, '#1c1a1a'); sprEllipse(c, -4 - 7 * kneel, -6, 6, 3.6, '#1c1a1a'); } // a knee down behind him
     else { banditFeet(c, p, '#1c1a1a'); if (kick) sprEllipse(c, 6 + kick * 15, 5, 5.5, 3.6, '#1c1a1a'); }
@@ -523,7 +555,17 @@ function drawValeriusBody(c, p) {
     c.strokeStyle = '#22252a'; c.lineWidth = 1; c.beginPath(); c.moveTo(-3, 9.5); c.lineTo(0, 12); c.lineTo(-2, 15); c.stroke(); // a dent in the right one
     const arm = (s, hx, hy) => banditArm(c, s, hx, hy, VAL_PLATE, '#1c1a1a');
     const coil = (hx, hy) => { const mx = lerp(-1, hx, 0.55), my = lerp(-13, hy, 0.55), a = Math.atan2(hy + 13, hx + 1); c.strokeStyle = '#90a4ae'; c.lineWidth = 1.1; for (let k = -1; k <= 1; k++) { c.beginPath(); c.ellipse(mx + Math.cos(a) * k * 2.2, my + Math.sin(a) * k * 2.2, 1.6, 3.2, a, 0, Math.PI * 2); c.stroke(); } }; // the chain wound round the left forearm
-    if (p.spearOut) { // the spear's out on its chain: the left fist holds the chain, the right hangs ready
+    if (p.blades) { // Unchained: a curved sabre in the right hand, a long jewelled knife in the left
+        const sl = p.slash || 0, cr = p.cross || 0, sm = p.storm || 0;
+        let rx = 10 + Math.abs(sl) * 4, ry = 12 - sl * 7, ra = 0.35 - sl * 1.1, lx = 10, ly = -12, la = -0.4;
+        if (cr) { const q = cr < 0 ? -cr : 1 - cr; rx = 12; ry = lerp(4, 14, q); ra = lerp(-0.9, 0.5, q); lx = 12; ly = lerp(-4, -14, q); la = lerp(0.9, -0.5, q); if (cr < 0) { ry = -4 * -cr + 12 * (1 + cr); ly = 4 * -cr - 12 * (1 + cr); } } // crossed before him, then torn apart
+        if (sm) { rx = lerp(rx, 2, sm); ry = lerp(ry, 19, sm); ra = lerp(ra, 1.45, sm); lx = lerp(lx, 2, sm); ly = lerp(ly, -19, sm); la = lerp(la, -1.45, sm); } // arms flung out for the spin
+        valBlade(c, rx, ry, ra, 'sabre'); valBlade(c, lx, ly, la, 'knife');
+        arm(1, rx, ry); arm(-1, lx, ly); coil(lx, ly);
+    } else if (p.unarmed) { // empty-handed: the spear in a pillar, the blades not yet drawn, or dropped as he kneels
+        arm(1, 6, 15); arm(-1, 6, -15); coil(6, -15);
+        if (!p.dead) { c.strokeStyle = '#90a4ae'; c.lineWidth = 1; c.beginPath(); c.moveTo(6, -15); c.lineTo(9, -19); c.lineTo(7, -22); c.stroke(); } // the snapped chain's end
+    } else if (p.spearOut) { // the spear's out on its chain: the left fist holds the chain, the right hangs ready
         arm(1, 6, 15); arm(-1, 16, -6); coil(16, -6);
     } else if (p.whirl !== undefined) { // whirled overhead
         arm(1, 4, 5); arm(-1, 4, -5); coil(4, -5);
@@ -540,15 +582,56 @@ function drawValeriusBody(c, p) {
         drawValChain(c, tk > 0.3 ? 5 : lx, tk > 0.3 ? -6 : ly, bx - 1.8, by, 3, 0.6); // a short slack loop from his fist to the butt ring
     }
     const hx = 2 + kneel * 3; // the head, bowed when he kneels
-    if (p.helmless) { valBareHead(c, hx); return; }
+    if (p.helmless) { valBareHead(c, hx, p.crownless); return; }
     sprEllipse(c, hx, 0, 7.6, 7.4, VAL_PLATE); // the closed helm
     c.strokeStyle = '#22252a'; c.lineWidth = 1.6; c.beginPath(); c.moveTo(hx - 6, 0); c.lineTo(hx + 6, 0); c.stroke(); // the ridge
     c.fillStyle = '#0d0d0f'; c.fillRect(hx + 5.2, -4, 1.8, 8); // the eye slit
     c.fillStyle = 'rgba(255, 255, 255, 0.25)'; c.beginPath(); c.ellipse(hx - 2, -3, 2.6, 1.6, -0.5, 0, Math.PI * 2); c.fill();
 }
+// One of his two stolen blades, from the grip along +x at angle a: a curved sabre with a gold guard, or a long knife with a
+// jewelled pommel (both taken off men who thought they were better with them)
+function valBlade(c, x, y, a, kind) {
+    c.save(); c.translate(x, y); c.rotate(a);
+    if (kind === 'sabre') {
+        c.beginPath(); c.moveTo(2, -1.6); c.quadraticCurveTo(16, -3.8, 27, 1.5); c.quadraticCurveTo(15, 0.6, 2, 1.6); c.closePath(); sprFill(c, '#dfe6ea');
+        c.strokeStyle = 'rgba(255, 255, 255, 0.7)'; c.lineWidth = 0.7; c.beginPath(); c.moveTo(4, -1.4); c.quadraticCurveTo(15, -3, 24, 0.6); c.stroke();
+        c.strokeStyle = VAL_GOLD; c.lineWidth = 1.8; c.beginPath(); c.moveTo(1.5, -3.6); c.quadraticCurveTo(3.5, 0, 1.5, 3.6); c.stroke(); // the guard
+    } else {
+        c.beginPath(); c.moveTo(2, -1.4); c.lineTo(17, -0.6); c.lineTo(20, 0); c.lineTo(17, 0.6); c.lineTo(2, 1.4); c.closePath(); sprFill(c, '#cfd8dc');
+        c.fillStyle = VAL_GOLD; c.fillRect(0.5, -2.8, 1.8, 5.6);
+        c.fillStyle = '#c62828'; c.beginPath(); c.arc(-4.5, 0, 1.6, 0, Math.PI * 2); c.fill(); // a ruby in the pommel
+    }
+    c.fillStyle = '#3e2723'; c.fillRect(-4, -1.1, 5, 2.2); // the grip
+    c.restore();
+}
+// On his throne (map_castle.js, wave 16): sat back against it, legs out in front, forearms along the armrests, the spear
+// propped along the right armrest under his hand, the cloak spilling over the seat behind him. p.snap raises the right hand for the finger snap.
+function drawValeriusSeated(c, p) {
+    const snap = p.snap || 0, rise = p.rise || 0; // rise: leaning forward out of the seat (map_castle.js valerius_rises)
+    sprCape(c, { t: p.t, walk: 0, move: 0, trail: { x: 0, y: 0 } }, VAL_CLOAK, 20, 17, VAL_GOLD);
+    for (const s of [-1, 1]) { // thighs forward, boots planted (one leg stretched out, a king at his ease)
+        const fx = s < 0 ? 22 : 18 + 3 * rise, fy = s * (s < 0 ? 9 : 6.5);
+        sprStroke(c, VAL_STEEL, 7.5, () => { c.moveTo(1 + rise * 3, s * 5.5); c.lineTo(fx - 3, fy); });
+        sprEllipse(c, fx, fy, 5.2, 3.7, '#1c1a1a');
+    }
+    if (!rise) { c.save(); c.translate(-14, 23); c.rotate(-0.06); valSpear(c, VAL_SPEAR_L); c.restore(); } // propped beside him
+    c.save(); c.translate(rise * 3, 0);
+    sprEllipse(c, -2, 0, 10, 15.5, VAL_RED); // the surcoat
+    c.strokeStyle = VAL_GOLD; c.lineWidth = 1.1; c.beginPath(); c.arc(-4, 0, 3.4, 0, Math.PI * 2); c.moveTo(-7.4, 3.8); c.lineTo(-0.6, -3.8); c.stroke();
+    for (const s of [-1, 1]) { sprEllipse(c, -1.5, s * 13, 6.5, 5.6, VAL_PLATE); c.fillStyle = '#9aa3ad'; c.beginPath(); c.arc(0.5, s * 13, 1.1, 0, Math.PI * 2); c.fill(); }
+    const arm = (s, hx, hy) => banditArm(c, s, hx, hy, VAL_PLATE, '#1c1a1a');
+    arm(-1, 13, -17); // along the left armrest
+    if (snap > 0) { // the right hand up in front of him, fingers snapping
+        const hx = lerp(13, 20, snap), hy = lerp(17, 9, snap);
+        arm(1, hx, hy);
+        if (snap > 0.6) { c.strokeStyle = 'rgba(255, 236, 200, 0.9)'; c.lineWidth = 1; c.beginPath(); for (let k = 0; k < 5; k++) { const a = k / 5 * Math.PI * 2; c.moveTo(hx + Math.cos(a) * 4, hy + Math.sin(a) * 4); c.lineTo(hx + Math.cos(a) * 7, hy + Math.sin(a) * 7); } c.stroke(); }
+    } else arm(1, 13, 17); // and the right
+    valBareHead(c, 1 + rise * 2);
+    c.restore();
+}
 // Helmless (the castle): close-cropped dark hair gone grey in streaks, the brow and ears catching the light at the front,
 // a scar across the scalp, a stolen iron crown, and the ember eyes he had behind the visor
-function valBareHead(c, hx) {
+function valBareHead(c, hx, crownless) {
     for (const s of [-1, 1]) sprEllipse(c, hx + 0.5, s * 6.6, 1.5, 2.2, '#a87c62'); // ears
     sprEllipse(c, hx, 0, 7, 6.6, '#1f1a18'); // the hair, cropped close
     c.strokeStyle = '#7d7771'; c.lineWidth = 0.9; c.lineCap = 'round'; c.beginPath(); // grey streaks combed back
@@ -556,6 +639,7 @@ function valBareHead(c, hx) {
     c.stroke();
     c.beginPath(); c.ellipse(hx + 4.4, 0, 2.6, 4.4, 0, -Math.PI / 2, Math.PI / 2); c.fillStyle = '#b48669'; c.fill(); // the brow
     c.strokeStyle = '#d98c84'; c.lineWidth = 0.9; c.beginPath(); c.moveTo(hx + 1, -5.4); c.lineTo(hx + 5, -1.6); c.stroke(); // the scar
+    if (crownless) { c.fillStyle = '#ffab40'; for (const s of [-1, 1]) c.fillRect(hx + 5.6, s * 1.9 - 0.6, 1.4, 1.2); return; } // the crown fell from him (map_castle.js)
     c.strokeStyle = '#26292e'; c.lineWidth = 1.8; c.beginPath(); c.ellipse(hx, 0, 5.6, 5.3, 0, 0, Math.PI * 2); c.stroke(); // the crown's band
     c.fillStyle = '#26292e';
     for (let k = 0; k < 7; k++) { const a = k / 7 * Math.PI * 2 + 0.3, ux = Math.cos(a), uy = Math.sin(a); c.beginPath(); c.moveTo(hx + ux * 4.6 - uy * 1.3, uy * 4.4 + ux * 1.3); c.lineTo(hx + ux * 8, uy * 7.6); c.lineTo(hx + ux * 4.6 + uy * 1.3, uy * 4.4 - ux * 1.3); c.fill(); } // its spikes
@@ -892,6 +976,100 @@ const BANDIT_SPRITES = {
     // Valerius the Vanguard (drawValeriusBody, above)
     boss_valerius(c, p) { drawValeriusBody(c, p); },
 
+    // The Royal Guard (ai.js WardenAI / BladeAI / CaptainAI): the king's colours on all three, crimson and gold.
+    // Gorran, the Iron Warden: a big man in full plate under a crimson tabard, a gold-crested great helm, a tower shield on
+    // the left arm held across the front (p.guard 1 up, 0 swung aside), the halberd in the right (p.haft as the halberdier's).
+    // p.charge drives the shield forward and the head down behind it; p.daze rolls the helm.
+    boss_champ_warden(c, p) {
+        const ch = p.dead ? 0 : (p.charge || 0), gd = p.dead ? 0 : (p.guard === undefined ? 1 : p.guard), dz = p.daze ? Math.sin(p.t * 9) * 2 : 0;
+        banditFeet(c, p, '#1f2428');
+        if (!p.dead) sprCape(c, p, '#6b1414', 17, 14, VAL_GOLD);
+        sprTorso(c, '#8a969e', 15.5, 11.5);
+        c.strokeStyle = '#56636b'; c.lineWidth = 1.1; for (const r of [10, 7]) { c.beginPath(); c.arc(1, 0, r, Math.PI * 0.62, Math.PI * 1.38); c.stroke(); } // the back plate's lames
+        sprEllipse(c, -1.5, 0, 6.5, 10.5, '#8e1b1b', false); // the tabard
+        c.strokeStyle = VAL_GOLD; c.lineWidth = 1; c.beginPath(); c.arc(-3, 0, 3, 0, Math.PI * 2); c.moveTo(-6, 3.4); c.lineTo(0, -3.4); c.stroke(); // the king's sigil
+        sprPauldrons(c, '#a7b3b9', 7, 13.5);
+        const ha = p.dead ? 0.3 : (p.haft === undefined ? -0.3 : p.haft), px = p.dead ? -8 : 4, py = p.dead ? 24 : 11;
+        c.save(); c.translate(px, py); c.rotate(ha); drawHalberd(c); c.restore();
+        if (p.dead) banditArm(c, 1, -2, 18, '#8a969e', '#37474f'); else banditArm(c, 1, px, py, '#8a969e', '#37474f');
+        const sx = lerp(5, 14, gd) + ch * 6, sy = lerp(-17, -4, gd), sa = lerp(-1.2, 0, gd); // the tower shield: across the front, or swung out to the left
+        banditArm(c, -1, sx - 3, sy, '#8a969e', '#37474f');
+        if (!p.dead) {
+            c.save(); c.translate(sx, sy); c.rotate(sa);
+            c.beginPath(); c.roundRect(-4.5, -21, 9, 42, 3); sprFill(c, '#5d2a1e');
+            c.fillStyle = '#8e1b1b'; c.fillRect(-2.5, -19, 5, 38);
+            c.fillStyle = VAL_GOLD; c.fillRect(-2.5, -1.5, 5, 3); c.fillRect(-0.8, -19, 1.6, 38); // a gold cross on its face
+            c.strokeStyle = '#2f3a40'; c.lineWidth = 2.2; c.beginPath(); c.roundRect(-4.5, -21, 9, 42, 3); c.stroke(); // iron rim
+            c.fillStyle = 'rgba(255, 255, 255, 0.35)'; c.fillRect(-3.5, -20, 2, 40);
+            c.restore();
+        } else { c.save(); c.translate(-4, -24); c.rotate(1.3); c.beginPath(); c.roundRect(-4.5, -21, 9, 42, 3); sprFill(c, '#5d2a1e'); c.restore(); }
+        const hx = 2 + ch * 2;
+        sprEllipse(c, hx + dz * 0.3, dz, 8.2, 8.2, '#b8c3c8'); // the great helm
+        c.fillStyle = '#263238'; c.fillRect(hx + 7.6, -4.5 + dz, 1.8, 9); // its eye slit
+        c.strokeStyle = VAL_GOLD; c.lineWidth = 2; c.beginPath(); c.moveTo(hx - 6, dz); c.lineTo(hx + 8, dz); c.stroke(); // the gold crest
+        if (!p.dead) sprLeaf(c, hx - 4, dz, Math.PI + p.trail.y * 0.03, 12, '#b71c1c'); // the plume
+        c.fillStyle = 'rgba(255, 255, 255, 0.5)'; c.beginPath(); c.ellipse(hx - 1, -3 + dz, 2.6, 1.3, -0.5, 0, Math.PI * 2); c.fill();
+        if (p.daze) for (let k = 0; k < 3; k++) { const a = p.t * 5 + k * 2.1; sprStar(c, hx + Math.cos(a) * 11, Math.sin(a) * 11, 2.2, '#fff59d'); } // seeing stars
+    },
+
+    // Sable, the Royal Blade: lean, in plum-black leathers, a deep hood, a pale porcelain half-mask, a crimson sash trailing,
+    // a curved dagger in each hand. p.stab cuts with both; p.fan spreads the arms back for the throw, then flings them;
+    // p.crouch sinks her before the Shadow Step.
+    boss_champ_blade(c, p) {
+        const cr = p.dead ? 0 : (p.crouch || 0), st = p.stab || 0, fan = p.fan || 0;
+        banditFeet(c, p, '#17121a');
+        if (cr) c.scale(1 - 0.12 * cr, 1 + 0.06 * cr);
+        if (!p.dead) { sprTails(c, p, ['#c62828', '#7f1010'], 2.6, 22); sprCape(c, p, '#2b2230', 16, 11, '#7f1010'); }
+        sprTorso(c, '#3a2e40', 11.5, 8);
+        c.strokeStyle = '#c62828'; c.lineWidth = 2.4; c.beginPath(); c.moveTo(-1, -8); c.lineTo(-1, 8); c.stroke(); // the sash at the waist
+        c.strokeStyle = '#1b151e'; c.lineWidth = 1.4; c.beginPath(); c.moveTo(5, -7); c.lineTo(-5, 7); c.stroke(); // a baldric of throwing knives
+        c.fillStyle = '#b0bec5'; for (const u of [0.2, 0.4, 0.6, 0.8]) c.fillRect(lerp(5, -5, u) - 0.8, lerp(-7, 7, u) - 1.6, 1.6, 3.2);
+        const dag = (s, hx, hy, a) => { c.save(); c.translate(hx, hy); c.rotate(a); c.beginPath(); c.moveTo(1, -1.3); c.quadraticCurveTo(8, -2.6 * s, 11.5, 0.6 * s); c.quadraticCurveTo(7, 0.8 * s, 1, 1.3); c.closePath(); sprFill(c, '#e0e6ea'); c.fillStyle = '#4a1418'; c.fillRect(-2.5, -1.2, 3.5, 2.4); c.restore(); };
+        if (p.dead) { banditArm(c, -1, 1, -17, '#3a2e40', '#17121a'); banditArm(c, 1, -1, 17, '#3a2e40', '#17121a'); }
+        else for (const s of [-1, 1]) {
+            const back = fan > 0 ? 0 : -fan, fl = fan > 0 ? fan : 0; // drawn back (fan < 0), then flung out (fan > 0)
+            const hx = 9 + st * 7 - back * 10 + fl * 6, hy = s * (9 - st * 4 + back * 5 + fl * 4), a = s * (-0.35 + st * 0.3 + fl * 0.5 - back * 0.6);
+            dag(s, hx, hy, a); banditArm(c, s, hx, hy, '#3a2e40', '#17121a');
+        }
+        sprHood(c, '#241c28', '#0d0a0f');
+        c.beginPath(); c.ellipse(7.2, 0, 2.6, 4.8, 0, -Math.PI / 2, Math.PI / 2); c.fillStyle = '#e8e0d8'; c.fill(); // the porcelain half-mask
+        if (!p.dead) { c.fillStyle = '#c62828'; for (const s of [-1, 1]) c.fillRect(7.6, s * 2 - 0.6, 1.6, 1.2); }
+    },
+
+    // Corvin, the Crossbow Captain: a long crimson coat with gold frogging, a bandolier of bolts, a wide-brimmed captain's
+    // hat with a red and white plume, a heavy gilded crossbow. Kneels to aim (p.kneel), cranks it (p.reload), raises it to
+    // the sky for Bolt Rain (p.raise), and lobs a firepot from the left hand (p.lob, p.threw).
+    boss_champ_captain(c, p) {
+        const kn = p.dead ? 0 : (p.kneel || 0), ra = p.dead ? 0 : (p.raise || 0);
+        if (kn > 0.05) { sprEllipse(c, -7 - kn * 2, -6.5, 5, 3.5, '#1f1814'); sprEllipse(c, 1 + kn * 7, 7, 5 + kn * 2, 3.8, '#2b211c'); }
+        else banditFeet(c, p, '#1f1814');
+        if (!p.dead) sprCape(c, p, '#5a1a17', 19, 13, VAL_GOLD); // the coat's long skirts
+        c.save(); if (kn) c.scale(1 - 0.06 * kn, 1 - 0.04 * kn);
+        sprTorso(c, '#7a2420', 13, 9.5);
+        c.strokeStyle = VAL_GOLD; c.lineWidth = 0.9; for (const y of [-5, -1.5, 2, 5.5]) { c.beginPath(); c.moveTo(3, y); c.lineTo(7, y); c.stroke(); } // gold frogging
+        c.strokeStyle = '#3e2723'; c.lineWidth = 2.6; c.beginPath(); c.moveTo(6, -9); c.lineTo(-6, 9); c.stroke(); // the bandolier
+        c.fillStyle = '#d7ccc8'; for (const u of [0.15, 0.35, 0.55, 0.75]) { const x = lerp(6, -6, u), y = lerp(-9, 9, u); c.beginPath(); c.moveTo(x - 1.3, y - 2); c.lineTo(x + 1.3, y - 2); c.lineTo(x, y - 4); c.closePath(); c.fill(); }
+        sprPauldrons(c, '#7a2420', 5.5, 12);
+        if (p.dead) { banditArm(c, -1, 1, -18, '#7a2420', '#2b211c'); banditArm(c, 1, 0, 18, '#7a2420', '#2b211c'); c.save(); c.translate(-4, 25); c.rotate(0.3); drawCrossbow(c, 0, false, 0); c.restore(); }
+        else {
+            const r = p.reload === undefined ? 1 : p.reload, sx = 3 - (r < 1 ? 5 : 0) + kn * 2, lob = p.lob || 0, th = p.threw || 0;
+            c.save(); c.translate(sx, 4); if (ra) c.scale(1 - 0.6 * ra, 1); drawCrossbow(c, r, p.loaded, p.t); // raised to the sky: foreshortened
+            c.fillStyle = VAL_GOLD; c.fillRect(15, -2, 3, 4); c.restore(); // gilded fittings
+            banditArm(c, 1, sx + (r < 1 ? -3 : 4), r < 1 ? 4 + Math.sin(p.t * 9) * 3 : 6, '#7a2420', '#2b211c');
+            if (lob > 0 || th > 0) { // the left hand off the stock: a firepot drawn back and thrown
+                const hx = lerp(lerp(8, -6, lob), 15, th), hy = -lerp(9, 13, lob);
+                if (th < 0.3) { sprEllipse(c, hx + 1.5, hy, 4, 4, '#b5774a'); if (lob > 0.25) { c.fillStyle = '#ff6d00'; c.beginPath(); c.ellipse(hx + 1.5, hy - 4.2, 2.6, 2, 0, 0, Math.PI * 2); c.fill(); } }
+                banditArm(c, -1, hx, hy, '#7a2420', '#2b211c');
+            } else banditArm(c, -1, sx + 15 * (1 - 0.6 * ra), 3, '#7a2420', '#2b211c');
+        }
+        sprEllipse(c, 1, 0, 11.5, 11.5, '#2a211c'); // the hat's wide brim...
+        c.strokeStyle = VAL_GOLD; c.lineWidth = 1; c.beginPath(); c.arc(1, 0, 10.3, 0, Math.PI * 2); c.stroke(); // ...its gold edging...
+        sprEllipse(c, 1, 0, 6.2, 6.2, '#3a2e27'); // ...and crown
+        if (!p.dead) { sprLeaf(c, -2, -3, Math.PI - 0.4 + p.trail.y * 0.03, 15, '#c62828'); sprLeaf(c, -2, -1, Math.PI - 0.2 + p.trail.y * 0.03, 11, '#eceff1'); } // the plume
+        c.fillStyle = 'rgba(255, 255, 255, 0.3)'; c.beginPath(); c.ellipse(-1, -3.5, 3, 1.4, -0.5, 0, Math.PI * 2); c.fill();
+        c.restore();
+    },
+
     // The Warchief: a big brute in a fur mantle and a ragged red cloak, war paint, a cleaver in one hand and a torch
     // in the other, and a bandolier of throwing knives
     boss_warlord(c, p) {
@@ -1000,7 +1178,8 @@ function banditDeathFx(e) {
     burst(e.x, e.y, 0, Math.PI * 2, boss ? 14 : 7, { kind: 'smoke', color: 'rgba(120, 104, 88, 0.6)', size: boss ? 14 : 9, speed: [20, 80], life: 0.7, drag: 3, grow: 20 });
     burst(e.x, e.y, away, 1.8, boss ? 12 : 5, { kind: 'debris', color: '#6d5c4d', size: 3, speed: [60, 200], life: 0.45, drag: 4 });
     if (e.type === 'shield' && e.shieldHp > 0) burst(e.x, e.y, away, 1.6, 6, { kind: 'debris', color: '#8d6e63', size: 4, speed: [60, 180], life: 0.5, drag: 3 });
-    effects.push({ type: 'bandit_corpse', x: e.x + Math.cos(away) * 6, y: e.y + Math.sin(away) * 6, kind: e.type, face: away + jitter(0.6), scale: e.size / 26, drop: jitter(2), life: boss ? 25 : 7, maxLife: boss ? 25 : 7 });
+    const life = e.king ? 9999 : boss ? 25 : 7; // the King of Thieves lies in his hall for good
+    effects.push({ type: 'bandit_corpse', x: e.x + Math.cos(away) * 6, y: e.y + Math.sin(away) * 6, kind: e.type, face: away + jitter(0.6), scale: e.size / 26, drop: jitter(2), life, maxLife: life, helmless: !!(e.helmless || e.king), crownless: !!e.crownless, unarmed: !!e.king });
     if (boss) { addShake(7); effects.push({ type: 'slime_shock', x: e.x, y: e.y, radius: 150, color: '#ff7043', life: 0.5, maxLife: 0.5 }); }
 }
 
@@ -1138,7 +1317,7 @@ function updateBanditFx(dt) {
         if (k < 0.3) continue;
         if (player.z <= 4 && Math.hypot(player.x - ef.x, player.y - ef.y) < ef.radius + player.radius * 0.4) { takeDamage(FIRE_DPS(wave) * dt, true); player.burning = true; }
         for (const e of enemies) {
-            if (e.dead || e.prop || e.airborne || e.spawnT > 0 || e.type === 'boss_warlord' || e.submerged) continue;
+            if (e.dead || e.prop || e.airborne || e.spawnT > 0 || e.type === 'boss_warlord' || e.king || e.submerged) continue; // the Warchief and the King walk through their own fires
             if (Math.hypot(e.x - ef.x, e.y - ef.y) < ef.radius + e.size * 0.3) applyDamage(e, FIRE_DPS_ENEMY(wave) * dt, 'dot');
         }
     }
@@ -1227,10 +1406,11 @@ function drawBanditProjectile(p) {
         c.fillStyle = '#c62828'; for (const s of [-1, 1]) { c.beginPath(); c.moveTo(-6, 0); c.lineTo(-13, s * 4); c.lineTo(-11, 0); c.closePath(); c.fill(); }
         c.restore(); return true;
     }
-    if (p.shape === 'knife' && own === 'boss_warlord') { // a throwing knife, point first
-        const a = Math.atan2(p.vy, p.vx);
+    if (p.shape === 'knife' && (own === 'boss_warlord' || own === 'boss_champ_blade')) { // a throwing knife, point first (the Warchief's, Sable's)
+        const a = Math.atan2(p.vy, p.vx), night = currentMap.type === 'castle';
         c.save(); c.translate(p.x, p.y); c.rotate(a);
-        c.strokeStyle = 'rgba(255, 236, 210, 0.22)'; c.lineWidth = 4; c.beginPath(); c.moveTo(-28, 0); c.lineTo(-8, 0); c.stroke();
+        c.strokeStyle = night ? 'rgba(255, 236, 210, 0.5)' : 'rgba(255, 236, 210, 0.22)'; c.lineWidth = night ? 5 : 4; c.beginPath(); c.moveTo(night ? -48 : -28, 0); c.lineTo(-8, 0); c.stroke();
+        if (night) { c.globalCompositeOperation = 'lighter'; glow(c, 4, 0, 20, '#fff3e0', 0.35); c.globalCompositeOperation = 'source-over'; }
         c.beginPath(); c.moveTo(12, 0); c.lineTo(0, -3); c.lineTo(0, 3); c.closePath(); c.fillStyle = '#eceff1'; c.fill(); c.strokeStyle = '#263238'; c.lineWidth = 1; c.stroke();
         c.fillStyle = '#90a4ae'; c.fillRect(-1, -4, 2, 8);
         c.fillStyle = '#5d4037'; c.fillRect(-9, -1.8, 8, 3.6); c.fillStyle = '#ff9800'; c.fillRect(-6, -1.8, 1.5, 3.6);
@@ -1261,7 +1441,7 @@ function drawBanditGround(ef) {
     }
     if (ef.type === 'bandit_corpse') {
         const a = Math.min(1, ef.life / 1.5), lay = Math.min(1, (ef.maxLife - ef.life) / 0.25); // falls over, lies there, fades
-        const pose = { t: 0, walk: 0, move: 0, trail: { x: 0, y: 0 }, stab: 0, draw: 0, shield: 0, throwK: 0, torchK: 0, kegK: 0, dead: true };
+        const pose = { t: 0, walk: 0, move: 0, trail: { x: 0, y: 0 }, stab: 0, draw: 0, shield: 0, throwK: 0, torchK: 0, kegK: 0, dead: true, helmless: ef.helmless, crownless: ef.crownless, unarmed: ef.unarmed };
         if (lay < 1) { stampBandit(null, ef.x, ef.y, ef.face, ef.scale * (0.92 + 0.08 * lay), pose, 0, a * 0.95, 0.25 * lay, ef.kind); return true; }
         if (!ef.img) { const E = banditExtent(ef.kind, ef.scale); ef.img = cavCanvas(E * 2, E * 2); stampBandit(null, 0, 0, ef.face, ef.scale, pose, 0, 1, 0.25, ef.kind, ef.img); } // it lies still: painted once
         c.save(); c.globalAlpha = a * 0.95; c.drawImage(ef.img, ef.x - ef.img.width / 2, ef.y - ef.img.height / 2); c.restore();
@@ -1289,7 +1469,29 @@ function drawBanditGround(ef) {
     if (ef.type === 'gar_tell') { // the garrison's wind-ups (ai.js garPrep): a lane or a wedge along its aim, dashed while it follows you, solid once locked
         const e = ef.e; if (e.dead || e.state !== ef.state) return true;
         const k = e.prepLen ? clamp01(1 - e.stateTimer / e.prepLen) : 1, locked = e.stateTimer <= ef.lock, a = e.aimA, p = 0.5 + 0.5 * Math.sin(fxTime * 14);
+        if (ef.kind === 'ring') { // Sable's Shadow Step: where she'll appear and cut, behind you; it follows you until it locks
+            const x = e.stepX, y = e.stepY, R = ef.R;
+            c.save(); c.fillStyle = `rgba(200, 40, 60, ${0.1 + 0.16 * k + (locked ? 0.06 * p : 0)})`; c.beginPath(); c.arc(x, y, R, 0, Math.PI * 2); c.fill();
+            c.strokeStyle = locked ? 'rgba(255, 230, 225, 0.95)' : 'rgba(255, 170, 160, 0.6)'; c.lineWidth = locked ? 2.6 : 1.6; c.setLineDash(locked ? [] : [9, 7]); c.lineDashOffset = -fxTime * 40;
+            c.beginPath(); c.arc(x, y, R, 0, Math.PI * 2); c.stroke(); c.setLineDash([]);
+            c.strokeStyle = 'rgba(255, 210, 200, 0.85)'; c.lineWidth = 2; c.beginPath(); c.arc(x, y, R * (1 - k) + 8 * k, 0, Math.PI * 2); c.stroke(); // closing in on her mark
+            c.translate(x, y); c.rotate(fxTime * 2); c.strokeStyle = 'rgba(255, 220, 215, 0.8)'; c.lineWidth = 2; c.lineCap = 'round'; // two crossed daggers at its heart
+            for (const s of [-1, 1]) { c.save(); c.rotate(s * 0.7); c.beginPath(); c.moveTo(-10, 0); c.lineTo(10, 0); c.stroke(); c.restore(); }
+            c.restore(); return true;
+        }
         c.save(); c.translate(e.x, e.y);
+        if (ef.kind === 'fan') { // Sable's Fan of Knives: one thin lane per knife
+            for (let j = 0; j < ef.n; j++) {
+                const aj = a + (j / (ef.n - 1) - 0.5) * 2 * ef.half;
+                let L = ef.len; if (currentMap.grid) { const cl = clipToWalls(e.x, e.y, e.x + Math.cos(aj) * L, e.y + Math.sin(aj) * L, 4, true); if (cl) L = Math.hypot(cl[0] - e.x, cl[1] - e.y); }
+                c.save(); c.rotate(aj);
+                c.fillStyle = `rgba(230, 60, 40, ${0.1 + 0.08 * k})`; c.fillRect(0, -ef.w / 2, L, ef.w);
+                c.lineWidth = locked ? 2 : 1.2; c.setLineDash(locked ? [] : [8, 6]); c.lineDashOffset = -fxTime * 50;
+                c.strokeStyle = locked ? 'rgba(255, 225, 215, 0.95)' : `rgba(255, 200, 185, ${0.45 + 0.2 * p})`; c.strokeRect(0, -ef.w / 2, L, ef.w); c.setLineDash([]);
+                c.restore();
+            }
+            c.restore(); return true;
+        }
         if (ef.kind === 'wedge') {
             const R = ef.R, A = ef.half;
             c.fillStyle = `rgba(200, 40, 30, ${0.1 + 0.16 * k})`; c.beginPath(); c.moveTo(0, 0); c.arc(0, 0, R, a - A, a + A); c.closePath(); c.fill();
@@ -1306,6 +1508,28 @@ function drawBanditGround(ef) {
             c.strokeStyle = locked ? 'rgba(255, 235, 225, 0.95)' : 'rgba(255, 210, 195, 0.7)'; c.lineWidth = 2; c.lineCap = 'round';
             for (const f of [0.3, 0.55, 0.8]) { const d = L * f; c.beginPath(); c.moveTo(d - 6, -hw); c.lineTo(d + 4, 0); c.lineTo(d - 6, hw); c.stroke(); }
         }
+        c.restore(); return true;
+    }
+    if (ef.type === 'blade_ring') { // Sable's cut on arrival: a ring of steel flashing round her, exactly the ring she marked
+        const k = 1 - ef.life / ef.maxLife;
+        c.save(); c.globalAlpha = 1 - k; c.strokeStyle = '#fff3f0'; c.lineWidth = 5 * (1 - k) + 1;
+        for (let j = 0; j < 3; j++) { const a0 = j * 2.1 + k * 3; c.beginPath(); c.arc(ef.x, ef.y, ef.R * (0.75 + 0.25 * k), a0, a0 + 1.5); c.stroke(); }
+        c.restore(); return true;
+    }
+    if (ef.type === 'smoke_bomb') { // where Sable vanished: a low cloud on the floor, thinning out
+        const k = 1 - ef.life / ef.maxLife;
+        c.save(); c.globalAlpha = 0.55 * (1 - k);
+        for (let j = 0; j < 5; j++) { const a = j * 1.3, d = 14 + 20 * k; c.fillStyle = j % 2 ? '#3a3040' : '#4a4250'; c.beginPath(); c.arc(ef.x + Math.cos(a) * d, ef.y + Math.sin(a) * d * 0.8, 26 + 26 * k, 0, Math.PI * 2); c.fill(); }
+        c.restore(); return true;
+    }
+    if (ef.type === 'bolt_rain') { // Corvin's Bolt Rain once it has come down: bolts standing in the floor, fading (the mark itself is a slam_warn)
+        const t = ef.maxLife - ef.life; if (t < ef.warn) return true;
+        const a = clamp01(1 - (t - ef.warn - 0.8) / 0.8);
+        c.save(); c.globalAlpha = a; c.lineCap = 'round';
+        for (let j = 0; j < 4; j++) { const x = ef.x + Math.cos(ef.seed + j * 1.7) * 18, y = ef.y + Math.sin(ef.seed + j * 2.3) * 14;
+            c.strokeStyle = 'rgba(0, 0, 0, 0.3)'; c.lineWidth = 2.4; c.beginPath(); c.moveTo(x, y); c.lineTo(x + 9, y + 5); c.stroke();
+            c.strokeStyle = '#2b1a10'; c.lineWidth = 3; c.beginPath(); c.moveTo(x, y); c.lineTo(x - 4, y - 8); c.stroke();
+            c.fillStyle = '#5d4037'; c.beginPath(); c.arc(x - 4, y - 8, 2.4, 0, Math.PI * 2); c.fill(); }
         c.restore(); return true;
     }
     if (ef.type === 'whip_lane') { // where the Beastmaster's lash will fall: a narrow wedge, its edge sweeping out, bright once locked
@@ -1383,6 +1607,27 @@ function drawBanditGround(ef) {
         }
         c.restore(); return true;
     }
+    if (ef.type === 'val_cross') { // Cross Cut: an X of two lanes laid on you; it follows you until it locks
+        const e = ef.e; if (e.dead || e.state !== 'cross_prep') return true;
+        const k = clamp01(1 - ef.life / ef.maxLife), locked = ef.maxLife - ef.life > ef.lockAt, p = 0.5 + 0.5 * Math.sin(fxTime * 14), w = ef.w, L = ef.L;
+        c.save(); c.translate(e.crossX, e.crossY);
+        for (const s of [-1, 1]) {
+            c.save(); c.rotate(e.aimA + s * Math.PI / 4);
+            c.fillStyle = `rgba(230, 60, 40, ${0.1 + 0.08 * k + 0.05 * p})`; c.fillRect(-L / 2, -w / 2, L, w);
+            c.lineWidth = locked ? 2.4 : 1.4; c.setLineDash(locked ? [] : [9, 7]); c.lineDashOffset = -fxTime * 50;
+            c.strokeStyle = locked ? 'rgba(255, 225, 215, 0.95)' : `rgba(255, 200, 185, ${0.45 + 0.2 * p})`; c.strokeRect(-L / 2, -w / 2, L, w); c.setLineDash([]);
+            c.restore();
+        }
+        c.restore(); return true;
+    }
+    if (ef.type === 'val_storm') { // Blade Storm's reach: dashed while he winds up, a faint disc while he spins
+        const e = ef.e; if (e.dead || e.state !== (ef.spin ? 'storm' : 'storm_prep')) return true;
+        const R = ef.R, p = 0.5 + 0.5 * Math.sin(fxTime * 12);
+        c.save(); c.fillStyle = `rgba(200, 40, 30, ${ef.spin ? 0.08 : 0.1 + 0.08 * p})`; c.beginPath(); c.arc(e.x, e.y, R, 0, Math.PI * 2); c.fill();
+        c.strokeStyle = ef.spin ? 'rgba(255, 170, 150, 0.55)' : 'rgba(255, 225, 215, 0.9)'; c.lineWidth = ef.spin ? 1.6 : 2.4; c.setLineDash(ef.spin ? [] : [12, 8]); c.lineDashOffset = -fxTime * 40;
+        c.beginPath(); c.arc(e.x, e.y, R, 0, Math.PI * 2); c.stroke(); c.setLineDash([]); c.restore();
+        return true;
+    }
     if (ef.type === 'val_lash') { // the lasso's lash: the ring of chain cracking out, fading fast
         const k = 1 - ef.life / ef.maxLife;
         c.save(); c.globalAlpha = 1 - k; c.strokeStyle = '#cfd8dc'; c.lineWidth = 4 * (1 - k) + 1; c.setLineDash([6, 4]); c.beginPath(); c.arc(ef.x, ef.y, ef.R, 0, Math.PI * 2); c.stroke(); c.setLineDash([]); c.restore();
@@ -1412,6 +1657,23 @@ function drawBanditOverlay() {
         const aT = e.cycA - e.cycDir * 1.12; c.strokeStyle = 'rgba(40, 30, 26, 0.45)'; c.lineWidth = 2.5; c.beginPath(); c.arc(e.x, e.y, R + 2, Math.min(aT, e.cycA), Math.max(aT, e.cycA)); c.stroke(); // a dark rim, so it reads on pale stone
         c.restore();
     }
+    for (const e of enemies) { // the Blade Storm: two blades whirling round him, each trailing a fading band
+        if (e.type !== 'boss_valerius' || e.dead || e.state !== 'storm') continue;
+        const R = VK_STORM_R, r0 = R * 0.45;
+        c.save();
+        for (const off of [0, Math.PI]) for (let k = 0; k < 6; k++) { const a1 = e.spinA + off - k * 0.18, a0 = a1 - 0.18; c.fillStyle = `rgba(255, 240, 235, ${0.55 * (1 - k / 6)})`; c.beginPath(); c.arc(e.x, e.y, R, a0, a1); c.arc(e.x, e.y, r0, a1, a0, true); c.closePath(); c.fill(); }
+        c.strokeStyle = 'rgba(60, 20, 20, 0.45)'; c.lineWidth = 2.5; for (const off of [0, Math.PI]) { c.beginPath(); c.arc(e.x, e.y, R + 2, e.spinA + off - 1.0, e.spinA + off); c.stroke(); }
+        c.restore();
+    }
+    for (const ef of effects) { // Cross Cut: two bright cuts flashing down the X
+        if (ef.type !== 'val_cross_flash') continue;
+        const k = 1 - ef.life / ef.maxLife;
+        c.save(); c.globalAlpha = 1 - k; c.lineCap = 'round';
+        for (const s of [-1, 1]) { const a = ef.a + s * Math.PI / 4, ux = Math.cos(a), uy = Math.sin(a), h = ef.L / 2 * Math.min(1, k * 4);
+            c.strokeStyle = 'rgba(255, 235, 230, 0.55)'; c.lineWidth = ef.w * (1 - k); c.beginPath(); c.moveTo(ef.x - ux * h, ef.y - uy * h); c.lineTo(ef.x + ux * h, ef.y + uy * h); c.stroke();
+            c.strokeStyle = '#ffffff'; c.lineWidth = 3; c.stroke(); }
+        c.restore();
+    }
     for (const ef of effects) { // the Sweeping Arc's crescent, a bright band swept across the wedge
         if (ef.type !== 'val_slash' || ef.e.dead) continue;
         const k = 1 - ef.life / ef.maxLife, e = ef.e, sweep = Math.min(1, k * 2.5), a0 = ef.a + ef.half, a1 = ef.a + ef.half - 2 * ef.half * sweep;
@@ -1424,7 +1686,7 @@ function drawBanditOverlay() {
         if (e.type !== 'boss_valerius' || e.dead || !e.spear) continue;
         const sc = e.size / 26, sp = e.spear, ux = Math.cos(sp.a), uy = Math.sin(sp.a), len = (VAL_SPEAR_L + 13) * sc, bx = sp.x - ux * len, by = sp.y - uy * len, f = valFist(e);
         c.save(); c.globalAlpha = 1 - (e.fadeK || 0);
-        drawValChain(c, f.x, f.y, bx, by, Math.min(14, Math.hypot(bx - f.x, by - f.y) * 0.04), sc * 0.85);
+        if (!e.unchained) drawValChain(c, f.x, f.y, bx, by, Math.min(14, Math.hypot(bx - f.x, by - f.y) * 0.04), sc * 0.85); // snapped: the spear flies free
         c.fillStyle = 'rgba(0, 0, 0, 0.22)'; c.beginPath(); c.ellipse(sp.x - ux * len * 0.5 + 6, sp.y - uy * len * 0.5 + 10, len * 0.5, 4, sp.a, 0, Math.PI * 2); c.fill(); // its shadow
         c.translate(bx, by); c.rotate(sp.a); c.scale(sc, sc); valSpear(c, VAL_SPEAR_L);
         c.restore();

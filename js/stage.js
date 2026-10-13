@@ -303,11 +303,15 @@ function onEnemySpawned(e) {
 // breather; only a boss stops the run: the stage exit opens, or (without a stage map) the boss-cleared screen and its shop.
 function onWaveCleared() {
     if (isTraining()) return; // training.js: no waves to clear
+    // A boss wave whose boss a scene brings (the bridge's Valerius, the throne room) starts with nothing to kill: a
+    // level-up closing then used to "clear" it and open the exit before the fight. Not cleared until the boss is out.
+    if (isBossWave && !bossSpawned) { gameState = STATE.PLAYING; lastTime = performance.now(); return; }
     if (mapDef() && isBossWave && !isEndlessMode) {
         if (!currentMap.caveOpen) {
             if (currentMap.type === 'cavern') startSealBreak(); // map_cavern.js: the wall gives way first
             else if (currentMap.type === 'village') dropWarchiefLetter(); // map_village.js: his letter first, then the barricade burns
             else if (currentMap.type === 'trail') startGateOpen(); // map_trail.js: the chain snaps, the barrier falls
+            else if (currentMap.type === 'castle') { if (wave === 16) startValeriusRises(); } // map_castle.js: the guard is down and he stands; no exit (the run ends at his crown)
             else openStageExit();
         }
         gameState = STATE.PLAYING; lastTime = performance.now(); // walk out to finish the stage
@@ -386,6 +390,10 @@ function updateStageEvent(dt) {
     else if (ev.type === 'bridge_gate') updateBridgeGate(ev, dt);
     else if (ev.type === 'keep_breach') updateKeepBreach(ev, dt); // map_castle.js
     else if (ev.type === 'throne_doors') updateThroneDoors(ev, dt);
+    else if (ev.type === 'throne_audience') updateThroneAudience(ev, dt);
+    else if (ev.type === 'valerius_rises') updateValeriusRises(ev, dt);
+    else if (ev.type === 'valerius_fall') updateValeriusFall(ev, dt);
+    else if (ev.type === 'crown_claim') updateCrownClaim(ev, dt);
     else if (ev.type === 'cave_exit') {
         player.dash = null; player.grappleTarget = null;
         const [dx, dy, dd] = getVector(player.x, player.y, d.exitTo.x, d.exitTo.y);
@@ -404,7 +412,7 @@ function updateStage(dt) {
         if (currentMap.type === 'hive') updateHive(dt); else if (currentMap.type === 'village') updateVillage(dt); else if (currentMap.type === 'trail') updateTrail(dt); else if (currentMap.type === 'bridge') updateBridge(dt); else if (currentMap.type === 'castle') updateCastle(dt); else updateCavern(dt);
     }
     if (d && currentMap.caveOpen && !stageEvent && Math.hypot(player.x - d.exit.x, player.y - d.exit.y) < d.exitR) {
-        if (currentMap.type === 'hive') startTrophyClaim(); else startCaveExit();
+        if (currentMap.type === 'hive') startTrophyClaim(); else if (currentMap.type === 'castle') startCrownClaim(); else startCaveExit(); // map_hive.js / map_castle.js: a crown to claim
     }
 }
 

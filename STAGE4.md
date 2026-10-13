@@ -11,22 +11,20 @@ earlier steps taught.
 | 1 | The bridge's gate opens after Valerius's escape; his death taunt; helmless Valerius (sprite and portrait) | **Done, playtested** |
 | 2 | The castle map (`js/map_castle.js`): three parts, the door scenes, spawns, torchlight, reused minions | **Done, playtested** |
 | 3 | Four new garrison minions | **Done, awaiting playtest** |
-| 4 | Wave 16: Valerius seated on his throne, the audience scene, his barks, three Royal Guard champions | **Next** |
-| 5 | Wave 17: Valerius, King of Thieves: the last fight, hazards, the twin-blade phase, his death and crown | To do |
+| 4 | Wave 16: Valerius seated on his throne, the audience scene, his barks, three Royal Guard champions | **Done, awaiting playtest** |
+| 5 | Wave 17: Valerius, King of Thieves: the last fight, hazards, the twin-blade phase, his death and crown | **Done, awaiting playtest** |
 | 6 | Docs: CLAUDE.md (file row, stage endings, events, Known issues), BALANCE.md numbers | Ongoing; update as each step lands |
 
 The user playtests after each step, so deliver one step and wait for feedback before the next. They asked for the time
 cost up front. Steps 1+2 took about an hour; step 3 is estimated at 45-75 minutes (less if the crossbowman and halberdier
 go first and the other two after a playtest). Steps 4 and 5 are each bigger than step 3; step 5 is the biggest.
 
-Steps 1-2 are committed (v1.10.2.1); step 3 isn't yet (commit only when the user asks; since v1.7 the work goes on `master`, messages like
+Steps 1-3 are committed (v1.10.2.1, v1.10.2.2); step 4 isn't yet (commit only when the user asks; since v1.7 the work goes on `master`, messages like
 `v1.10.3 - Bandit Bastion - Stage 4`).
 
-### Stand-ins until steps 4 and 5
+### Stand-ins
 
-- Walking into the throne room on wave 16 shows Victory (`updateCastle` in map_castle.js: the `wave >= 16 ... showVictory()` line). Replace it with the throne audience trigger in step 4.
-- `valeriusFall(e)` (map_castle.js) just calls `showVictory()`. Step 5 replaces it with his last words and the crown.
-- main.js `startNextWave` already sets waves 16 and 17 to `isBossWave = true; enemiesToSpawn = 0`: their scenes spawn the champions and Valerius, like wave 11's intro does.
+None left: the stage runs from the gate to his crown. What's open is the playtest (balance numbers in BALANCE.md).
 
 ## The user's decisions
 
@@ -78,6 +76,19 @@ keep: thief, shield, archer, bannerman + crossbow, halberd, cutpurse) and BALANC
 
 ## Step 4: wave 16, the Royal Guard
 
+### What step 4 built
+
+- **The bug fix first:** stage.js `onWaveCleared` returns early on a boss wave before `bossSpawned`. Wave 11 (and 16, 17) start with nothing to kill, so a level-up card closing at the wave's start (the Beastmaster's XP) "cleared" it and opened the bridge's exit. Every scene that brings a boss must set `bossSpawned = true` (the bridge intro does, `spawnRoyalGuard` does; step 5's wave 17 must too).
+- **Seated Valerius:** `castleSeat(on)` sets `cst.seated` and adds a solid `king` obstacle (it draws nothing) so nobody walks through him; set when the throne doors open and on a dev jump to 16. Drawn by `drawSeatedValerius` (map_castle.js, end of `drawCastleGround`, with a halo and a light hole of his own) through `stampBandit(null, ...)` with `p.seated` → bandits.js `drawValeriusSeated` (legs forward, forearms on the armrests, the spear propped at his right; `p.snap` raises the right hand, `p.rise` leans him forward; at `cst.riseK >= 1` the standing body is drawn in front of the throne).
+- **The audience** (`throne_audience`, wave 16, the hero past x 4750): camera to the throne, `VALERIUS_AUDIENCE_LINES`, the snap (`cst.snapAt`, bark "Guard."), `spawnRoyalGuard` (the enemy loop is paused in a scene, so the event drives their `spawnT` itself), the boss card, then the bark "Entertain me.".
+- **Barks:** `throneBark(kind, force)` sets `cst.bark`; `drawThroneBark` (end of `drawCastleAbove`) draws it over his head, or pinned to the screen edge with an arrow when he's off-screen. Kinds in `THRONE_BARKS`: snap, open, hit (combat.js `takeDamage`: a hit of 12% max HP or more, at most once per 7 s, 65% of the time), and one set per champion type for their deaths. Only while he's seated and after the audience.
+- **Champions** (ai.js after `ValeriusAI`: `CH_*`, `WARDEN_*`, `BLADE_*`, `CAPT_*`; shared `champTick` / `champGap` / `champWalk` / `champHit`; telegraphs through `garPrep` / `gar_tell`, with two new kinds in bandits.js: `ring` (at `e.stepX/Y`) and `fan` (n lanes)). Gorran (`boss_champ_warden`): Bulwark (`wardenBulwark`: hits within 1.05 rad of `e.guardA` while `e.guarding` deal x0.3; the shield turns at 2 rad/s, so flanking works), Halberd Sweep (wedge), Shield Charge (lane; a wall or a pillar dazes him 1.2 s). Sable (`boss_champ_blade`): circles at 150-270 px; Shadow Step (a ring 55 px behind you that follows until it locks; she appears and cuts it, `blade_ring`), Fan of Knives (5 lanes), a cut up close, Smoke Bomb (`submerged` and faded for 1.3 s, back 230-320 px off; when she loses 8% HP during one move or you get within 90 px; 10 s cooldown; `smoke_bomb` effect). Corvin (`boss_champ_captain`): keeps 320-540 px; Piercing Bolt (armour-piercing, the crossbowman's lane), Bolt Rain (6 marks: `bolt_rain` effects plus `slam_warn`, landed by map_castle.js `updateBoltRain`, bolts drawn falling in `drawCastleAbove` and stuck in the floor in bandits.js), a firepot (`grenadierThrow`) when you crowd him. Sprites in bandits.js `BANDIT_SPRITES` with poses in `banditPose`; each wears its name and a small bar (`e.champName`, `drawBandit`).
+- **Rally:** combat.js `checkEnemyDeath` calls `championFell` (map_castle.js): `cst.guardDown`, each survivor's `e.rally` (1, then 2: speed x1.15 / x1.3 and gaps x0.75 / x0.55 via `CH_SPD`, `CH_GAP`; telegraph lengths unchanged), and a bark. Loot: only the last champion drops the item and the full purse; the others drop 2 gold piles.
+- **The end of the wave:** stage.js `onWaveCleared` (castle, wave 16) → `startValeriusRises`: clears the guard's shots, marks and telegraphs, `VALERIUS_RISE_LINES`, he stands, then Victory (stand-in).
+- Tested headless: the wave 11 fix (a level-up at the wave's start no longer opens the exit; the walk to the gate calls him down), the audience, every champion move landing on a still hero (~1040 damage in 20 s), Bulwark (100 → 18 from the front, 60 from behind), the daze on a pillar, the smoke and the cut, the rally and barks, one item, the rise scene and Victory, the throne death taunt.
+
+### The plan as written
+
 - After `throne_doors` (wave 15 cleared), set `cst.seated = true` and draw Valerius seated on the throne
   (`CS_SEAT`, facing west) from map_castle.js with the bandit sprite pipeline:
   `stampBandit(null, x, y, face, scale, pose, 0, 1, 0, 'boss_valerius')` with a pose
@@ -104,6 +115,19 @@ keep: thief, shield, archer, bannerman + crossbow, halberd, cutpurse) and BALANC
   boss-exit flow. Make sure the generic boss-wave branch in `onWaveCleared` doesn't open an exit there.
 
 ## Step 5: wave 17, Valerius, King of Thieves
+
+### What step 5 built
+
+- **Also fixed:** the bark bubble's text ran out of its box to the left (`drawThroneBark` now sets `textAlign = 'left'`; other draws leave it centred).
+- **The rise** (`valerius_rises`, map_castle.js): his dialogue (`VALERIUS_RISE_LINES`), he stands (`cst.riseK`), whirls the spear (`cst.whirl`), then `kingArrives`: `pushBoss(activeDungeon.stage4_boss, 17, ...)` (enemies.json `stage4_boss`: 9000 + 1300w HP, 25 + 4.5w damage, 1500 XP), `e.king`, `e.helmless`, `cst.king`, `castleSeat(false)`, and `startNextWave()` (main.js counts him in for wave 17 when `cst.king` is alive, like the trail's wave 10). The boss card goes up after, over wave 17's banner. A dev jump to 17 plays the same scene on walking into the nave, without the guard, and counts him in by hand.
+- **His AI** (ai.js `ValeriusAI` with `e.king`; new constants `VAL_GAP_K`, `VAL_DODGE_K`, `VAL_PREF_K`, `VK_*`; `valChoose` split into choosing and `valStart(e, m)`; `valChooseKing` picks per phase; `valPace` = 0.8 in the king's phases 2-3): phase changes for the king are their own branches (the bridge's archers never come up). Phase 2: `chand_prep` turns him on a chandelier's chain (a locked chain lane to it, plus a `slam_warn` circle under it lasting the whole prep, toss and drop), then the normal `toss_out` with `e.tossMax` / `e.tossChand` cuts it; `kick_run` (a sprint behind a brazier, giving up after 1.6 s) → `kick_prep` (a `charge_lane` locked from the start) → `brazierKick`. Hazards share `e.hazCd` (5.5 s). `valReset` drops a chandelier whose toss was interrupted, so a marked circle never lies. Phase 3: `unchain` (1.8 s, invulnerable: the snap at 0.35 s, `e.unchained` (no more chain drawn), the throw into the nearest `pillar_t`, the blades at 1.0 s, the roar at 1.3 s: `kingUnchained` dims the candles), then `flurry_prep` / `flurry` (×3), `cross_prep` / `cross` (`e.crossX/Y` follow you until the lock), `k_step_prep` / `k_step_in` (`valStepMark`; the ring is the garrison's `gar_tell` ring), `storm_prep` / `storm`. Afterimages are always on in phase 3.
+- **Drawing** (bandits.js): `p.blades` (`valBlade`: a sabre and a jewelled knife; `p.slash`, `p.cross`, `p.storm` poses), `p.unarmed` (the spear gone, the snapped chain end), `valBareHead(c, hx, crownless)`; telegraphs `val_cross`, `val_storm`; overlay: the storm's smear and the Cross Cut's flash; the knife corpse pose carries `helmless` / `crownless` / `unarmed`, and his corpse lasts for good (`e.king`). map_castle.js: falling chandeliers (`drawChandelier(x, y, t, fall, dim)`), wrecks (`drawChandelierWreck`), `drawBrazierRoll`, toppled braziers, dropped blades, `drawPillarSpear` (the column is redrawn over the buried blade), `drawIronCrown` / `drawCastleCrown`; the darkness loses the fallen chandeliers' light and deepens with `cst.dimK`.
+- **Death** (combat.js `kingLastStand` → map_castle.js `startValeriusFall`): clears his telegraphs, shots and rolling braziers; he kneels and drops the blades; `VALERIUS_LAST_WORDS`; he falls (`banditDeathFx`, `e.crownless`), the crown rolls off (`cst.crown`), his fires die down, his loot is collected, the exit moves onto the crown (`crownExit`), then his XP (after the scene). `crown_claim` (stage.js `updateStage`, like the hive's trophy) → Victory.
+- After bot runs (BALANCE.md "Bastion bot runs"): his HP 9000 + 1300w → 6600 + 950w, Twin Flurry's follow-ups slower to lock (0.42 s / 0.2 s) and ×0.8, fewer Chain Cyclones in phase 2; after the user's look, Twin Flurry slower (1100 px/s), at most every 5 s and winded 0.7 s after, and phase 3's gaps 0.45 s; the powder cart's wreck shrinks after the breach (`cartWreck`); and the crown always comes to rest in the nave (`crownSpot`: one run lost it in an alcove's corner, out of reach).
+- `resetCastle` restores everything (chandeliers, kicked braziers back into the obstacles, the pillar spear, the dimming, the crown, `cst.king`).
+- Tested headless: wave 16 → rise → wave 17 counts him (activeEnemies 1, `bossSpawned`), the dev jump to 17, phase 2 (a chandelier drop, the brazier kick with its lane, fire strip and toppled brazier), Unchained (all four blade moves come up), the death scene, the crown, the claim and Victory.
+
+### The plan as written
 
 - **`valerius_rises`:** he stands, an angry dialogue line, pulls his spear from behind the throne; then
   `pushBoss(activeDungeon.stage4_boss, 17, ...)` (add `stage4_boss` to enemies.json: `type: "boss_valerius"`, its own

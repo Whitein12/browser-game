@@ -96,7 +96,7 @@ function updateHUD() {
     const left = enemiesToSpawn + activeEnemies;
     waveStats.peak = Math.max(waveStats.peak || 0, left);
     el('wave-display').textContent = isTraining() ? 'Training' : wave > 0 ? `Wave ${wave}` : 'Prepare';
-    el('wave-subtext').textContent = isTraining() ? `${enemies.filter(e => e.dummy && !e.dead).length} dummies · T: panel` : wave === 0 ? 'Choose your first skill' : waveBreak > 0 ? `Next wave in ${Math.ceil(waveBreak)}` : currentMap.caveOpen ? (currentMap.type === 'hive' ? 'Claim the crown' : 'The way is open') : left === 1 ? '1 enemy left' : `${left} enemies left`;
+    el('wave-subtext').textContent = isTraining() ? `${enemies.filter(e => e.dummy && !e.dead).length} dummies · T: panel` : wave === 0 ? 'Choose your first skill' : waveBreak > 0 ? `Next wave in ${Math.ceil(waveBreak)}` : currentMap.caveOpen ? (currentMap.type === 'hive' || currentMap.type === 'castle' ? 'Claim the crown' : 'The way is open') : left === 1 ? '1 enemy left' : `${left} enemies left`;
     el('wave-prog').style.width = (waveBreak > 0 ? 100 : waveStats.peak ? (1 - left / waveStats.peak) * 100 : 0) + '%';
     if (player.gold !== hud.lastGold) {
         el('gold-display').textContent = player.gold;

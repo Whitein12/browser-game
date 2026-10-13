@@ -45,6 +45,12 @@
       { "id": "garrison_halberd", "size": 32, "color": "#7e8a92", "baseSpeed": 60, "speedVar": 5, "baseHp": 55, "hpScale": 18, "baseDmg": 10, "dmgScale": 1.6, "baseXp": 22, "xpScale": 3, "type": "halberd", "weight": 0.12 },
       { "id": "garrison_grenadier", "size": 26, "color": "#6d5a45", "baseSpeed": 75, "speedVar": 8, "baseHp": 22, "hpScale": 7, "baseDmg": 10, "dmgScale": 1.5, "baseXp": 14, "xpScale": 2.5, "type": "grenadier", "weight": 0.1 },
       { "id": "garrison_cutpurse", "size": 24, "color": "#2f3a2c", "baseSpeed": 170, "speedVar": 15, "baseHp": 16, "hpScale": 6, "baseDmg": 7, "dmgScale": 1.2, "baseXp": 14, "xpScale": 2, "type": "cutpurse", "weight": 0.1 }
-    ]
+    ],
+    "stage4_champions": [
+      { "id": "champ_warden", "name": "Gorran", "size": 44, "color": "#7e8a92", "baseSpeed": 70, "baseHp": 2600, "hpScale": 300, "baseDmg": 18, "dmgScale": 3, "baseXp": 350, "type": "boss_champ_warden", "stateTimer": 1.2 },
+      { "id": "champ_blade", "name": "Sable", "size": 30, "color": "#2b2230", "baseSpeed": 150, "baseHp": 1800, "hpScale": 220, "baseDmg": 14, "dmgScale": 2.5, "baseXp": 350, "type": "boss_champ_blade", "stateTimer": 1.0 },
+      { "id": "champ_captain", "name": "Corvin", "size": 34, "color": "#6b2420", "baseSpeed": 85, "baseHp": 1900, "hpScale": 230, "baseDmg": 14, "dmgScale": 2.5, "baseXp": 350, "type": "boss_champ_captain", "stateTimer": 1.6 }
+    ],
+    "stage4_boss": { "id": "valerius_king", "size": 52, "color": "#4e342e", "baseSpeed": 170, "baseHp": 6600, "hpScale": 950, "baseDmg": 25, "dmgScale": 4.5, "baseXp": 1500, "type": "boss_valerius", "stateTimer": 1.0 }
   }
 }

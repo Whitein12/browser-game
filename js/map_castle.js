@@ -55,7 +55,9 @@ const CS_CHAND = [[4890, 900], [5150, 735], [5150, 1065], [5410, 900], [5670, 73
 const CS_BANNERS = [[800, 190, 1], [1900, 190, 1], [900, 1610, -1], [2150, 1610, -1], [2500, 430, 1], [2500, 1370, -1]]; // [x, y, side]: poles on the wall tops
 
 const cst = { built: false, ground: null, grid: null, open: 0, keepCells: [], throneCells: [], spawns: [], kegs: [], torches: [], lastSpawn: null,
-    arriveAt: 0, portK: 0, promptAt: 0, brazierDown: false, fuseK: 0, breachAt: -9, throneK: 0, seated: false, guardMax: 0 };
+    arriveAt: 0, portK: 0, promptAt: 0, brazierDown: false, fuseK: 0, breachAt: -9, throneK: 0, seated: false, guardMax: 0,
+    audience: false, guardDown: 0, bark: null, barkHitAt: -99, snapAt: -9, rising: false, riseK: 0, // wave 16: the audience, the Royal Guard, his barks
+    king: null, whirl: false, chand: CS_CHAND.map(() => ({ state: 'up' })), kicked: [], toppled: [], pillarSpear: null, dim: 0, dimK: 0, crown: null }; // wave 17: the King of Thieves and his hall
 
 const csSec = x => (x < CS.keep ? 0 : x < CS.throne ? 1 : 2);
 const csOutside = (x, y) => x < CS.keep && (y < 130 || y > 1670 || (x < 230 && Math.abs(y - CS.y) >= 90)) && !CS_TOWERS.some(([tx, ty, r]) => Math.hypot(x - tx, y - ty) < r);
@@ -75,6 +77,10 @@ function resetCastle() {
     for (const i of cst.keepCells) G.data[i] = T_SEAL;
     for (const i of cst.throneCells) G.data[i] = T_SEAL;
     cst.open = 0; cst.lastSpawn = null; cst.brazierDown = false; cst.fuseK = 0; cst.breachAt = -9; cst.throneK = 0; cst.seated = false; cst.guardMax = 0;
+    for (const o of cst.kicked) D.obstacles.push(o); // the braziers he kicked stand again
+    cartWreck(false);
+    cst.kicked = []; cst.toppled = []; cst.chand = CS_CHAND.map(() => ({ state: 'up' })); cst.pillarSpear = null; cst.dim = cst.dimK = 0; cst.crown = null; cst.king = null; cst.whirl = false;
+    castleSeat(false); cst.audience = false; cst.guardDown = 0; cst.bark = null; cst.barkHitAt = -99; cst.snapAt = -9; cst.rising = false; cst.riseK = 0;
     cst.arriveAt = fxTime; cst.portK = 0; cst.dropped = false; cst.promptAt = fxTime;
     for (let i = D.obstacles.length - 1; i >= 0; i--) if (D.obstacles[i].kind === 'keg') D.obstacles.splice(i, 1);
     for (const k of cst.kegs) { if (k.ent) k.ent.dead = true; k.ent = null; makeKeg(k); } // bandits.js
@@ -87,8 +93,8 @@ function castleEnter(w) {
     if (cst.open === need) return;
     if (cst.open > need) resetCastle();
     stageEvent = null; showStagePrompt(false);
-    if (need >= 1) { for (const i of cst.keepCells) cst.grid.data[i] = T_FLOOR; cst.breachAt = fxTime - 30; cst.brazierDown = true; cst.fuseK = 1; }
-    if (need >= 2) { for (const i of cst.throneCells) cst.grid.data[i] = T_FLOOR; cst.throneK = 1; }
+    if (need >= 1) { cartWreck(true); for (const i of cst.keepCells) cst.grid.data[i] = T_FLOOR; cst.breachAt = fxTime - 30; cst.brazierDown = true; cst.fuseK = 1; }
+    if (need >= 2) { for (const i of cst.throneCells) cst.grid.data[i] = T_FLOOR; cst.throneK = 1; castleSeat(true); } // he's on his throne, waiting
     cst.open = need;
     player.x = need === 2 ? 4600 : need === 1 ? 2650 : STAGE_MAPS.castle.start.x; player.y = CS.y;
     updateNav(true); updateCamera(0, true);
@@ -608,7 +614,10 @@ function updateCastle(dt) {
     }
     cst.portK = cst.dropped ? clamp01((fxTime - cst.dropAt) / 0.15) : 0;
     if (cst.promptAt && fxTime - cst.promptAt > 4) { cst.promptAt = 0; showStagePrompt(false); }
-    if (wave >= 16 && cst.open === 2 && !stageEvent && player.x > 4750 && !isEndlessMode && gameState === STATE.PLAYING) showVictory(); // ui.js; for now: the Royal Guard and Valerius's last fight come next
+    const inHall = cst.open === 2 && !stageEvent && player.x > 4750 && !isEndlessMode && gameState === STATE.PLAYING;
+    if (inHall && wave === 16 && !cst.audience) startThroneAudience(); // an audience with the king, and his Royal Guard
+    if (inHall && wave >= 17 && !cst.rising && !cst.king) startValeriusRises(); // a dev jump to wave 17: no guard, he stands at once
+    updateBoltRain(); updateKingHazards(dt);
 }
 
 // Regular waves: the keep's doors are blown in after wave 13, the throne room opens after wave 15
@@ -618,6 +627,9 @@ function castleWaveCleared() {
 }
 
 // The brazier by the keep's doors topples into the spilled powder; the spark runs to the cart and the doors are blown in
+// The powder cart by the keep's doors: whole, it's a cart; blown up, a small wreck. Bot runs found heroes caught in the
+// gap between the full-size cart and the keep wall, narrower than the hero
+function cartWreck(on) { const o = STAGE_MAPS.castle.obstacles.find(p => p.kind === 'pcart'); if (o) o.r = on ? 16 : 30; }
 function startKeepBreach() { stageEvent = { type: 'keep_breach', t: 0, blocking: true }; showStagePrompt(false); }
 
 function updateKeepBreach(ev, dt) {
@@ -627,7 +639,7 @@ function updateKeepBreach(ev, dt) {
     cst.fuseK = clamp01((t - 0.6) / 1.0);
     if (t > 0.6 && t < 1.6) { const [x, y] = csTrailPt(cst.fuseK); spawnParticle({ kind: 'spark', color: '#ffe082', x, y, vx: jitter(160), vy: jitter(160), size: 1.8, life: 0.25, drag: 3, grow: 0, spin: 0, rot: 0 }); }
     if (t > 1.6 && !ev.boom) { // the cart goes up and takes the doors with it
-        ev.boom = true; cst.open = 1; cst.breachAt = fxTime; addShake(9); hitStopTimer = Math.max(hitStopTimer, 0.1);
+        ev.boom = true; cst.open = 1; cst.breachAt = fxTime; addShake(9); hitStopTimer = Math.max(hitStopTimer, 0.1); cartWreck(true);
         for (const i of cst.keepCells) cst.grid.data[i] = T_FLOOR;
         updateNav(true);
         const x = P[0], y = P[1];
@@ -657,14 +669,320 @@ function updateThroneDoors(ev, dt) {
     camera.tx = CS.throne - 220; camera.ty = CS.y;
     if (t < 0.7 && t - ev.rumble > 0.18) { ev.rumble = t; addShake(1.5); } // the bar lifted on the other side
     cst.throneK = easeOut(clamp01((t - 0.7) / 1.3));
-    if (t > 0.9 && !ev.opened) { ev.opened = true; cst.open = 2; for (const i of cst.throneCells) cst.grid.data[i] = T_FLOOR; updateNav(true); addShake(3); }
+    if (t > 0.9 && !ev.opened) { ev.opened = true; cst.open = 2; castleSeat(true); for (const i of cst.throneCells) cst.grid.data[i] = T_FLOOR; updateNav(true); addShake(3); }
     if (t > 2.2 && !ev.asked) { ev.asked = true; openDialogue({ name: 'Valerius', title: 'Lord of the Bastion', portrait: 'valerius_bare', lines: VALERIUS_INVITE_LINES, onClose: () => { ev.talked = true; } }); } // dialogue.js
     if (!ev.talked) return;
     if ((ev.t2 += dt) > 0.4) { camera.tx = camera.ty = null; stageEvent = null; showStagePrompt(true, 'The throne room is open'); cst.promptAt = fxTime; }
 }
 
-// combat.js checkEnemyDeath: Valerius's death in his hall (for now straight to Victory; his last words and his crown come next)
-function valeriusFall(e) { showVictory(); }
+// ---------- wave 16: the audience and the Royal Guard ----------
+// He sits his throne (cst.seated, drawn by drawSeatedValerius) from the moment its doors open. Crossing into the nave on
+// wave 16 plays throne_audience: the camera goes to him, he speaks, snaps his fingers, and his three champions step out of
+// the alcoves (ai.js WardenAI / BladeAI / CaptainAI). He stays on the throne the whole fight, untouchable and not an
+// enemy, barking at it (throneBark: speech over his head that never pauses the game). The last of them down ends the
+// wave: stage.js onWaveCleared plays valerius_rises.
+const VALERIUS_AUDIENCE_LINES = [
+    'There you are. Kneel, if you like. Everyone does, sooner or later.',
+    'A Warchief, a Beastmaster, half my garrison. You\'ve cost me more than any army that ever came at these walls.',
+    'But a king doesn\'t dirty his hands on every stray that wanders into his hall. That\'s what a Royal Guard is for.',
+];
+const VALERIUS_RISE_LINES = [
+    'Enough.',
+    'Gorran, Sable, Corvin. The best blades I ever bought, and you cut them down in my own hall.',
+    'Fine. You want the king? Then come and take the crown off my head.',
+];
+const THRONE_BARKS = {
+    snap: ['Guard.'],
+    open: ['Entertain me.', 'Well? Kill it.'],
+    hit: ['Ha! Did you feel that?', 'That\'s it. Bleed on my carpet.', 'Careful. Don\'t die before I\'ve had my turn.', 'Oh, that one hurt. Good.', 'Again!'],
+    king_hit: ['Feel that? That\'s twenty years of killing.', 'Up. I\'m not done with you.', 'Bleed for your king.', 'Is that all Cinderholt had left?'],
+    boss_champ_warden: ['Gorran! Twenty years at my door, and you fold to that?', 'There goes my wall. I liked that shield.'],
+    boss_champ_blade: ['Sable... careless. I taught you better than that.', 'My Blade, dulled. How disappointing.'],
+    boss_champ_captain: ['Corvin. You had one job: keep your distance.', 'Down goes my captain. Who taught you to aim, a blind man?'],
+};
+const CS_GUARD = [[0, 5150, -1, 5060, 790], [1, 5150, 1, 5110, 1050], [2, 5670, -1, 5620, 720]]; // [roster, alcove x, wall side, where they take their stand]
+const CS_SNAP_HAND = { x: CS_SEAT.x - 40, y: CS_SEAT.y - 18 }; // his right hand raised (drawValeriusSeated, facing west at scale 2)
+
+// Seated, he's solid (nobody walks through the king); the obstacle draws nothing
+function castleSeat(on) {
+    const O = STAGE_MAPS.castle.obstacles, i = O.findIndex(o => o.kind === 'king');
+    cst.seated = on;
+    if (on && i < 0) O.push({ x: CS_SEAT.x - 28, y: CS_SEAT.y, r: 32, kind: 'king' });
+    if (!on && i >= 0) O.splice(i, 1);
+}
+
+function startThroneAudience() {
+    cst.audience = true; showStagePrompt(false);
+    player.dash = null; player.grappleTarget = null; player.charge = null; player.heavy = null;
+    stageEvent = { type: 'throne_audience', t: 0, t2: 0, blocking: true };
+}
+
+function updateThroneAudience(ev, dt) {
+    camera.tx = 5560; camera.ty = CS.y;
+    if (ev.t > 0.9 && !ev.asked) { ev.asked = true; openDialogue({ name: 'Valerius', title: 'Lord of the Bastion', portrait: 'valerius_bare', lines: VALERIUS_AUDIENCE_LINES, onClose: () => { ev.talked = true; } }); } // dialogue.js
+    if (!ev.talked) return;
+    const t = ev.t2 += dt;
+    if (t > 0.1 && !ev.snap) { ev.snap = true; cst.snapAt = fxTime; throneBark('snap'); }
+    if (t > 0.4 && !ev.snapped) { // the snap rings round the hall
+        ev.snapped = true; addShake(2);
+        burst(CS_SNAP_HAND.x, CS_SNAP_HAND.y, 0, Math.PI * 2, 8, { kind: 'spark', color: '#ffe0b2', size: 2, speed: [60, 180], life: 0.3, drag: 5 });
+        effects.push({ type: 'slime_shock', x: CS_SNAP_HAND.x, y: CS_SNAP_HAND.y, radius: 60, color: '#ffe0b2', life: 0.35, maxLife: 0.35 });
+    }
+    if (t > 0.7 && !ev.guard) ev.guard = spawnRoyalGuard();
+    if (ev.guard) ev.guard.forEach((e, j) => { e.spawnT = Math.max(0, Math.min(e.spawnMax, e.spawnMax - (t - 0.7 - j * 0.25))); }); // they step out one after another (the enemy loop is paused in a scene)
+    if (t > 1.9 && !ev.card) { ev.card = true; showBossCard('The Royal Guard', 'Sworn to the King of Thieves'); } // stage.js
+    if (t > 2.9) { for (const e of ev.guard) e.spawnT = 0; camera.tx = camera.ty = null; stageEvent = null; throneBark('open'); }
+}
+
+// The three champions, at wave 16's strength, sharing one boss bar (hud.js reads e.champion and cst.guardMax)
+function spawnRoyalGuard() {
+    const roster = activeDungeon.stage4_champions || [], out = [];
+    for (const [ri, ax, s, x, y] of CS_GUARD) {
+        const b = roster[ri]; if (!b) continue;
+        const e = pushBoss(b, wave, x, y); // main.js
+        e.champion = true; e.champName = b.name; e.rally = 0; e.state = null; e.stateTimer = b.stateTimer + Math.random() * 0.6; e.seed = Math.random() * 10;
+        e.spawnT = e.spawnMax = 0.9; e.spawnOX = ax; e.spawnOY = CS.y + s * 500; e.facingAngle = Math.atan2(y - e.spawnOY, x - ax);
+        out.push(e);
+    }
+    cst.guardMax = out.reduce((s, e) => s + e.maxHp, 0); cst.guardDown = 0;
+    activeEnemies += out.length; enemiesToSpawn = 0; bossSpawned = true; updateHUD();
+    return out;
+}
+
+// combat.js checkEnemyDeath: one of the guard is down. The others rally; he has a word about it
+function championFell(e) {
+    cst.guardDown++;
+    const left = enemies.filter(o => o.champion && !o.dead);
+    for (const o of left) {
+        o.rally = Math.min(2, cst.guardDown);
+        effects.push({ type: 'slime_shock', x: o.x, y: o.y, radius: 110, color: '#ff7043', life: 0.6, maxLife: 0.6 });
+        effects.push({ type: 'text', text: 'Rallied!', x: o.x, y: o.y - o.size / 2 - 30, color: '#ffab91', life: 1.0, maxLife: 1.0 });
+    }
+    if (left.length) throneBark(e.type, true);
+}
+
+// A line from the throne over his head (drawCastleAbove), no pause. Big hits on the hero only now and then
+function throneBark(kind, force) {
+    if (currentMap.type !== 'castle') return;
+    const k = cst.king && !cst.king.dead && !cst.king.escaping ? cst.king : null; // wave 17: he says it to your face
+    if (k ? kind !== 'hit' : (!cst.seated || !cst.audience || cst.rising)) return;
+    if (kind === 'hit') {
+        if ((cst.bark && fxTime - cst.bark.at < cst.bark.life) || fxTime - cst.barkHitAt < 7 || Math.random() < 0.35) return;
+        cst.barkHitAt = fxTime;
+    } else if (!force && cst.bark && fxTime - cst.bark.at < cst.bark.life * 0.5) return;
+    const set = THRONE_BARKS[k ? 'king_hit' : kind]; if (!set) return;
+    const text = set[(Math.random() * set.length) | 0];
+    cst.bark = { text, at: fxTime, life: 1.8 + text.length * 0.045, e: k };
+}
+function kingBark(e, text) { if (currentMap.type === 'castle') cst.bark = { text, at: fxTime, life: 1.8 + text.length * 0.045, e }; } // ai.js: his phase changes
+
+// Corvin's Bolt Rain (ai.js CaptainAI): each mark is hit a second after it appears; the marker is the hit
+function updateBoltRain() {
+    for (const ef of effects) {
+        if (ef.type !== 'bolt_rain' || ef.hit || ef.maxLife - ef.life < ef.warn) continue;
+        ef.hit = true;
+        if (player.z <= 4 && Math.hypot(player.x - ef.x, player.y - ef.y) < ef.r + player.radius) takeDamage(ef.dmg);
+        burst(ef.x, ef.y, -Math.PI / 2, 2.4, 5, { kind: 'debris', color: '#5e4a44', size: 2.5, speed: [50, 150], life: 0.4, drag: 4 });
+    }
+}
+
+// The last of the guard is down (stage.js onWaveCleared on wave 16): he rises from the throne.
+// For now the scene ends in Victory; step 5 turns it into wave 17, Valerius, King of Thieves.
+function startValeriusRises() {
+    if (cst.rising) return;
+    cst.rising = true; cst.bark = null; showStagePrompt(false);
+    player.dash = null; player.grappleTarget = null; player.charge = null; player.heavy = null;
+    for (let i = effects.length - 1; i >= 0; i--) if (effects[i].type === 'bolt_rain' || effects[i].type === 'gar_tell') effects.splice(i, 1);
+    for (let i = projectiles.length - 1; i >= 0; i--) if (projectiles[i].isEnemy) projectiles.splice(i, 1);
+    stageEvent = { type: 'valerius_rises', t: 0, t2: 0, blocking: true };
+}
+
+function updateValeriusRises(ev, dt) {
+    camera.tx = 5800; camera.ty = CS.y;
+    if (ev.t > 1.0 && !ev.asked) { ev.asked = true; openDialogue({ name: 'Valerius', title: 'King of Thieves', portrait: 'valerius_bare', lines: VALERIUS_RISE_LINES, onClose: () => { ev.talked = true; } }); }
+    if (!ev.talked) { cst.riseK = clamp01((ev.t - 0.3) / 0.6) * 0.6; return; } // he leans forward out of the seat
+    const t = ev.t2 += dt;
+    cst.riseK = Math.min(1, 0.6 + t / 0.5);
+    if (t > 0.5 && !ev.stood) { ev.stood = true; addShake(3); burst(CS_SEAT.x - 20, CS_SEAT.y, Math.PI, 1.6, 10, { kind: 'smoke', color: 'rgba(120, 104, 88, 0.6)', size: 12, speed: [40, 140], life: 0.6, drag: 3, grow: 22 }); }
+    cst.whirl = t > 0.6 && t < 1.25; // he takes up the spear and whirls it overhead
+    if (t > 1.25 && !ev.king) ev.king = kingArrives();
+    if (t > 1.45 && !ev.card) { ev.card = true; showBossCard('Valerius, King of Thieves', 'Lord of the Bastion'); } // stage.js: over wave 17's banner
+    if (t > 2.4) { stageEvent = null; camera.tx = camera.ty = null; }
+}
+
+// He's in the fight: the last boss, at wave 17's strength (enemies.json stage4_boss). Wave 17 starts at once, no breather
+function kingArrives() {
+    const e = pushBoss(activeDungeon.stage4_boss, 17, CS_SEAT.x - 34, CS_SEAT.y); // main.js
+    e.king = true; e.helmless = true; e.facingAngle = Math.PI; e.state = 'rally'; e.stateTimer = 0.6; e.seed = Math.random() * 10;
+    cst.king = e; cst.whirl = false; castleSeat(false);
+    valImpact(e.x, e.y, 5); // ai.js
+    effects.push({ type: 'slime_shock', x: e.x, y: e.y, radius: 260, color: '#c9a227', life: 0.7, maxLife: 0.7 });
+    if (wave === 16) startNextWave(); // main.js: wave 17 counts him in (as the trail's wave 10 counts the Beastmaster)
+    else { bossSpawned = true; activeEnemies++; updateHUD(); } // a dev jump straight to wave 17
+    return e;
+}
+
+// ---------- wave 17: his hall in the fight (ai.js ValeriusAI, phase 2 on) ----------
+
+// The chandelier he'll cut down: one still hanging near you, in reach of his toss; -1 if none
+function kingChandelier(e) {
+    let best = -1, bd = Infinity;
+    CS_CHAND.forEach(([x, y], i) => {
+        if (cst.chand[i].state !== 'up') return;
+        const dh = Math.hypot(x - player.x, y - player.y), de = Math.hypot(x - e.x, y - e.y);
+        if (dh < 300 && de < 700 && de > 120 && dh < bd) { bd = dh; best = i; }
+    });
+    return best;
+}
+function chandelierCut(i, dmg) { // the chain parts: it drops (updateKingHazards crashes it VK_CHAND_FALL s later)
+    if (cst.chand[i].state !== 'up') return;
+    cst.chand[i] = { state: 'fall', t0: fxTime, dmg };
+    const [x, y] = CS_CHAND[i];
+    burst(x, y, 0, Math.PI * 2, 10, { kind: 'spark', color: '#ffe0b2', size: 2.2, speed: [80, 240], life: 0.35, drag: 4 }); addShake(2);
+}
+// A brazier in the throne room he can get behind, with you within its lane's reach
+function kingBrazier(e) {
+    let best = null, bd = Infinity;
+    for (const o of currentMap.obstacles) {
+        if (o.kind !== 'brazier' || o.x < CS.throne) continue;
+        const de = Math.hypot(o.x - e.x, o.y - e.y), dh = Math.hypot(o.x - player.x, o.y - player.y);
+        if (de < 480 && dh < VK_KICK_L - 40 && dh > 140 && de < bd) { bd = de; best = o; }
+    }
+    return best;
+}
+const kickLane = (B, a) => { const cl = clipToWalls(B.x, B.y, B.x + Math.cos(a) * VK_KICK_L, B.y + Math.sin(a) * VK_KICK_L, 18, false); return cl ? Math.hypot(cl[0] - B.x, cl[1] - B.y) : VK_KICK_L; };
+function brazierKick(e, B, a) { // off its stand and rolling down the lane, spilling fire
+    const i = currentMap.obstacles.indexOf(B); if (i < 0) return;
+    currentMap.obstacles.splice(i, 1); cst.kicked.push(B);
+    effects.push({ type: 'brazier_roll', x: B.x, y: B.y, a, left: kickLane(B, a), dmg: e.dmg * VK_KICK_DMG, hit: false, acc: 0, spin: 0, life: 9, maxLife: 9 });
+    addShake(3); valImpact(B.x, B.y, 3);
+    burst(B.x, B.y, a, 1.2, 14, { kind: 'spark', color: '#ffb74d', size: 2.4, speed: [120, 360], life: 0.5, drag: 3 });
+}
+function pillarSpear(P) { cst.pillarSpear = { ...P }; } // ai.js Unchained: it stays in the pillar
+function kingUnchained() { // his roar: every candle still burning gutters low
+    cst.dim = 1;
+    CS_CHAND.forEach(([x, y], i) => { if (cst.chand[i].state === 'up') burst(x, y, -Math.PI / 2, Math.PI, 6, { kind: 'smoke', color: 'rgba(90, 84, 80, 0.5)', size: 8, speed: [20, 70], life: 0.9, drag: 2, grow: 16 }); });
+}
+
+function updateKingHazards(dt) {
+    cst.dimK += (cst.dim - cst.dimK) * Math.min(1, dt * 1.5);
+    CS_CHAND.forEach(([x, y], i) => { // a chandelier coming down: the crash, candles and fire across the slabs
+        const ch = cst.chand[i]; if (ch.state !== 'fall' || fxTime - ch.t0 < VK_CHAND_FALL) return;
+        ch.state = 'down'; ch.seed = Math.random() * 6;
+        if (player.z <= 4 && Math.hypot(player.x - x, player.y - y) < VK_CHAND_R + player.radius) takeDamage(ch.dmg);
+        addShake(6); hitStopTimer = Math.max(hitStopTimer, 0.05);
+        effects.push({ type: 'slime_shock', x, y, radius: VK_CHAND_R + 40, color: '#ffcc80', life: 0.45, maxLife: 0.45 });
+        burst(x, y, 0, Math.PI * 2, 18, { kind: 'debris', color: '#3a3d42', size: 3.5, speed: [100, 340], life: 0.6, drag: 3 });
+        burst(x, y, 0, Math.PI * 2, 16, { kind: 'spark', color: '#ffd180', size: 2.4, speed: [120, 380], life: 0.45, drag: 4 });
+        igniteGround(x, y, 70, 6, null); // bandits.js
+    });
+    const R = player.radius;
+    for (const ef of effects) { // a kicked brazier tumbling down its lane, a hit for whoever's in it, fire every few steps
+        if (ef.type !== 'brazier_roll' || ef.life <= 0) continue;
+        const step = Math.min(ef.left, VK_KICK_SPEED * dt), nx = ef.x + Math.cos(ef.a) * step, ny = ef.y + Math.sin(ef.a) * step;
+        const blocked = solidCell(terrainAt(nx, ny), false) || currentMap.obstacles.some(o => o.kind !== 'keg' && o.kind !== 'king' && Math.hypot(nx - o.x, ny - o.y) < o.r + 16);
+        if (!blocked) { ef.x = nx; ef.y = ny; ef.left -= step; ef.acc += step; ef.spin += step * 0.06; }
+        if (ef.acc >= 55) { ef.acc = 0; igniteGround(ef.x, ef.y, 30, 5, null); }
+        if (!ef.hit && player.z <= 4 && Math.hypot(player.x - ef.x, player.y - ef.y) < VK_KICK_W / 2 + R) {
+            ef.hit = true; takeDamage(ef.dmg);
+            if (!player.dash && !player.grappleTarget) { player.x += Math.cos(ef.a) * 80; player.y += Math.sin(ef.a) * 80; clampToBounds(player, R); }
+        }
+        if (Math.random() < 0.6) spawnParticle({ kind: 'spark', color: '#ffb74d', x: ef.x + jitter(10), y: ef.y + jitter(10), vx: jitter(80), vy: jitter(80), size: 2, life: 0.35, drag: 3, grow: 0, spin: 0, rot: 0 });
+        if (blocked || ef.left <= 0) { // it fetches up against whatever stopped it
+            ef.life = 0; igniteGround(ef.x, ef.y, 50, 6, null); cst.toppled.push({ x: ef.x, y: ef.y, a: ef.a }); addShake(3);
+            burst(ef.x, ef.y, ef.a + Math.PI, 1.6, 12, { kind: 'spark', color: '#ffb74d', size: 2.4, speed: [100, 300], life: 0.45, drag: 3 });
+        }
+    }
+}
+
+// ---------- his death: he kneels, he speaks, he falls; his crown rolls free, and taking it ends the run ----------
+
+const VALERIUS_LAST_WORDS = [
+    'Ha... so this is how it looks. From the other end of the blade.',
+    'I took this crown off a dead king, you know. In a burning hall, just like this one.',
+    'Go on. Take it. See how long you keep it... before someone like you comes for it. Someone like me.',
+];
+function startValeriusFall(e) { // combat.js kingLastStand
+    valReset(e); e.state = 'king_fall'; e.kneelK = 0; e.ghosting = false; e.spear = null; e.fadeK = 0; e.liftZ = 0; e.airborne = false; // ai.js
+    cst.bark = null; showStagePrompt(false);
+    for (let i = effects.length - 1; i >= 0; i--) { const t = String(effects[i].type); if (t.startsWith('val_') || t === 'gar_tell' || t === 'slam_warn' || t === 'charge_lane' || t === 'brazier_roll' || t === 'blade_ring' || t === 'bolt_rain') effects.splice(i, 1); }
+    for (const ch of cst.chand) if (ch.state === 'fall') ch.state = 'down';
+    for (let i = projectiles.length - 1; i >= 0; i--) if (projectiles[i].isEnemy) projectiles.splice(i, 1);
+    player.dash = null; player.grappleTarget = null; player.charge = null; player.heavy = null;
+    hitStopTimer = Math.max(hitStopTimer, 0.25); addShake(6);
+    stageEvent = { type: 'valerius_fall', t: 0, t2: 0, blocking: true, e };
+}
+
+function updateValeriusFall(ev, dt) {
+    const e = ev.e;
+    camera.tx = lerp(player.x, e.x, 0.6); camera.ty = lerp(player.y, e.y, 0.6);
+    if (!ev.talked) {
+        e.kneelK = easeOut(clamp01(ev.t / 0.5)); e.facingAngle = Math.atan2(player.y - e.y, player.x - e.x);
+        if (ev.t > 0.3 && !ev.dropped) { // the blades slip from his hands
+            ev.dropped = true;
+            if (e.blades) { e.bladesDown = true; effects.push({ type: 'dropped_blades', x: e.x, y: e.y, a: e.facingAngle, life: 9999, maxLife: 9999 }); burst(e.x, e.y, 0, Math.PI * 2, 8, { kind: 'spark', color: '#eceff1', size: 2, speed: [60, 160], life: 0.3, drag: 5 }); }
+            e.unchained = true;
+        }
+        if (ev.t > 1.1 && !ev.asked) { ev.asked = true; openDialogue({ name: 'Valerius', title: 'King of Thieves', portrait: 'valerius_bare', lines: VALERIUS_LAST_WORDS, onClose: () => { ev.talked = true; } }); } // dialogue.js
+        return;
+    }
+    const t = ev.t2 += dt;
+    if (t > 0.3 && !ev.fell) { // he goes down, and the crown rolls off his head
+        ev.fell = true; e.crownless = true; e.hp = 0; e.dead = true; activeEnemies = Math.max(0, activeEnemies - 1);
+        banditDeathFx(e); addShake(5); // bandits.js: he lies in his hall for good
+        const a = e.facingAngle + Math.PI + 0.7;
+        let x = e.x + Math.cos(a) * 75, y = e.y + Math.sin(a) * 75;
+        [x, y] = crownSpot(x, y);
+        cst.crown = { x, y, x0: e.x, y0: e.y, t0: fxTime };
+    }
+    if (t > 1.7) { // the way to it is clear: his fires die down, his gold and XP are yours
+        stageEvent = null; camera.tx = camera.ty = null;
+        for (const f of effects) if (f.type === 'ground_fire') f.life = Math.min(f.life, 0.6);
+        drops.push({ x: e.x, y: e.y, type: 'item', itemData: generateItem(wave + 2), radius: 10, life: 30.0 });
+        for (let i = 0; i < 5; i++) drops.push({ x: e.x, y: e.y, type: 'gold', val: 20 + wave * 2, radius: 8, life: 30.0 });
+        collectAllDrops(); // combat.js
+        crownExit();
+        gainXP(e.xp); // combat.js: after the scene, so a level-up doesn't cover it
+    }
+}
+// Where the crown comes to rest: always out in the nave where you can walk up to it (a bot run once lost it in an
+// alcove's corner, out of reach), never inside a pillar or a brazier
+function crownSpot(x, y) {
+    x = Math.max(CS.throneIn + 60, Math.min(CS_DAIS.x1 - 60, x)); y = Math.max(CS.y - CS_HALF.throne + 60, Math.min(CS.y + CS_HALF.throne - 60, y));
+    for (const o of currentMap.obstacles) {
+        if (o.kind === 'king') continue;
+        const dx = x - o.x, dy = y - o.y, d = Math.hypot(dx, dy), need = o.r + 34;
+        if (d < need) { const a = d > 0.1 ? Math.atan2(dy, dx) : Math.atan2(CS.y - o.y, 0.001); x = o.x + Math.cos(a) * need; y = o.y + Math.sin(a) * need; }
+    }
+    return terrainAt(x, y) === T_FLOOR ? [x, y] : [5400, CS.y];
+}
+function crownExit() {
+    STAGE_MAPS.castle.exit = { x: cst.crown.x, y: cst.crown.y };
+    openStageExit('#ffd54f'); showStagePrompt(true, 'Claim his crown'); // stage.js
+}
+
+// combat.js checkEnemyDeath: his death without the scene (his HP set to 0 directly): the crown falls where he stood
+function valeriusFall(e) {
+    if (cst.crown) return;
+    for (const f of effects) if (f.type === 'bandit_corpse' && f.kind === 'boss_valerius') { f.crownless = true; f.img = null; }
+    const [cx, cy] = crownSpot(e.x, e.y + 40);
+    cst.crown = { x: cx, y: cy, x0: e.x, y0: e.y, t0: fxTime };
+    activeEnemies = Math.max(0, activeEnemies - 1);
+    crownExit(); gainXP(e.xp);
+}
+
+function startCrownClaim() { stageEvent = { type: 'crown_claim', t: 0, blocking: true }; showStagePrompt(false); } // stage.js updateStage
+function updateCrownClaim(ev, dt) {
+    const C = cst.crown; player.dash = null; player.grappleTarget = null;
+    camera.tx = player.x; camera.ty = player.y;
+    C.claimK = clamp01(ev.t / 0.9);
+    if (ev.t > 0.9 && !ev.flash) {
+        ev.flash = true; addShake(4);
+        effects.push({ type: 'slime_shock', x: player.x, y: player.y, radius: 260, color: '#ffd54f', life: 0.8, maxLife: 0.8 });
+        burst(player.x, player.y - 30, 0, Math.PI * 2, 24, { kind: 'spark', color: '#ffe082', size: 3, speed: [140, 380], life: 0.6, drag: 4 });
+    }
+    if (ev.t > 2.0) { stageEvent = null; camera.tx = camera.ty = null; cst.crown = null; currentMap.caveOpen = false; showVictory(); } // ui.js: the Bastion is yours
+}
 
 // ---------- drawing (world space; the camera transform is already applied) ----------
 
@@ -688,7 +1006,8 @@ function drawCastleGround() {
     for (const [x, y, s] of cst.torches) if (cavIn(x, y, V)) glow(ctx, x, y + s * 12, 60, '#ff9800', 0.3 + 0.08 * Math.sin(t * 11 + x));
     if (cst.throneK > 0 && cst.open < 2 && cavIn(CS.throne, CS.y, V)) glow(ctx, CS.throne, CS.y, 260 * cst.throneK, '#ff3d00', 0.35 * cst.throneK); // red light pouring out
     let n = 0; // a pale halo on the ground under every bandit, so their dark browns stand out against the night
-    for (const e of enemies) if (!e.dead && !e.prop && !e.pod && !(e.spawnT > 0) && n < 40 && cavIn(e.x, e.y, V)) { n++; glow(ctx, e.x, e.y + 3, e.size * 1.3 + 16, '#cfdcec', 0.3); }
+    for (const e of enemies) if (!e.dead && !e.prop && !e.pod && !e.submerged && !(e.spawnT > 0) && n < 40 && cavIn(e.x, e.y, V)) { n++; glow(ctx, e.x, e.y + 3, e.size * 1.3 + 16, '#cfdcec', 0.3); }
+    if (cst.seated && cavIn(CS_SEAT.x, CS_SEAT.y, V)) glow(ctx, CS_SEAT.x, CS_SEAT.y + 3, 70, '#cfdcec', 0.3); // and under the king on his throne
     ctx.restore();
     for (const o of currentMap.obstacles) {
         if (!cavIn(o.x, o.y, V)) continue;
@@ -699,13 +1018,24 @@ function drawCastleGround() {
         else if (o.kind === 'pcart') drawPowderCart(o, t);
     }
     for (const [x, y, s] of cst.torches) if (cavIn(x, y, V)) drawFlame(ctx, x, y + s * 9, 7, t, x * 0.013, 1);
+    CS_CHAND.forEach(([x, y], i) => { if (cst.chand[i].state === 'down' && cavIn(x, y, V)) drawChandelierWreck(x, y, cst.chand[i].seed || 0); });
+    for (const o of cst.toppled) if (cavIn(o.x, o.y, V)) { // a kicked brazier where it fetched up, its coals strewn back along the lane
+        ctx.save(); ctx.translate(o.x, o.y); ctx.rotate(o.a + 1.2); ctx.fillStyle = '#262626'; ctx.strokeStyle = '#0e0e0e'; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(0, 0, 17, 10, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.restore();
+        for (let k = 1; k < 6; k++) { ctx.fillStyle = k % 2 ? '#5d1a08' : '#3a1206'; ctx.beginPath(); ctx.arc(o.x - Math.cos(o.a) * k * 9 + Math.sin(k) * 4, o.y - Math.sin(o.a) * k * 9 + Math.cos(k) * 4, 2.6, 0, Math.PI * 2); ctx.fill(); }
+    }
+    for (const ef of effects) {
+        if (ef.type === 'brazier_roll' && ef.life > 0) drawBrazierRoll(ef);
+        else if (ef.type === 'dropped_blades') for (const [s, kind] of [[1, 'sabre'], [-1, 'knife']]) { ctx.save(); ctx.translate(ef.x + Math.cos(ef.a + s * 1.4) * 34, ef.y + Math.sin(ef.a + s * 1.4) * 34); ctx.rotate(ef.a + s * 0.9); ctx.scale(2, 2); valBlade(ctx, 0, 0, 0, kind); ctx.restore(); } // bandits.js
+    }
+    if (cst.seated && cavIn(CS_SEAT.x, CS_SEAT.y, V)) drawSeatedValerius();
+    if (cst.crown && cavIn(cst.crown.x, cst.crown.y, V)) drawCastleCrown();
     if (cst.fuseK > 0 && cst.fuseK < 1) { const [x, y] = csTrailPt(cst.fuseK); ctx.save(); ctx.globalCompositeOperation = 'lighter'; glow(ctx, x, y, 26, '#ffe082', 0.9); ctx.restore(); } // the spark running along the powder
 }
 
 // Dusk is long gone: the bailey under a cold night, the keep's halls darker still, the throne room lit by its chandeliers
 function drawCastleDark() {
     const cx = camera.x + viewW() / 2, k = clamp01((cx - 2300) / 400), k2 = clamp01((cx - 4350) / 300);
-    const a = 0.42 + 0.18 * k - 0.08 * k2, r = Math.round(lerp(10, 14, k)), gc = Math.round(lerp(9, 8, k)), b = Math.round(lerp(24, 8, k));
+    const a = 0.42 + 0.18 * k - 0.08 * k2 + 0.1 * k2 * cst.dimK, r = Math.round(lerp(10, 14, k)), gc = Math.round(lerp(9, 8, k)), b = Math.round(lerp(24, 8, k)); // dimK: darker once his roar guttered the candles
     drawDarkLayer(`rgba(${r}, ${gc}, ${b}, ${a})`, hole => { // map_cavern.js
         const t = fxTime, V = cavView(420);
         for (const o of currentMap.obstacles) {
@@ -716,10 +1046,12 @@ function drawCastleDark() {
             else if (o.kind === 'gold') hole(o.x, o.y, 150, 0.35);
         }
         for (const [x, y, s] of cst.torches) if (cavIn(x, y, V)) hole(x, y + s * 14, 230 + Math.sin(t * 11 + x) * 8, 0.6);
-        for (const [x, y] of CS_CHAND) if (cavIn(x, y, V)) hole(x, y, 340, 0.6);
+        CS_CHAND.forEach(([x, y], i) => { if (cst.chand[i].state === 'up' && cavIn(x, y, V)) hole(x, y, 340 * (1 - 0.45 * cst.dimK), 0.6 * (1 - 0.5 * cst.dimK)); });
+        if (cst.crown) hole(cst.crown.x, cst.crown.y, 300, 0.8);
         if (cst.throneK > 0 && cst.open < 2) hole(CS.throne, CS.y, 400 * cst.throneK, 0.7);
         let n = 0; // every bandit and every enemy shot stands in its own pool of light: dark browns on dark ground were hard to pick out
-        for (const e of enemies) if (!e.dead && !e.prop && !e.pod && n < 40 && cavIn(e.x, e.y, V)) { n++; hole(e.x, e.y, e.size * 2 + 90, 0.5); }
+        for (const e of enemies) if (!e.dead && !e.prop && !e.pod && !e.submerged && n < 40 && cavIn(e.x, e.y, V)) { n++; hole(e.x, e.y, e.size * 2 + 90, 0.5); }
+        if (cst.seated) hole(CS_SEAT.x, CS_SEAT.y, 230, 0.6); // the king on his throne, never lost in the dark
         for (const p of projectiles) if (p.isEnemy && n < 70 && cavIn(p.x, p.y, V)) { n++; hole(p.x, p.y, 120, 0.55); }
         for (const ef of effects) {
             if (ef.type === 'ground_fire') hole(ef.x, ef.y, ef.radius * 3.4, 0.65 * Math.min(1, ef.life / 0.8));
@@ -817,7 +1149,15 @@ function drawCastleAbove() {
     }
     const F = CS_PROPS.find(p => p[3] === 'forge');
     if (cavIn(F[0] + 150, F[1] - 120, cavView(400))) drawSmokeColumn(F[0] + 30, F[1] - 120, t, 2.4, 0.7, 0.3); // map_village.js: out of the smithy's chimney
-    for (const [x, y] of CS_CHAND) if (cavIn(x, y, V)) drawChandelier(x, y, t);
+    CS_CHAND.forEach(([x, y], i) => { const ch = cst.chand[i]; if (ch.state !== 'down' && cavIn(x, y, V)) drawChandelier(x, y, t, ch.state === 'fall' ? clamp01((fxTime - ch.t0) / VK_CHAND_FALL) : 0, cst.dimK); });
+    if (cst.pillarSpear && cavIn(cst.pillarSpear.x, cst.pillarSpear.y, V)) drawPillarSpear(cst.pillarSpear);
+    for (const ef of effects) { // Corvin's Bolt Rain: bolts dropping onto their marks in the last moments
+        if (ef.type !== 'bolt_rain') continue;
+        const k = (ef.maxLife - ef.life - (ef.warn - 0.3)) / 0.3; if (k < 0 || k >= 1) continue;
+        c.save(); c.strokeStyle = '#2b1a10'; c.lineWidth = 3; c.lineCap = 'round';
+        for (let j = 0; j < 4; j++) { const h = (1 - k) * 170, x = ef.x + Math.cos(ef.seed + j * 1.7) * 18 + h * 0.4, y = ef.y + Math.sin(ef.seed + j * 2.3) * 14 - h; c.beginPath(); c.moveTo(x, y); c.lineTo(x - 5, y - 12); c.stroke(); }
+        c.restore();
+    }
     const tx0 = Math.floor(player.x / 200), ty0 = Math.floor(player.y / 200); // embers in the bailey, dust motes in the keep
     c.fillStyle = player.x < CS.keep ? '#ffb74d' : '#d8cbb8';
     for (let ty = ty0 - 2; ty <= ty0 + 2; ty++) for (let tx = tx0 - 3; tx <= tx0 + 3; tx++) {
@@ -825,16 +1165,102 @@ function drawCastleAbove() {
         c.globalAlpha = 0.25 + 0.25 * Math.sin(t * 2 + hsh); c.fillRect(x, y, 1.8, 1.8);
     }
     c.globalAlpha = 1;
+    if (cst.bark) drawThroneBark();
+}
+
+// Valerius on his throne, facing west down the nave (bandits.js drawValeriusSeated); risen, he stands before it
+function drawSeatedValerius() {
+    const snapT = fxTime - cst.snapAt, snap = snapT < 0.3 ? snapT / 0.3 : snapT < 0.9 ? 1 : snapT < 1.3 ? 1 - (snapT - 0.9) / 0.4 : 0;
+    const stand = cst.riseK >= 1, pose = { t: fxTime, walk: 0, move: 0, trail: { x: 0, y: 0 }, helmless: true, seated: !stand, snap, rise: cst.riseK, whirl: cst.whirl ? fxTime * 16 : undefined };
+    const x = CS_SEAT.x - (stand ? 34 : 0);
+    ctx.save(); ctx.globalAlpha = 0.32; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(x + 3, CS_SEAT.y + 12, 28, 22, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    stampBandit(null, x, CS_SEAT.y, Math.PI, 2, pose, 0, 1, 0, 'boss_valerius'); // bandits.js
+}
+
+// His bark: a dark box with the line in it over his head, a tail down to him; kept on screen when he's off it
+function drawThroneBark() {
+    const b = cst.bark, age = fxTime - b.at; if (age < 0 || age > b.life) { if (age > b.life) cst.bark = null; return; }
+    const c = ctx, a = Math.min(1, age / 0.15, (b.life - age) / 0.3);
+    c.save(); c.font = 'italic 16px Georgia, serif'; c.textAlign = 'left'; // other draws leave it centred
+    const tw = c.measureText(b.text).width, w = tw + 28, h = 44, mx = 14;
+    const ax = b.e ? b.e.x : CS_SEAT.x, ay = b.e ? b.e.y - (b.e.liftZ || 0) : CS_SEAT.y; // over him: on his throne, or in the fight
+    let bx = ax - w / 2, by = ay - 70 - h;
+    const vx0 = camera.x + mx, vx1 = camera.x + viewW() - mx - w, vy0 = camera.y + mx, vy1 = camera.y + viewH() - mx - h;
+    const cx = Math.max(vx0, Math.min(vx1, bx)), cy = Math.max(vy0, Math.min(vy1, by)), pinned = cx !== bx || cy !== by; bx = cx; by = cy;
+    c.globalAlpha = a; c.fillStyle = 'rgba(20, 11, 9, 0.9)'; c.strokeStyle = '#c9a227'; c.lineWidth = 1.5;
+    c.beginPath(); c.roundRect(bx, by, w, h, 6);
+    if (!pinned) { c.moveTo(ax - 9, by + h); c.lineTo(ax, by + h + 12); c.lineTo(ax + 9, by + h); } // the tail down to him
+    c.fill(); c.stroke();
+    c.fillStyle = '#ff8a65'; c.font = 'bold 10px Georgia, serif'; c.textBaseline = 'top'; c.fillText(pinned ? (ax > bx + w ? 'VALERIUS  \u25B6' : ax < bx ? '\u25C0  VALERIUS' : 'VALERIUS') : 'VALERIUS', bx + 10, by + 6);
+    c.fillStyle = '#f3e5c8'; c.font = 'italic 16px Georgia, serif'; c.fillText(b.text, bx + 14, by + 20);
+    c.restore();
 }
 
 // A chandelier hanging over the nave: an iron wheel with candles round its rim and chains up to the dark
-function drawChandelier(x, y, t) {
-    const c = ctx, R = 34;
-    c.fillStyle = 'rgba(0, 0, 0, 0.25)'; c.beginPath(); c.ellipse(x + 30, y + 40, R + 6, R * 0.8, 0, 0, Math.PI * 2); c.fill(); // its shadow far below
+// fall: 0 hanging .. 1 on the floor (it shrinks away from the eye, its shadow closing in); dim: the candles guttered
+function drawChandelier(x, y, t, fall = 0, dim = 0) {
+    const c = ctx, R = 34, f2 = fall * fall;
+    c.fillStyle = `rgba(0, 0, 0, ${0.25 + 0.25 * f2})`; c.beginPath(); c.ellipse(x + 30 * (1 - f2), y + 40 * (1 - f2), R + 6, R * 0.8, 0, 0, Math.PI * 2); c.fill(); // its shadow far below
+    c.save(); c.translate(x, y); c.scale(1 - 0.2 * f2, 1 - 0.2 * f2); c.rotate(fall * 0.5); c.translate(-x, -y);
     c.strokeStyle = '#1e1f22'; c.lineWidth = 5; c.beginPath(); c.arc(x, y, R, 0, Math.PI * 2); c.stroke();
     c.strokeStyle = '#3a3d42'; c.lineWidth = 2.5; c.stroke();
     for (let k = 0; k < 4; k++) { const a = k * Math.PI / 2 + 0.4; c.beginPath(); c.moveTo(x, y); c.lineTo(x + Math.cos(a) * R, y + Math.sin(a) * R); c.stroke(); }
     sprEllipse(c, x, y, 5, 5, '#2b2d30');
-    c.save(); c.globalCompositeOperation = 'lighter'; glow(c, x, y, R * 2.6, '#ffb74d', 0.2 + 0.03 * Math.sin(t * 7 + x)); c.restore();
-    for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2, cx = x + Math.cos(a) * R, cy = y + Math.sin(a) * R; c.fillStyle = '#efe6d2'; c.beginPath(); c.arc(cx, cy, 2.6, 0, Math.PI * 2); c.fill(); c.fillStyle = '#ffd180'; c.beginPath(); c.arc(cx + 0.5, cy - 0.5, 1.6 + 0.4 * Math.sin(t * 13 + k), 0, Math.PI * 2); c.fill(); }
+    c.save(); c.globalCompositeOperation = 'lighter'; glow(c, x, y, R * 2.6, '#ffb74d', (0.2 + 0.03 * Math.sin(t * 7 + x)) * (1 - 0.7 * dim)); c.restore();
+    for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2, cx = x + Math.cos(a) * R, cy = y + Math.sin(a) * R; c.fillStyle = '#efe6d2'; c.beginPath(); c.arc(cx, cy, 2.6, 0, Math.PI * 2); c.fill(); c.fillStyle = '#ffd180'; c.beginPath(); c.arc(cx + 0.5, cy - 0.5, (1.6 + 0.4 * Math.sin(t * 13 + k)) * (1 - 0.6 * dim), 0, Math.PI * 2); c.fill(); }
+    if (fall > 0) { c.strokeStyle = '#263238'; c.lineWidth = 2; for (const s of [-1, 1]) { c.beginPath(); c.moveTo(x + s * 6, y - 6); c.lineTo(x + s * 12, y - 22 - 10 * fall); c.stroke(); } } // the parted chain whipping after it
+    c.restore();
+}
+// A chandelier on the floor where it crashed: the iron wheel bent out of round, spokes snapped, candles strewn
+function drawChandelierWreck(x, y, seed) {
+    const c = ctx;
+    c.save(); c.translate(x, y); c.rotate(seed);
+    c.fillStyle = 'rgba(10, 6, 4, 0.5)'; c.beginPath(); c.ellipse(0, 0, 52, 44, 0, 0, Math.PI * 2); c.fill(); // soot
+    c.strokeStyle = '#1e1f22'; c.lineWidth = 5; c.beginPath(); c.ellipse(0, 0, 36, 27, 0.3, 0.4, Math.PI * 2 - 0.3); c.stroke();
+    c.strokeStyle = '#3a3d42'; c.lineWidth = 2.5; c.stroke();
+    for (const [a, l] of [[0.7, 30], [2.4, 18], [4.1, 26]]) { c.beginPath(); c.moveTo(0, 0); c.lineTo(Math.cos(a) * l, Math.sin(a) * l * 0.75); c.stroke(); }
+    for (let k = 0; k < 7; k++) { const a = k * 0.9 + seed, d = 22 + (k % 3) * 14; c.save(); c.translate(Math.cos(a) * d, Math.sin(a) * d); c.rotate(a * 2); c.fillStyle = '#d8cfbc'; c.fillRect(-4, -1.6, 8, 3.2); c.restore(); }
+    c.restore();
+}
+// His spear where he drove it into a pillar, the snapped chain hanging from its ring
+function drawPillarSpear(P) {
+    const c = ctx, sc = 2, len = (VAL_SPEAR_L + 13) * sc, ux = Math.cos(P.a), uy = Math.sin(P.a), bx = P.x - ux * len, by = P.y - uy * len;
+    c.save(); c.fillStyle = 'rgba(0, 0, 0, 0.25)'; c.beginPath(); c.ellipse(bx + ux * len * 0.5 + 10, by + uy * len * 0.5 + 14, len * 0.5, 4, P.a, 0, Math.PI * 2); c.fill();
+    c.translate(bx, by); c.rotate(P.a); c.scale(sc, sc); valSpear(c, VAL_SPEAR_L); c.restore(); // bandits.js
+    drawValChain(c, bx - ux * 4, by - uy * 4, bx - ux * 30 + 4, by - uy * 30 + 16, 4, 1.4);
+    c.save(); c.beginPath(); c.arc(P.px, P.py, P.pr + 1, 0, Math.PI * 2); c.clip(); csPillar(c, P.px, P.py, P.pr, true); c.restore(); // the column over the buried blade
+}
+// A brazier kicked over and rolling: the iron bowl tumbling, coals spilling, its fire streaming behind
+function drawBrazierRoll(ef) {
+    const c = ctx;
+    c.fillStyle = 'rgba(0, 0, 0, 0.3)'; c.beginPath(); c.ellipse(ef.x + 4, ef.y + 8, 20, 12, 0, 0, Math.PI * 2); c.fill();
+    c.save(); c.translate(ef.x, ef.y); c.rotate(ef.spin);
+    c.fillStyle = '#262626'; c.strokeStyle = '#0e0e0e'; c.lineWidth = 2; c.beginPath(); c.ellipse(0, 0, 17, 11 + 5 * Math.abs(Math.sin(ef.spin)), 0, 0, Math.PI * 2); c.fill(); c.stroke();
+    for (let k = 0; k < 4; k++) { c.fillStyle = k % 2 ? '#ff7043' : '#a33c10'; c.beginPath(); c.arc(-6 + k * 4, Math.sin(k * 2) * 4, 2.6, 0, Math.PI * 2); c.fill(); }
+    c.restore();
+    c.save(); c.globalCompositeOperation = 'lighter'; glow(c, ef.x, ef.y, 60, '#ff8f00', 0.5); c.restore();
+    drawFlame(c, ef.x - Math.cos(ef.a) * 8, ef.y - Math.sin(ef.a) * 8, 14, fxTime, ef.spin, 1); // bandits.js
+}
+// His iron crown: a dark band with seven spikes, gold studs; lying where it rolled, lifting to the hero as it's claimed
+function drawIronCrown(c, x, y, s, tilt) {
+    c.save(); c.translate(x, y); c.rotate(tilt); c.scale(s, s * 0.8);
+    c.strokeStyle = '#141518'; c.lineWidth = 4.4; c.beginPath(); c.ellipse(0, 0, 9, 9, 0, 0, Math.PI * 2); c.stroke();
+    c.strokeStyle = '#3a3d42'; c.lineWidth = 2.6; c.stroke();
+    c.fillStyle = '#26292e';
+    for (let k = 0; k < 7; k++) { const a = k / 7 * Math.PI * 2 - Math.PI / 2, ux = Math.cos(a), uy = Math.sin(a); c.beginPath(); c.moveTo(ux * 8.5 - uy * 2.2, uy * 8.5 + ux * 2.2); c.lineTo(ux * 15, uy * 15); c.lineTo(ux * 8.5 + uy * 2.2, uy * 8.5 - ux * 2.2); c.fill(); }
+    c.fillStyle = VAL_GOLD; for (let k = 0; k < 7; k++) { const a = k / 7 * Math.PI * 2 - Math.PI / 2 + Math.PI / 7; c.beginPath(); c.arc(Math.cos(a) * 9, Math.sin(a) * 9, 1.5, 0, Math.PI * 2); c.fill(); }
+    c.restore();
+}
+function drawCastleCrown() {
+    const C = cst.crown, t = fxTime, k = C.claimK || 0, roll = clamp01((t - C.t0) / 0.5);
+    const gx = lerp(C.x0, C.x, easeOut(roll)), gy = lerp(C.y0, C.y, easeOut(roll)) - Math.abs(Math.sin(roll * Math.PI * 2)) * 10 * (1 - roll); // it bounces as it rolls off
+    const x = lerp(gx, player.x, k), bob = roll >= 1 ? Math.sin(t * 2.5) * 3 : 0, y = lerp(gy, player.y - 46, k) - bob - k * 20;
+    if (roll >= 1 && k < 1) {
+        const g = ctx.createLinearGradient(gx, gy - 260, gx, gy); g.addColorStop(0, 'rgba(255, 213, 79, 0)'); g.addColorStop(1, `rgba(255, 224, 130, ${0.3 * (1 - k)})`);
+        ctx.fillStyle = g; ctx.fillRect(gx - 22, gy - 260, 44, 260); // a column of light over it
+        ctx.strokeStyle = `rgba(255, 224, 160, ${(0.5 + 0.3 * Math.sin(t * 4)) * (1 - k)})`; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(gx, gy + 4, 40, 26, 0, 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)'; ctx.beginPath(); ctx.ellipse(gx, gy + 6, 18, 9, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.save(); ctx.globalCompositeOperation = 'lighter'; glow(ctx, x, y, 55, '#ffd54f', 0.4); ctx.restore();
+    drawIronCrown(ctx, x, y, 1.7 + k * 0.6, roll < 1 ? roll * 6 : Math.sin(t * 1.2) * 0.12);
 }

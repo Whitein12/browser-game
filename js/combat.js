@@ -111,7 +111,7 @@ function applyDamage(enemy, amount, source = 'player', projAngle = null) {
     }
 
     const weak = weakPointDamage(enemy, source, projAngle); // Nightblade: true damage on top, and the hit goes through blocks
-    if (queenLastStand(enemy, amount + weak) || valeriusLastStand(enemy, amount + weak)) return;
+    if (queenLastStand(enemy, amount + weak) || valeriusLastStand(enemy, amount + weak) || kingLastStand(enemy, amount + weak)) return;
 
     if (!weak) {
         if (enemy.type === 'slime_warden' && enemy.orbs > 0) {
@@ -126,6 +126,7 @@ function applyDamage(enemy, amount, source = 'player', projAngle = null) {
         }
 
         if (enemy.type === 'boss_valerius' && source !== 'dot' && valDodge(enemy)) return; // ai.js: he reads the blow and steps aside
+        if (enemy.type === 'boss_champ_warden' && source !== 'dot') amount = wardenBulwark(enemy, amount); // ai.js: the tower shield turns blows from the front
         if (enemy.type === 'thief' && Math.random() < 0.20) {
             enemy.dodgeAt = fxTime; enemy.dodgeSide = Math.random() < 0.5 ? -1 : 1; // bandits.js draws the sidestep
             effects.push({ type: 'text', text: 'Evaded!', x: enemy.x, y: enemy.y - 20, color: '#fff', life: 0.6, maxLife: 0.6 }); return;
@@ -176,6 +177,14 @@ function valeriusLastStand(enemy, dmg) {
     if (enemy.type !== 'boss_valerius' || isEndlessMode || currentMap.type !== 'bridge' || enemy.hp - dmg > 0 || enemy.escaping) return false;
     enemy.hp = 1; enemy.invulnerable = true; enemy.escaping = true;
     startValeriusEscape(enemy);
+    return true;
+}
+
+// Valerius, King of Thieves (wave 17): the killing blow drops him to one knee for his last words (map_castle.js valerius_fall)
+function kingLastStand(enemy, dmg) {
+    if (enemy.type !== 'boss_valerius' || !enemy.king || isEndlessMode || enemy.hp - dmg > 0 || enemy.escaping) return false;
+    enemy.hp = 1; enemy.invulnerable = true; enemy.escaping = true;
+    startValeriusFall(enemy);
     return true;
 }
 
@@ -299,6 +308,7 @@ function takeDamage(amount, isContinuous = false, sourceObj = null) {
     }
 
     player.hp -= amount; waveStats.dmgTaken += amount;
+    if (!isContinuous && amount >= player.maxHp * 0.12 && currentMap.type === 'castle' && player.hp > 0) throneBark('hit'); // map_castle.js: he enjoys that from his throne
     if (!isContinuous) player.hurtFlash = 0.2; // sprite hit flash
     if (!isContinuous && amount >= player.maxHp * 0.08) addShake(3);
 
@@ -363,8 +373,9 @@ function checkEnemyDeath(e) {
 
         const rates = itemDataConfig.dropChances;
         if (e.type.startsWith('boss')) {
-            drops.push({ x: e.x + 20, y: e.y, type: 'item', itemData: generateItem(wave + 2), radius: 10, life: 30.0 });
-            for(let i=0; i<5; i++) drops.push({ x: e.x - 20 + (i*10), y: e.y + (i*10), type: 'gold', val: 20 + wave*2, radius: 8, life: 30.0 });
+            if (!e.champion || !enemies.some(o => o.champion && !o.dead)) drops.push({ x: e.x + 20, y: e.y, type: 'item', itemData: generateItem(wave + 2), radius: 10, life: 30.0 }); // the Royal Guard: one item, from the last to fall
+            const purse = e.champion && enemies.some(o => o.champion && !o.dead) ? 2 : 5; // the Royal Guard: a little gold each, the full purse from the last
+            for(let i=0; i<purse; i++) drops.push({ x: e.x - 20 + (i*10), y: e.y + (i*10), type: 'gold', val: 20 + wave*2, radius: 8, life: 30.0 });
             if (e.type === 'boss_warlord' && currentMap.type === 'village' && !isEndlessMode) { // his war chest: stage 1 alone pays for the first rare weapon (BALANCE.md section 7)
                 for (let i = 0; i < 4; i++) { const a = i / 4 * Math.PI * 2 + 0.6, d = 45 + (i % 2) * 20; drops.push({ x: e.x + Math.cos(a) * d, y: e.y + Math.sin(a) * d, type: 'gold', val: 20, radius: 8, life: 30.0 }); }
                 effects.push({ type: 'text', text: 'The war chest!', x: e.x, y: e.y - 50, color: '#ffd54f', life: 1.6, maxLife: 1.6 });
@@ -380,6 +391,7 @@ function checkEnemyDeath(e) {
             drops.push({ x: e.x, y: e.y, type: 'scrap', radius: 10, life: 15.0 });
         }
         
+        if (e.champion) championFell(e); // map_castle.js: Valerius has a word, the others rally
         gainXP(e.xp); // the corpse is removed from `enemies` by removeDeadEnemies()
         activeEnemies--; score++; waveStats.kills++; updateHUD();
 
