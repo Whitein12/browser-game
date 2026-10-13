@@ -232,6 +232,212 @@ var HoundAI = (e, dt, curSpd, edx, edy, edist, i) => {
     e.facingAngle = e.heading; // it faces where it runs (as RiderAI does)
 };
 
+// ---------- the Bastion's garrison (stage 4, map_castle.js) ----------
+// Every wind-up is a gar_tell effect drawn from the bandit's own state (bandits.js drawBanditGround): a lane or a wedge
+// along e.aimA, dashed while it follows the hero, solid for its last `lock` seconds, exactly as wide as the hit.
+const CROSS_AIM = 1.0, CROSS_LOCK = 0.35, CROSS_RELOAD = 3.2, CROSS_SPEED = 1100, CROSS_RANGE = 900, CROSS_DMG = 1.6, CROSS_W = 14, CROSS_NEAR = 300, CROSS_FAR = 520; // the crossbowman: kneel and aim, lock, one armour-piercing bolt, a long crank to reload
+const HAL_HOLD = 115, HAL_LOCK = 0.2, HAL_GAP = 1.1, HAL_REC = 0.7; // the halberdier keeps HAL_HOLD px off the hero (pole's length)
+const HAL_SWEEP_T = 0.75, HAL_SWEEP_R = 105, HAL_SWEEP_HALF = 1.05, HAL_SWEEP_DMG = 1.6; // the sweep: wind-up, reach past its body, half-angle, hit
+const HAL_THRUST_T = 0.6, HAL_THRUST_L = 150, HAL_THRUST_W = 26, HAL_THRUST_DMG = 2.0;   // the thrust down a lane
+const GREN_CD = 4.2, GREN_WINDUP = 0.7, GREN_SPEED = 380, GREN_FIRE_R = 60, GREN_FIRE_LIFE = 4, GREN_NEAR = 240, GREN_FAR = 400; // the firepot grenadier
+const CUT_WINDUP = 0.4, CUT_LOCK = 0.15, CUT_DASH = 240, CUT_DASH_SPEED = 820, CUT_REACH = 4, CUT_FLEE = 1.25, CUT_SLIP = 0.45, CUT_FLEE_MAX = 9; // the cutpurse: its dash, how much faster it flees, slipping out, the longest it runs before melting into the dark
+const CUT_STEAL = w => 10 + Math.round(w * 1.5), CUT_WAVE_CAP = 0.25, CUT_REFUND = 1.5; // gold per theft; never more than a quarter of the gold held at the wave's start; killed, it drops x1.5
+
+function garPrep(e, state, len, tell) {
+    e.state = state; e.stateTimer = e.prepLen = len; e.aimA = Math.atan2(player.y - e.y, player.x - e.x);
+    if (tell) effects.push({ type: 'gar_tell', e, state, ...tell, life: len + 0.05, maxLife: len + 0.05 });
+}
+function garCheck(e) { // stunned (its AI didn't run) or frozen in a wind-up: the attack is lost, so nothing lands after its telegraph ran out
+    const gap = e.aiAt !== undefined && fxTime - e.aiAt > 0.15; e.aiAt = fxTime;
+    if (e.prepLen && (gap || e.frozenTimer > 0)) { e.state = null; e.prepLen = 0; e.stateTimer = 0.6; }
+}
+function garAim(e, lock) { if (e.stateTimer > lock) e.aimA = Math.atan2(player.y - e.y, player.x - e.x); e.facingAngle = e.aimA; }
+function garKeep(e, dt, curSpd, edx, edy, edist, near, far, k = 1) { // stays near..far off the hero (the flow field's way round walls)
+    if (curSpd <= 0 || !(edist > 0) || edist === Infinity) return;
+    const rd = Math.hypot(player.x - e.x, player.y - e.y), s = curSpd * k * dt;
+    if (rd > far) { e.x += edx / edist * s; e.y += edy / edist * s; } else if (rd < near) { e.x -= edx / edist * s; e.y -= edy / edist * s; }
+}
+function garShove(e, d) { // knocked back, away from it
+    if (!player.dash && !player.grappleTarget) { const [x, y, l] = getVector(e.x, e.y, player.x, player.y); player.x += x / (l || 1) * d; player.y += y / (l || 1) * d; clampToBounds(player, player.radius); }
+    burst(player.x, player.y, Math.atan2(player.y - e.y, player.x - e.x), 1.4, 8, { kind: 'spark', color: '#ffe0b2', size: 2.4, speed: [120, 300], life: 0.25, drag: 5 });
+}
+
+// The crossbowman keeps 300-520 px off, kneels, and lays a long lane on the hero that locks before the bolt flies.
+// The bolt is heavy and armour-piercing (combat.js takeDamage); then it cranks the string back for CROSS_RELOAD s, walking slower.
+var CrossbowAI = (e, dt, curSpd, edx, edy, edist, i) => {
+    e.stateTimer = (e.stateTimer === undefined ? 0.8 + Math.random() : e.stateTimer) - dt;
+    garCheck(e);
+    e.kneelK = (e.kneelK || 0) + ((e.state === 'aim' ? 1 : 0) - (e.kneelK || 0)) * Math.min(1, 12 * dt);
+    if (e.state === 'aim') {
+        garAim(e, CROSS_LOCK);
+        if (e.stateTimer <= 0) {
+            const ux = Math.cos(e.aimA), uy = Math.sin(e.aimA), o = e.size / 2 + 4;
+            projectiles.push({ x: e.x + ux * o, y: e.y + uy * o, vx: ux * CROSS_SPEED, vy: uy * CROSS_SPEED, radius: CROSS_W / 2, life: (CROSS_RANGE - o) / CROSS_SPEED, isEnemy: true, owner: e, damage: e.dmg * CROSS_DMG, shape: 'bolt', pierceArmor: true });
+            e.state = null; e.prepLen = 0; e.stateTimer = CROSS_RELOAD; e.shotAt = fxTime; addShake(1);
+            burst(e.x + ux * o, e.y + uy * o, e.aimA, 0.5, 4, { kind: 'spark', color: '#ffe0b2', size: 1.8, speed: [120, 260], life: 0.2, drag: 5 });
+        }
+        return;
+    }
+    const reloading = e.shotAt !== undefined && fxTime - e.shotAt < CROSS_RELOAD;
+    garKeep(e, dt, curSpd, edx, edy, edist, CROSS_NEAR, CROSS_FAR, reloading ? 0.6 : 1);
+    const rd = Math.hypot(player.x - e.x, player.y - e.y);
+    if (e.stateTimer <= 0 && curSpd > 0 && e.frozenTimer <= 0 && rd < CROSS_FAR + 150 && shotClear(e.x, e.y, player.x, player.y))
+        garPrep(e, 'aim', CROSS_AIM, { kind: 'lane', len: CROSS_RANGE, w: CROSS_W, lock: CROSS_LOCK, air: true });
+};
+
+// Is the hero's body in a lane from e along a, len long and w wide?
+function garInLane(e, a, len, w) {
+    const dx = player.x - e.x, dy = player.y - e.y, along = dx * Math.cos(a) + dy * Math.sin(a), perp = Math.abs(-dx * Math.sin(a) + dy * Math.cos(a));
+    return along > 0 && along < len + player.radius && perp < w / 2 + player.radius;
+}
+
+// The halberdier: armoured and slow, it closes to pole's length and holds there, alternating a wide sweep (a wedge)
+// and a thrust (a lane; the only one that reaches past the sweep). Winded for HAL_REC s after each.
+var HalberdAI = (e, dt, curSpd, edx, edy, edist, i) => {
+    const rd = Math.hypot(player.x - e.x, player.y - e.y), sweepR = e.size / 2 + HAL_SWEEP_R, thrustL = e.size / 2 + HAL_THRUST_L;
+    e.stateTimer = (e.stateTimer === undefined ? 0.6 + Math.random() * 0.6 : e.stateTimer) - dt;
+    garCheck(e);
+    if (e.state === 'sweep_prep' || e.state === 'thrust_prep') {
+        garAim(e, HAL_LOCK);
+        if (e.stateTimer > 0) return;
+        const a = e.aimA, R = player.radius, air = player.z > 4;
+        e.prepLen = 0; e.swingAt = fxTime; e.lastMove = e.state === 'sweep_prep' ? 'sweep' : 'thrust';
+        if (e.lastMove === 'sweep') { // the blade swings across the wedge
+            e.state = 'sweep'; e.stateTimer = 0.2; addShake(2);
+            effects.push({ type: 'val_slash', e, a, R: sweepR, half: HAL_SWEEP_HALF, life: 0.24, maxLife: 0.24 }); // bandits.js: the crescent
+            let off = Math.atan2(player.y - e.y, player.x - e.x) - a; while (off > Math.PI) off -= Math.PI * 2; while (off < -Math.PI) off += Math.PI * 2;
+            if (!air && rd < sweepR + R && Math.abs(off) < HAL_SWEEP_HALF + R / Math.max(rd, 20)) { takeDamage(e.dmg * HAL_SWEEP_DMG); garShove(e, 60); }
+        } else { // the spike drives down the lane
+            e.state = 'thrust'; e.stateTimer = 0.16; addShake(1.5);
+            if (!air && garInLane(e, a, thrustL, HAL_THRUST_W)) { takeDamage(e.dmg * HAL_THRUST_DMG); garShove(e, 40); }
+        }
+        return;
+    }
+    if (e.state === 'sweep' || e.state === 'thrust') {
+        e.facingAngle = e.aimA;
+        if (e.state === 'thrust' && curSpd > 0) { e.x += Math.cos(e.aimA) * 250 * dt; e.y += Math.sin(e.aimA) * 250 * dt; } // a step into it
+        if (e.stateTimer <= 0) { e.state = 'recover'; e.stateTimer = HAL_REC; }
+        return;
+    }
+    if (e.state === 'recover') { e.facingAngle = e.aimA; if (e.stateTimer <= 0) { e.state = null; e.stateTimer = HAL_GAP * (0.8 + Math.random() * 0.4); } return; } // open to a counter
+    if (curSpd > 0 && edist > 0 && edist !== Infinity) {
+        if (rd > HAL_HOLD) { e.x += edx / edist * curSpd * dt; e.y += edy / edist * curSpd * dt; }
+        else if (rd < HAL_HOLD - 50) { e.x -= edx / edist * curSpd * 0.6 * dt; e.y -= edy / edist * curSpd * 0.6 * dt; } // too close for the pole: a step back
+    }
+    if (e.stateTimer <= 0 && curSpd > 0 && e.frozenTimer <= 0 && rd < HAL_HOLD + 60 && (!currentMap.grid || walkClear(e.x, e.y, player.x, player.y))) {
+        if (rd < sweepR && (e.lastMove !== 'sweep' || Math.random() < 0.35)) garPrep(e, 'sweep_prep', HAL_SWEEP_T, { kind: 'wedge', R: sweepR, half: HAL_SWEEP_HALF, lock: HAL_LOCK });
+        else garPrep(e, 'thrust_prep', HAL_THRUST_T, { kind: 'lane', len: thrustL, w: HAL_THRUST_W, lock: HAL_LOCK });
+    }
+};
+
+// The firepot grenadier keeps 240-400 px off; it lights a clay pot (GREN_WINDUP) and lobs it at where the hero stands.
+// The marker is the fire's size; it bursts into ground fire there (bandits.js firepotLand), which burns bandits too.
+var GrenadierAI = (e, dt, curSpd, edx, edy, edist, i) => {
+    e.stateTimer = (e.stateTimer === undefined ? 1 + Math.random() : e.stateTimer) - dt;
+    garCheck(e);
+    if (e.state === 'windup') {
+        e.facingAngle = Math.atan2(player.y - e.y, player.x - e.x);
+        if (e.stateTimer <= 0) { grenadierThrow(e); e.state = null; e.prepLen = 0; e.stateTimer = GREN_CD; e.thrownAt = fxTime; }
+        return;
+    }
+    garKeep(e, dt, curSpd, edx, edy, edist, GREN_NEAR, GREN_FAR);
+    const rd = Math.hypot(player.x - e.x, player.y - e.y);
+    if (e.stateTimer <= 0 && curSpd > 0 && e.frozenTimer <= 0 && rd < GREN_FAR + 100 && shotClear(e.x, e.y, player.x, player.y)) garPrep(e, 'windup', GREN_WINDUP, null);
+};
+function grenadierThrow(e) {
+    let tx = player.x, ty = player.y;
+    if (currentMap.grid) { const cl = clipToWalls(e.x, e.y, tx, ty, 10, true); if (cl) [tx, ty] = cl; }
+    const d = Math.hypot(tx - e.x, ty - e.y), flight = Math.max(0.35, d / GREN_SPEED);
+    projectiles.push({ type: 'firepot', x: e.x, y: e.y, ox: e.x, oy: e.y, targetX: tx, targetY: ty, speed: Math.max(1, d) / flight, radius: 7, life: flight + 0.1, isEnemy: true, owner: e, damage: 0, hitDmg: e.dmg, spin: Math.random() * 6 });
+    effects.push({ type: 'slam_warn', x: tx, y: ty, radius: GREN_FIRE_R, color: '#ff7043', life: flight, maxLife: flight }); // where it bursts, as wide as the fire
+}
+
+// The cutpurse, the King of Thieves' own: it darts in down a short lane; a hit that lands steals gold (capped per wave),
+// then it runs for a doorway of the open part of the castle with the purse on its back and slips out. Killed, it drops
+// the gold x1.5 (combat.js checkEnemyDeath); if it gets away, the gold is gone. Nothing else ever removes it quietly:
+// it's a wave enemy, so the wave can't end while it holds your gold, and escaping is the only exit without a kill.
+var CutpurseAI = (e, dt, curSpd, edx, edy, edist, i) => {
+    const rd = Math.hypot(player.x - e.x, player.y - e.y);
+    e.stateTimer = (e.stateTimer === undefined ? 0.5 + Math.random() * 0.6 : e.stateTimer) - dt;
+    e.ghosting = e.state === 'dash';
+    if (e.state === 'slip') { // out through the doorway (bandits.js draws it stepping in and fading)
+        e.fadeK = Math.min(1, (e.fadeK || 0) + dt / CUT_SLIP);
+        if (e.fadeK >= 1) cutpurseEscaped(e);
+        return;
+    }
+    if (e.state === 'flee') {
+        e.fleeT += dt; e.doorCd -= dt;
+        if (e.doorCd <= 0) { e.doorCd = 0.5; e.door = cutpurseDoor(e); }
+        let mx, my;
+        if (e.door && (!currentMap.grid || walkClear(e.x, e.y, e.door.x, e.door.y))) { mx = e.door.x - e.x; my = e.door.y - e.y; }
+        else if (edist > 0 && edist !== Infinity) { mx = -edx; my = -edy; } else { mx = e.x - player.x; my = e.y - player.y; } // no clear way to a door: away from the hero
+        const ml = Math.hypot(mx, my) || 1, sp = curSpd * CUT_FLEE;
+        if (sp > 0) { e.x += mx / ml * sp * dt; e.y += my / ml * sp * dt; e.facingAngle = Math.atan2(my, mx); }
+        if (Math.random() < 0.12) spawnParticle({ kind: 'dot', color: '#ffd54f', x: e.x + jitter(6), y: e.y + jitter(6), vx: jitter(30), vy: jitter(30), size: 1.8, life: 0.5, drag: 2, grow: 0, spin: 0, rot: 0 }); // a coin's glint as it runs
+        const atDoor = e.door && Math.hypot(e.door.x - e.x, e.door.y - e.y) < 26;
+        if (atDoor || (!e.door && rd > 700) || e.fleeT > CUT_FLEE_MAX) { e.state = 'slip'; e.fadeK = 0; e.slipTo = atDoor ? { x: e.door.ox, y: e.door.oy } : null; }
+        return;
+    }
+    garCheck(e);
+    if (e.state === 'dash_prep') { // crouched, the lane on the hero until it locks
+        garAim(e, CUT_LOCK);
+        if (e.stateTimer <= 0) { e.state = 'dash'; e.prepLen = 0; e.dashLeft = CUT_DASH; e.hitDone = false; }
+        return;
+    }
+    if (e.state === 'dash') { // a dart down the lane, a hand at the purse
+        const step = Math.min(e.dashLeft, CUT_DASH_SPEED * dt), nx = e.x + Math.cos(e.aimA) * step, ny = e.y + Math.sin(e.aimA) * step;
+        e.facingAngle = e.aimA;
+        if (curSpd <= 0 || (currentMap.grid && solidCell(terrainAt(nx, ny), false))) e.dashLeft = 0;
+        else { e.x = nx; e.y = ny; e.dashLeft -= step; }
+        if (!e.hitDone && player.z <= 4 && Math.hypot(player.x - e.x, player.y - e.y) < player.radius + e.size / 2 + CUT_REACH) {
+            e.hitDone = true;
+            const hp0 = player.hp, sh0 = player.shield || 0;
+            takeDamage(e.dmg);
+            if ((player.hp < hp0 || (player.shield || 0) < sh0) && cutpurseSteal(e)) { e.state = 'flee'; e.fleeT = 0; e.doorCd = 0; e.ghosting = false; return; } // a dodge or a parry keeps the purse
+        }
+        if (e.dashLeft <= 0) { e.state = 'recover'; e.stateTimer = 0.45; }
+        return;
+    }
+    if (e.state === 'recover') { if (e.stateTimer <= 0) { e.state = null; e.stateTimer = 0.7 + Math.random() * 0.5; } return; }
+    if (curSpd > 0 && rd > 90 && edist > 0 && edist !== Infinity) { e.x += edx / edist * curSpd * dt; e.y += edy / edist * curSpd * dt; }
+    if (e.stateTimer <= 0 && curSpd > 0 && e.frozenTimer <= 0 && rd < CUT_DASH - 20 && (!currentMap.grid || walkClear(e.x, e.y, player.x, player.y)))
+        garPrep(e, 'dash_prep', CUT_WINDUP, { kind: 'lane', len: CUT_DASH + e.size / 2 + CUT_REACH, w: e.size + CUT_REACH * 2, lock: CUT_LOCK });
+};
+function cutpurseSteal(e) {
+    const room = Math.floor((waveStats.gold0 || 0) * CUT_WAVE_CAP) - (waveStats.stolen || 0), n = Math.max(0, Math.min(player.gold, CUT_STEAL(wave), room));
+    if (n <= 0) return false; // nothing left it may take: it keeps fighting instead
+    player.gold -= n; e.loot = (e.loot || 0) + n; waveStats.stolen = (waveStats.stolen || 0) + n;
+    effects.push({ type: 'text', text: `-${n} gold`, x: player.x, y: player.y - 40, color: '#ffd54f', life: 1.2, maxLife: 1.2 });
+    burst(player.x, player.y, Math.atan2(e.y - player.y, e.x - player.x), 1.2, 8, { kind: 'spark', color: '#ffd54f', size: 2.2, speed: [80, 220], life: 0.4, drag: 3 }); // coins flicked toward it
+    updateHUD(); return true;
+}
+function cutpurseDoor(e) { // map_castle.js: the open part's doorways and tapestries; the one it's nearest to, the hero furthest from
+    if (currentMap.type !== 'castle' || !cst.spawns.length) return null;
+    let pool = cst.spawns.filter(p => p.sec === cst.open); if (!pool.length) pool = cst.spawns;
+    let best = null, bs = Infinity;
+    for (const p of pool) { const s = Math.hypot(p.x - e.x, p.y - e.y) - 0.8 * Math.hypot(p.x - player.x, p.y - player.y); if (s < bs) { bs = s; best = p; } }
+    return best;
+}
+function cutpurseEscaped(e) { // gone with the gold: no kill and no XP, but it no longer holds the wave open
+    if (e.dead) return;
+    e.dead = true; activeEnemies--;
+    if (e.loot > 0) effects.push({ type: 'text', text: `A cutpurse got away with ${e.loot} gold`, x: player.x, y: player.y - 56, color: '#ffb74d', life: 2.0, maxLife: 2.0 });
+    e.loot = 0;
+    if (enemiesToSpawn <= 0 && activeEnemies <= 0) { collectAllDrops(); if (gameState === STATE.PLAYING) onWaveCleared(); } // stage.js
+    updateHUD();
+}
+function cutpurseLoot(e) { // combat.js checkEnemyDeath: killed with the purse, the gold spills out x1.5
+    const total = Math.round(e.loot * CUT_REFUND), n = Math.min(4, Math.max(1, Math.ceil(total / 15)));
+    for (let k = 0; k < n; k++) {
+        const a = k / n * Math.PI * 2 + Math.random(), d = 16 + Math.random() * 20;
+        let x = e.x + Math.cos(a) * d, y = e.y + Math.sin(a) * d;
+        if (currentMap.grid && solidCell(terrainAt(x, y), false)) { x = e.x; y = e.y; } // never into a wall or under a table
+        drops.push({ x, y, type: 'gold', val: Math.floor(total / n) + (k < total % n ? 1 : 0), radius: 8, life: 30 });
+    }
+    effects.push({ type: 'text', text: `+${total} gold back`, x: e.x, y: e.y - 36, color: '#ffd54f', life: 1.4, maxLife: 1.4 });
+    e.loot = 0;
+}
+
 // The Beastmaster's hounds: real pack hounds (HoundAI) on the wave's hound stats, `master` set so they die with him
 function beastHounds(e, spots, spawnT) {
     const m = (activeDungeon.stage2_minions || []).find(mn => mn.type === 'hound'); if (!m) return;
@@ -705,6 +911,7 @@ var EnemyAI = {
         }
     },
     'horse': RiderAI, 'bannerman': BannermanAI, 'hound': HoundAI, 'slinger': SlingerAI,
+    'crossbow': CrossbowAI, 'halberd': HalberdAI, 'grenadier': GrenadierAI, 'cutpurse': CutpurseAI, // the Bastion's garrison (above)
     'spore_slime': (e, dt, curSpd, edx, edy, edist, i) => {
         if (edist > 250) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
         e.attackTimer -= dt;

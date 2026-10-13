@@ -10,8 +10,8 @@ earlier steps taught.
 |---|---|---|
 | 1 | The bridge's gate opens after Valerius's escape; his death taunt; helmless Valerius (sprite and portrait) | **Done, playtested** |
 | 2 | The castle map (`js/map_castle.js`): three parts, the door scenes, spawns, torchlight, reused minions | **Done, playtested** |
-| 3 | Four new garrison minions | **Next** |
-| 4 | Wave 16: Valerius seated on his throne, the audience scene, his barks, three Royal Guard champions | To do |
+| 3 | Four new garrison minions | **Done, awaiting playtest** |
+| 4 | Wave 16: Valerius seated on his throne, the audience scene, his barks, three Royal Guard champions | **Next** |
 | 5 | Wave 17: Valerius, King of Thieves: the last fight, hazards, the twin-blade phase, his death and crown | To do |
 | 6 | Docs: CLAUDE.md (file row, stage endings, events, Known issues), BALANCE.md numbers | Ongoing; update as each step lands |
 
@@ -19,7 +19,7 @@ The user playtests after each step, so deliver one step and wait for feedback be
 cost up front. Steps 1+2 took about an hour; step 3 is estimated at 45-75 minutes (less if the crossbowman and halberdier
 go first and the other two after a playtest). Steps 4 and 5 are each bigger than step 3; step 5 is the biggest.
 
-Nothing has been committed yet (commit only when the user asks; since v1.7 the work goes on `master`, messages like
+Steps 1-2 are committed (v1.10.2.1); step 3 isn't yet (commit only when the user asks; since v1.7 the work goes on `master`, messages like
 `v1.10.3 - Bandit Bastion - Stage 4`).
 
 ### Stand-ins until steps 4 and 5
@@ -65,6 +65,16 @@ ai.js and enemysprites.js (`BANDIT_TYPES`) before adding types.
 
 Then update `CS_MIX` (bailey: shield, archer, slinger, hound, bannerman, thief + crossbow, halberd, grenadier;
 keep: thief, shield, archer, bannerman + crossbow, halberd, cutpurse) and BALANCE.md's enemy table.
+
+### What step 3 built
+
+- **AI** (ai.js, after `HoundAI`): `CrossbowAI`, `HalberdAI`, `GrenadierAI`, `CutpurseAI`, timings `CROSS_*`, `HAL_*`, `GREN_*`, `CUT_*`. Shared helpers: `garPrep` (a wind-up: sets `e.state`, `e.prepLen`, `e.aimA` and pushes a `gar_tell` effect), `garAim` (the aim follows the hero until the lock), `garCheck` (a stun or freeze mid-wind-up cancels the attack, so nothing lands after its telegraph expired), `garKeep` (keep a distance band), `garInLane`, `garShove`. **Reuse `garPrep` / `gar_tell` for the Royal Guard's telegraphs** (kinds `lane` with `len`, `w`, `air`; `wedge` with `R`, `half`; `lock`).
+- **Telegraph** `gar_tell` (bandits.js `drawBanditGround`): drawn from the bandit's live state each frame, only while `e.state === ef.state`. The halberd's sweep reuses Valerius's `val_slash` crescent.
+- **Shots:** the bolt (`shape: 'bolt'`, `pierceArmor`: combat.js `takeDamage` skips armour for it) and the firepot (`type: 'firepot'`, flown like `sling_stone` in main.js; bandits.js `firepotLand` → `igniteGround`).
+- **The cutpurse's gold:** `cutpurseSteal` (cap: 25% of `waveStats.gold0`, tracked in `waveStats.stolen`), `e.loot`, `cutpurseDoor` (map_castle.js `cst.spawns` of the open part; elsewhere it just runs and escapes 700 px off), `cutpurseEscaped` (marks it dead without a kill, lowers `activeEnemies`, can clear the wave), `cutpurseLoot` (from combat.js `checkEnemyDeath`, drops ×1.5, never into a wall). bandits.js draws its slip through the doorway (`e.slipTo`, `e.fadeK`) and the coin over its head.
+- **Sprites** (bandits.js `BANDIT_SPRITES`): `crossbow` (with `drawCrossbow`), `halberd` (with `drawHalberd`), `grenadier`, `cutpurse`; poses in `banditPose`; corpses work through the usual `p.dead`.
+- **Roster and mix:** enemies.json `stage4_minions` (`garrison_crossbow`, `garrison_halberd`, `garrison_grenadier`, `garrison_cutpurse`), map_castle.js `CS_MIX` / `CS_CAP`. Numbers are in BALANCE.md (the enemy table and "The Bastion's garrison").
+- Tested headless: every telegraph draws, a natural wave 12 and 14 run without errors, a theft → flight → escape clears the wave when it was the last enemy, the cap holds, and a kill pays back ×1.5. The Training Room can't spawn bandit minions, so the user tests these in the castle (dev console, waves 12 / 14).
 
 ## Step 4: wave 16, the Royal Guard
 
@@ -162,7 +172,7 @@ There's no test suite. Serve the folder and drive headless Chrome over the DevTo
 
 1. `python -m http.server 8000` in the repo (run in the background).
 2. `"/c/Program Files/Google/Chrome/Application/chrome.exe" --headless=new --remote-debugging-port=9222 --window-size=1600,900 --user-data-dir=<scratchpad>/chrome --no-first-run --mute-audio about:blank` (background).
-3. A small driver (`cdp.mjs`, kept in the scratchpad) that reads a JSON list of steps
+3. A small driver (`cdp.mjs`, kept in the scratchpad; it's per session, so rewrite it if it's gone. The installed Node is **v20**: run it with `node --experimental-websocket`) that reads a JSON list of steps
    (`{nav}`, `{wait}`, `{eval}`, `{shot}`), connects to the page from `http://127.0.0.1:9222/json`, runs
    `Runtime.evaluate` / `Page.captureScreenshot`, and prints page exceptions. Wrap evals in
    `(() => { ... })()`: top-level `const` collides between evals.
@@ -172,6 +182,7 @@ There's no test suite. Serve the folder and drive headless Chrome over the DevTo
    `gameState = STATE.PLAYING; lastTime = performance.now()`; god mode by hand (`player.maxHp = player.hp = 99999`);
    stop spawns with `enemySpawnTimer = 1e9`; start scenes directly (`castleWaveCleared()` on wave 13 or 15).
    Read every screenshot. Stop Chrome and the server afterwards.
+5. To look closely at a pose, set states by hand, then freeze the game with `hitStopTimer = 1e9` (update stops, drawing goes on) and take a clipped screenshot (`Page.captureScreenshot` with `clip: { x, y, width, height, scale: 3 }`). Spawn a given type by pushing it from `activeDungeon.stage4_minions` the way main.js `spawnEnemy` does (and `activeEnemies++`).
 
 The user also plays the Training Room (`training.js`) to try things; point them there for a new enemy's or champion's
 telegraphs.

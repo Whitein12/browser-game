@@ -559,8 +559,10 @@ function csThrone(c, x, y, r, rnd) {
 
 // ---------- spawns ----------
 
-const CS_MIX = [{ shield: 0.24, archer: 0.22, slinger: 0.16, hound: 0.16, bannerman: 0.12, thief: 0.10 }, { thief: 0.30, shield: 0.22, archer: 0.20, bannerman: 0.12, slinger: 0.08, hound: 0.08 }];
-const CS_CAP = { hound: 4, bannerman: 2 };
+const CS_MIX = [ // the bailey's mix, then the keep's (the cutpurses only in the keep, the grenadiers only in the bailey)
+    { shield: 0.18, archer: 0.16, slinger: 0.10, hound: 0.12, bannerman: 0.08, thief: 0.08, crossbow: 0.10, halberd: 0.10, grenadier: 0.08 },
+    { thief: 0.22, shield: 0.18, archer: 0.16, bannerman: 0.08, crossbow: 0.12, halberd: 0.14, cutpurse: 0.10 }];
+const CS_CAP = { hound: 4, bannerman: 2, crossbow: 3, halberd: 4, grenadier: 2, cutpurse: 2 };
 const castleAlive = type => enemies.filter(e => !e.dead && !e.prop && e.type === type).length;
 const castleRoom = type => Math.max(0, (CS_CAP[type] || 99) - castleAlive(type));
 function castleMinions(list) {

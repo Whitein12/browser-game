@@ -739,10 +739,10 @@ function update(dt) {
             p.vx = (rx/rd)*1200; p.vy = (ry/rd)*1200; p.life = 0.5;
         }
         
-        if (p.type === 'trap_throw' || p.type === 'spore' || p.type === 'sling_stone') {
+        if (p.type === 'trap_throw' || p.type === 'spore' || p.type === 'sling_stone' || p.type === 'firepot') {
             const [tx, ty, td] = getVector(p.x, p.y, p.targetX, p.targetY); const spd = p.speed || 400;
             if (td > 10) { p.x += (tx/td)*spd*dt; p.y += (ty/td)*spd*dt; }
-            else if (p.type === 'sling_stone') p.life = 0; // it has landed
+            else if (p.type === 'sling_stone' || p.type === 'firepot') p.life = 0; // it has landed
         } else if (p.type !== 'turret' && p.type !== 'tesla_coil_trap') {
             p.x += p.vx * dt; p.y += p.vy * dt; 
         }
@@ -761,6 +761,7 @@ function update(dt) {
                 if (Math.hypot(p.x - player.x, p.y - player.y) < 26 + player.radius) takeDamage(p.owner.dmg);
                 burst(p.x, p.y, 0, Math.PI * 2, 6, { kind: 'debris', color: '#9e9e9e', size: 3, speed: [60, 180], life: 0.45, drag: 3 });
             }
+            if (p.type === 'firepot') firepotLand(p); // bandits.js: it bursts into fire
             if (p.type === 'spore') { effects.push({ type: 'spore_cloud', x: p.x, y: p.y, radius: 100, color: 'rgba(205, 220, 57, 0.4)', life: 3.0, maxLife: 3.0 }); }
             if (p.type === 'turret' && p.volatile) {
                 effects.push({ type: 'fiery_explosion', x: p.x, y: p.y, radius: 150, life: 0.5, maxLife: 0.5 });
@@ -777,7 +778,7 @@ function update(dt) {
                 continue;
             }
 
-            if (p.type !== 'trap_throw' && p.type !== 'spore' && p.type !== 'sling_stone' && Math.hypot(p.x - player.x, p.y - player.y) < player.radius + p.radius) { 
+            if (p.type !== 'trap_throw' && p.type !== 'spore' && p.type !== 'sling_stone' && p.type !== 'firepot' && Math.hypot(p.x - player.x, p.y - player.y) < player.radius + p.radius) { 
                 takeDamage(p.damage, false, { isProjectile: true, proj: p }); 
                 if (p.type === 'boss_slimeball') { effects.push({ type: 'puddle', x: p.x, y: p.y, radius: 30, color: '#009688', life: 1.5, maxLife: 1.5 }); }
                 if (p.type === 'bolas') { 

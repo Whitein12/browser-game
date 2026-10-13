@@ -276,7 +276,8 @@ function takeDamage(amount, isContinuous = false, sourceObj = null) {
         amount *= paladinDamageTakenMult(); // Plate of the Gilded Bastion
         armor *= paladinArmorMult();       // light shield while the hammer is away
     }
-    if (!isContinuous) amount = Math.max(1, amount * (1 - armorReduction(armor)));
+    const pierce = sourceObj && sourceObj.proj && sourceObj.proj.pierceArmor; // ai.js: the crossbowman's bolt goes through armour
+    if (!isContinuous) amount = Math.max(1, amount * (1 - armorReduction(pierce ? 0 : armor)));
     
     if (player.shield > 0) {
         if (player.shield >= amount) { player.shield -= amount; return; }
@@ -333,6 +334,7 @@ function checkEnemyDeath(e) {
         e.dead = true;
         enemyDeathFx(e); // enemysprites.js
         if (e.dummy) { trainingDummyDied(e); return; } // training.js: no loot, no XP, no wave; it's back on its post soon
+        if (e.loot > 0) cutpurseLoot(e); // ai.js: a cutpurse killed with your gold drops it x1.5
 
         if (e.markAngle !== undefined && activeClass.name === 'Nightblade' && activeClass.skills[4].selectedUpg === 'B') {
             effects.push({ type: 'circle', x: e.x, y: e.y, radius: 150, color: 'rgba(156, 39, 176, 0.3)', life: 0.3, maxLife: 0.3 });
