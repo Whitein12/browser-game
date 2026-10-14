@@ -422,6 +422,7 @@ function renderIcon(key, tint, glyph) {
     return (iconCache[key] = cv.toDataURL());
 }
 function skillIcon(classId, slot) {
+    if (classId === 'spellweaver' && isSpellbook() && activeClass.skills[slot] && activeClass.skills[slot].spell) return spellIcon(activeClass.skills[slot].spell); // spellweaver.js: the spell on that key
     const glyph = SKILL_GLYPHS[classId] && SKILL_GLYPHS[classId][slot];
     const tint = (classDataConfig[classId] && classDataConfig[classId].color) || '#888888';
     return renderIcon(`s:${classId}:${slot}${classId === 'druid' ? ':' + (player.companion || 'wolf') : ''}`, tint, glyph || (c => icStar(c, 32, 32, 16, '#fff')));

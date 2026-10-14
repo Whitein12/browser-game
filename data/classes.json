@@ -38,12 +38,12 @@
         "baseDmg": 18,
         "selectedUpg": null,
         "upgA": {
-          "name": "Explosive Impact",
-          "desc": "Deals AoE damage on hit"
+          "name": "Molten Aegis",
+          "desc": "The shield is white-hot: it leaves a trail of dragonfire along its whole path, out and back. Enemies in the trail take 40% of the throw's damage every second (3 s)."
         },
         "upgB": {
-          "name": "Aegis Catch",
-          "desc": "Catching the returning shield grants a shield twice as strong"
+          "name": "Hunting Shield",
+          "desc": "The shield bites into the first enemy it hits and stays lodged for 2.5 s, grinding it (half the throw's damage every 0.5 s). A full slam on that enemy rips it free: triple damage to it and a burst around it."
         }
       },
       "2": {
@@ -68,12 +68,12 @@
         "baseDmg": 20,
         "selectedUpg": null,
         "upgA": {
-          "name": "Aftershock",
-          "desc": "Leaves a zone that detonates after a delay"
+          "name": "Gravity Slam",
+          "desc": "The landing pulls everything within 260 px into the impact point and staggers it (bosses are only tugged). Bundle a pack up for your Dragonfire and your breath."
         },
         "upgB": {
-          "name": "Shrapnel Landing",
-          "desc": "Shoots 4 projectiles outward upon landing"
+          "name": "Meteor Dive",
+          "desc": "Hold Space to rise and hang in the air, untouchable, for up to 1.5 s, steering the landing with the cursor. Let go to dive: the longer you hung, the bigger the slam (up to x2.5 damage and 200 px). Dragon Breath in the air pours Wyrmfall down."
         }
       },
       "4": {
@@ -87,8 +87,8 @@
           "desc": "Turns blue and heavily slows enemies"
         },
         "upgB": {
-          "name": "Shatter Breath",
-          "desc": "Instantly shatters all enemy shields"
+          "name": "Sundering Breath",
+          "desc": "The flames crack open whatever they touch: Sundered enemies take +20% damage from you for 6 s. Shields and Slime Warden orbs shatter."
         }
       }
     }
@@ -118,7 +118,7 @@
     },
     "rareBoots": {
       "name": "Blinkstep Slippers",
-      "desc": "+50 Move Speed | Blink leaves an arcane echo where you were that bursts after 0.5s"
+      "desc": "+50 Move Speed | Every movement spell leaves an arcane echo where you were that bursts after 0.5s"
     },
     "rareGloves": {
       "name": "Spellthread Gloves",
@@ -226,12 +226,12 @@
         "baseDmg": 100,
         "selectedUpg": null,
         "upgA": {
-          "name": "Quickdraw",
-          "desc": "Draws fully in half the time, and you no longer slow down while drawing"
+          "name": "Ballista Shot",
+          "desc": "A fully drawn arrow hurls everything on its line 220 px back. Whatever slams into a wall or a pillar on the way is stunned for 1.5 s. Bosses only stagger back."
         },
         "upgB": {
-          "name": "Thunderhead",
-          "desc": "The follow-up strike deals full damage and stuns enemies on the line"
+          "name": "Hunter's Mark",
+          "desc": "The first enemy the arrow hits is Marked for 6 s: your basic arrows curve toward it and deal +40% to it."
         }
       },
       "2": {
@@ -241,12 +241,12 @@
         "baseDmg": 0,
         "selectedUpg": null,
         "upgA": {
-          "name": "Mending Winds",
-          "desc": "Increases healing amount"
+          "name": "Windwalk",
+          "desc": "For 2 s you're wind: enemy shots pass through you."
         },
         "upgB": {
-          "name": "Tailwind",
-          "desc": "Increases movement speed boost"
+          "name": "Hunter's Focus",
+          "desc": "For 4 s you plant your feet: Momentum stays full even standing still, and every basic looses two arrows."
         }
       },
       "3": {
@@ -256,12 +256,12 @@
         "baseDmg": 30,
         "selectedUpg": null,
         "upgA": {
-          "name": "Parting Shot",
-          "desc": "Launches an attack toward nearest enemy"
+          "name": "Disengage",
+          "desc": "You flip away from the cursor, and your next basic within 2 s looses a spread of 5 arrows."
         },
         "upgB": {
-          "name": "Acrobatics",
-          "desc": "Bigger jump range"
+          "name": "Twin Vault",
+          "desc": "Two charges, and every kill gives one back."
         }
       },
       "4": {
@@ -271,12 +271,12 @@
         "baseDmg": 30,
         "selectedUpg": null,
         "upgA": {
-          "name": "Heavy Shafts",
-          "desc": "Heavier arrows: wider impacts that briefly slow enemies"
+          "name": "Storm Rain",
+          "desc": "The volley becomes a storm cloud that rains arrows on its circle for 4 s (each arrow 45% of the hit, no falloff)."
         },
         "upgB": {
-          "name": "Rain of Arrows",
-          "desc": "Looses more arrows over a larger area"
+          "name": "Focused Barrage",
+          "desc": "Every arrow converges on the enemy nearest the cursor; the first 6 deal full damage."
         }
       }
     }

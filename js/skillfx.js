@@ -18,7 +18,7 @@ function withAlpha(hex, a) {
 // ==========================================
 
 function drawSkillProjectile(p) {
-    if (drawSpaceProjectile(p) || drawUltProjectile(p) || drawRmbProjectile(p)) return true; // skillfx_space.js, skillfx_ult.js, skillfx_rmb.js
+    if (drawSpaceProjectile(p) || drawUltProjectile(p) || drawRmbProjectile(p) || drawSpellProjectile(p)) return true; // skillfx_space.js, skillfx_ult.js, skillfx_rmb.js
     if (p.type === 'hallowed_ground') return true; // drawn on the ground layer (drawGroundProjectiles)
     if (p.type === 'tesla_coil_trap') { drawTeslaCoil(p); return true; }
     if (p.isRetribution) { drawRetributionBolt(p); return true; }
@@ -277,7 +277,7 @@ function drawSkillGround(ef) {
 
 function drawSkillEffect(ef) {
     const k = clamp01(ef.life / ef.maxLife), p = 1 - k;
-    if (drawESkillEffect(ef, p, k) || drawSpaceEffect(ef, p, k) || drawUltEffect(ef, p, k) || drawRmbEffect(ef, p, k)) return true;
+    if (drawESkillEffect(ef, p, k) || drawSpaceEffect(ef, p, k) || drawUltEffect(ef, p, k) || drawRmbEffect(ef, p, k) || drawSpellEffect(ef, p, k)) return true;
     switch (ef.type) {
         case 'heavy_slam': { // Dragonknight full overhead slam: the blade bites in, dust and a shockwave roll out (skills.js 'sword')
             const R = ef.radius, col = ef.fire ? '#ff7043' : '#ffe0b2';

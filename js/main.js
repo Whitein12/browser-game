@@ -4,13 +4,16 @@
 
 // Menu flow: dungeon map (menu.js) -> class carousel -> run
 window.selectDungeon = (did) => { activeDungeonId = did; activeDungeon = enemyDataConfig[did]; showClassSelection(); };
-window.chooseClass = (cid) => { selectedClassId = cid; if (cid === 'druid') showCompanionChoice(); else startGame(cid); }; // druid.js: wolf or black jaguar first
+window.chooseClass = (cid) => { selectedClassId = cid; if (cid === 'druid') showCompanionChoice(); else if (cid === 'spellweaver') showSpellbook(() => startGame(cid)); else startGame(cid); }; // druid.js: wolf or black jaguar first; spellweaver.js: the four spells first
 
 function startGame(className) {
     activeClass = JSON.parse(JSON.stringify(classDataConfig[className])); 
+    if (activeClass.name === 'Spellweaver') applyLoadout(player.spells || lastLoadout(), true); // spellweaver.js: the spells on the keys
+    resetSpellweaverState();
     player.color = activeClass.color; player.x = canvas.width / 2; player.y = canvas.height / 2;
-    player.level = 1; player.xp = 0; player.maxXp = 50; player.gold = 0; player.bonusDmg = 0.0; player.orbDmg = 0.0; player.bonusMaxHp = 0; player.skillPoints = 1;
+    player.level = 1; player.xp = 0; player.maxXp = xpToNext(1); player.gold = 0; player.orbDmg = 0.0; player.skillPoints = TREE_PTS_PER_LEVEL;
     wave = 0; equipment = { weapon: null, armor: null, amulet: null, boots: null, gloves: null }; inventory = [];
+    treeReset(); // skilltree.js: nothing learned yet
     isEndlessMode = false;
     
     player.blade = null;
@@ -24,8 +27,9 @@ function startGame(className) {
     buffs.rooted = 0; buffs.weakened = 0; buffs.evade100 = 0; buffs.deathMarkActive = 0; buffs.overclockTimer = 0; buffs.dragonfire = 0; buffs.lightningRod = false;
     player.phantomDecoy = null;
     player.dash = null; player.z = 0; player.grappleTarget = null; player.charge = null; player.heavy = null; comboOpen = null; dashGhosts.length = 0;
+    player.hang = null; player.prey = null; player.vaultCharges = undefined; player.vaultRecharge = 0; buffs.windwalk = buffs.focus = buffs.disengage = buffs.tvGuard = 0; // skills.js evolutions
     resetPaladinState();
-    enemies.length = 0; projectiles.length = 0; effects.length = 0; drops.length = 0; gameTimers.length = 0; particles.length = 0;
+    enemies.length = 0; projectiles.length = 0; effects.length = 0; drops.length = 0; gameTimers.length = 0; particles.length = 0; dmgNumbers.length = 0; dmgPending.clear();
     currentMap.type = null; setStageMap(mapTypeForWave(1)); // stage.js: places the hero at the map's start
     resetDruidState(true); // druid.js: the wolf starts at the hero's side, Bond empty
     
@@ -34,7 +38,7 @@ function startGame(className) {
     el('hud').classList.remove('hidden');
     el('hud-top').classList.remove('hidden');
     if (isTraining()) startTraining(); // training.js: no waves, every skill at rank 1, the panel
-    else triggerLevelUp("Choose Starting Skill");
+    else openTree(true); // skilltree.js: learn the first skill, then wave 1 starts
     loop();
 }
 
@@ -73,12 +77,12 @@ window.startNextWave = function() {
     if (fresh) { player.dash = null; player.z = 0; player.grappleTarget = null; player.charge = null; player.heavy = null; } // never carry a dash or a charge across a map change
 
     if (fresh) resetDruidState(); // druid.js: the companion comes back to heel (spirits stay through a regular wave)
+    if (fresh) resetSpellweaverState(); // spellweaver.js: runes and zones stay on their map
     if (wave > 1) awakenWeapon(); // items.js: the last wave was cleared, so the rare weapon grows
     el('intermission-screen').classList.add('hidden'); el('inventory-screen').classList.add('hidden'); el('shop-screen').classList.add('hidden');
     player.hp = Math.min(player.maxHp, player.hp + (player.maxHp * 0.3)); 
     waveStats = { kills: 0, gold0: player.gold, time: 0, dmgTaken: 0, peak: 0 };
     gameState = STATE.PLAYING; lastTime = performance.now(); updateHUD(); showWaveBanner();
-    if (player.skillPoints > 0) triggerLevelUp();
 }
 
 // ==========================================
@@ -109,12 +113,12 @@ initializeData();
 
 function recalcStats() {
     let gearHp = equipment.armor ? equipment.armor.val : 0;
-    player.maxHp = activeClass.baseMaxHp + gearHp + (player.bonusMaxHp || 0);
+    player.maxHp = activeClass.baseMaxHp + gearHp + (player.treeHp || 0); // skilltree.js: Vitality
     player.armor = activeClass.baseArmor;
     if (player.hp > player.maxHp) player.hp = player.maxHp;
 
     let gearMs = equipment.boots ? equipment.boots.val : 0;
-    player.speed = 250 + gearMs;
+    player.speed = 250 + gearMs + (player.treeSpeed || 0); // skilltree.js: Fleetness
     
     player.maxFlow = 100;
     
@@ -272,7 +276,7 @@ function castSkill(i, k, opt) { // opt: extra flags for the skill (combos.js, e.
     const before = { x: player.x, y: player.y, zeal: buffs.zealLocked && buffs.aspectOfReaper <= 0 ? 100 : (player.zeal || 0),
         anchor: i === 3 && activeClass.name === 'Machinist' ? projectiles.find(p => (p.type === 'turret' || p.type === 'tesla_coil_trap') && Math.hypot(p.x - mouseX, p.y - mouseY) < 50) : null };
     window.SkillRegistry[activeClass.name][i](sk, dmg, k, opt);
-    if (i === 3) { // combos.js: the dash (or a pull: Paladin charge / Iron Pull, Machinist grapple) opens the finisher window when it lands
+    if (i === 3 && !isSpellbook()) { // spellweaver.js swMoved does it for any movement spell. combos.js: the dash (or a pull: Paladin charge / Iron Pull, Machinist grapple) opens the finisher window when it lands
         comboCastAt = fxTime; // only an LMB press from now on counts for the finisher
         if (player.dash) player.dash.combo = true; else if (player.grappleTarget) player.grappleTarget.combo = true;
         else openCombo({ x0: before.x, y0: before.y, x1: player.x, y1: player.y }); // an instant one (Blink): the path from where it started
@@ -320,6 +324,7 @@ function update(dt) {
     updateFx(dt);
     updatePaladin(dt);
     updateDruid(dt); // druid.js: the wolves
+    updateSpellweaver(dt); // spellweaver.js: runes, zones, Time Stop, the mirror
     updateBanditFx(dt); // bandits.js: fire on the ground, lit powder kegs
     if (enemiesToSpawn > 0) { enemySpawnTimer -= dt; if (enemySpawnTimer <= 0) { spawnEnemy(); enemySpawnTimer = Math.max(0.5, 2.0 - (wave * 0.1)); } }
     if (cooldowns.basic > 0) cooldowns.basic -= dt;
@@ -330,6 +335,8 @@ function update(dt) {
     if (buffs.rooted > 0) buffs.rooted -= dt;
     if (buffs.dragonfire > 0) buffs.dragonfire -= dt;
     updateCombo(dt); // combos.js: the finisher window runs out
+    if (player.hang) updateHang(dt); // skills.js Meteor Dive: hanging in the air
+    if (activeClass.name === 'Ranger') updateRanger(dt); // skills.js: Windwalk, Focus, Disengage, Twin Vault's charges
     if (buffs.weakened > 0) buffs.weakened -= dt;
     if (buffs.evade100 > 0) buffs.evade100 -= dt;
     if (buffs.deathMarkActive > 0) buffs.deathMarkActive -= dt;
@@ -341,7 +348,7 @@ function update(dt) {
 
     if (player.shield > 0) { player.shieldTimer -= dt; if (player.shieldTimer <= 0) { player.shield = 0; updateHUD(); } }
     // Frenzy: after 3 s without a melee hit, stacks drain one every 0.5 s (a short dodge doesn't wipe the bar)
-    if (activeClass && activeClass.name === 'Dragonknight' && player.frenzyStacks > 0 && (player.frenzyTimer -= dt) <= 0) { player.frenzyStacks--; player.frenzyTimer = 0.5; }
+    if (activeClass && activeClass.name === 'Dragonknight' && player.frenzyStacks > 0 && !(buffs.dragonfire > 0 && hasTalent('wyrm_frenzy')) && (player.frenzyTimer -= dt) <= 0) { player.frenzyStacks--; player.frenzyTimer = 0.5; } // talents.js Blood Frenzy: none fade while the blade burns
     if (equipment.armor && equipment.armor.name === 'Hazard Suit') buffs.slowed = 0;
 
     if (activeClass && activeClass.name === 'Nightblade') {
@@ -629,6 +636,7 @@ function update(dt) {
     if (buffs.slowed > 0) currentSpeed *= 0.5;
     if (activeClass.name === 'Ranger') currentSpeed *= 1 + player.momentum; // Fleetfoot: momentum is move speed too
     if (player.charge) currentSpeed *= player.charge.slow; // drawing a charged shot
+    currentSpeed *= swMoveMult(); // spellweaver_evo.js: Meteor Shower, Resolve
     if (player.heavy && player.heavy.raw >= SLAM_TAP) currentSpeed *= SLAM_SLOW; // the greatsword raised overhead
     if (player.wading) currentSpeed *= 0.5; // map_cavern.js: knee-deep in a slime lake
     if (buffs.rooted > 0) currentSpeed = 0;
@@ -665,6 +673,7 @@ function update(dt) {
         player.stillTime = (player.stillTime || 0) + dt;
         if (player.stillTime > 1.0) player.momentum = Math.max(0, player.momentum - 0.10 * dt);
     }
+    if (buffs.focus > 0) player.momentum = 0.20; // skills.js Hunter's Focus: full even standing still
 
     for (let i = drops.length - 1; i >= 0; i--) {
         const d = drops[i]; d.life -= dt; if (d.life <= 0) { drops.splice(i, 1); continue; }
@@ -727,6 +736,7 @@ function update(dt) {
     for (let i = projectiles.length - 1; i >= 0; i--) {
         const p = projectiles[i]; 
         if (!p) continue; // the Queen's last stand / death clears her shots mid-loop (map_hive.js)
+        if (p.isEnemy && swShotStill(p)) continue; // spellweaver_evo.js Time Stop / Stasis Field: enemy shots hang in the air
         
         if (p.customUpdate) { p.customUpdate(dt, p); }
         if (p.homeTarget) steerShot(p, dt); // skills.js: Ranger aim assist (not a customUpdate, so rock still stops the arrow)
@@ -779,7 +789,8 @@ function update(dt) {
                 continue;
             }
 
-            if (p.type !== 'trap_throw' && p.type !== 'spore' && p.type !== 'sling_stone' && p.type !== 'firepot' && Math.hypot(p.x - player.x, p.y - player.y) < player.radius + p.radius) { 
+            if (p.type !== 'trap_throw' && p.type !== 'spore' && p.type !== 'sling_stone' && p.type !== 'firepot' && Math.hypot(p.x - player.x, p.y - player.y) < player.radius + p.radius) {
+                if (buffs.windwalk > 0) { if (!p.windPassed) { p.windPassed = true; windwalkShot(p); } continue; } // skills.js Ranger Windwalk: it passes through
                 takeDamage(p.damage, false, { isProjectile: true, proj: p }); 
                 if (p.type === 'boss_slimeball') { effects.push({ type: 'puddle', x: p.x, y: p.y, radius: 30, color: '#009688', life: 1.5, maxLife: 1.5 }); }
                 if (p.type === 'bolas') { 
@@ -794,14 +805,16 @@ function update(dt) {
             if (p.type === 'shield_throw') {
                 const leap = player.dash && player.dash.shields && player.dash.shields.includes(p) ? player.dash : null; // combos.js Skyfall Catch
                 if (leap && Math.hypot(p.x - player.x, p.y - player.y) < p.radius + player.radius + SKYFALL_REACH) { // snatched out of the air, either way it flies
-                    leap.skyfall = true; catchShield(p.sourceSkill); projectiles.splice(i, 1); continue;
+                    leap.skyfall = true; catchShield(p.sourceSkill, p); projectiles.splice(i, 1); continue;
                 }
+                if (p.lodged) { updateLodged(p, dt); continue; } // skills.js Hunting Shield: it stays in its prey, grinding
+                if (p.homeTarget && !p.returning) steerShot(p, dt); // Relentless Hunt: on to the next prey
                 if (p.hold) updateShieldHold(p, dt); // combos.js: a leap aimed at it holds it in the air
                 if (p.batted && updateBattedShield(p, dt)) continue; // combos.js Rebound: it ricochets for itself
                 if (!p.returning && !p.hold && (p.life <= 1.0 || p.x<=currentMap.left+20 || p.x>=currentMap.right-20 || p.y<=currentMap.top+20 || p.y>=currentMap.bottom-20)) { p.returning = true; p.hitList = []; }
                 if (p.returning) { // flies back to the Dragonknight wherever they are; touching it is the catch
                     const [rx, ry, rd] = getVector(p.x, p.y, player.x, player.y);
-                    if (rd < p.radius + player.radius) { catchShield(p.sourceSkill); projectiles.splice(i, 1); continue; }
+                    if (rd < p.radius + player.radius) { catchShield(p.sourceSkill, p); projectiles.splice(i, 1); continue; }
                     p.vx = (rx/rd)*900; p.vy = (ry/rd)*900; p.life = Math.max(p.life, 0.5); // never expires on the way home
                 }
             }
@@ -813,9 +826,11 @@ function update(dt) {
                 if (Math.hypot(p.x - e.x, p.y - e.y) < e.size/2 + p.radius) {
                     if ((p.pierce || p.type === 'shield_throw' || p.type === 'fan_of_knives' || p.type === 'scattergun' || p.type === 'censer_pulse' || p.type === 'ricochet') && p.hitList.includes(e)) continue; // a ricochet never re-hits the enemy it just bounced off
 
-                    if (p.type === 'fireball' || p.resonance) {
+                    if (p.spellHit) p.spellHit(p, e); // spellweaver_evo.js: Arcane Shotgun, echo darts
+                    else if (p.type === 'fireball' || p.resonance) {
                         let explRadius = p.resonance ? resonanceRadius() : (p.sourceSkill && p.sourceSkill.selectedUpg === 'B' ? 100 : 70);
                         if (p.resonance && !p.weaveDone) { p.weaveDone = true; weaveRefund(); } // skills.js: a landed empowered bolt speeds up the next spells
+                        if (p.resonance && isSpellbook()) swBoltHit(e); // spellweaver_evo.js: it sets a Searing Brand off
                         effects.push({ type: 'fiery_explosion', x: p.x, y: p.y, radius: explRadius, life: 0.4, maxLife: 0.4 });
                         if (p.sourceSkill && p.sourceSkill.selectedUpg === 'B') {
                             effects.push({ type: 'fire_puddle', x: p.x, y: p.y, radius: explRadius, color: 'rgba(255, 87, 34, 0.4)', life: 0.75, maxLife: 0.75, dmg: p.damage * 0.5 });
@@ -825,12 +840,8 @@ function update(dt) {
                         }
                     } else if (p.type === 'shield_throw') {
                         applyDamage(e, p.damage, 'melee');
-                        if (p.sourceSkill && p.sourceSkill.selectedUpg === 'A') {
-                            effects.push({ type: 'shield_blast', x: e.x, y: e.y, radius: 60, life: 0.3, maxLife: 0.3 });
-                            for(let k=enemies.length-1; k>=0; k--) {
-                                if (e !== enemies[k] && Math.hypot(e.x - enemies[k].x, e.y - enemies[k].y) <= 60 + enemies[k].size/2) applyDamage(enemies[k], p.damage*0.5, 'melee');
-                            }
-                        }
+                        if (!p.returning && hasTalent('shield_stun') && !e.dead && !e.type.startsWith('boss')) e.stunTimer = Math.max(e.stunTimer || 0, 0.4); // talents.js Heavy Rim
+                        if (!p.returning && !p.lodged && !e.dead && p.sourceSkill && p.sourceSkill.selectedUpg === 'B' && (p.lodges || 0) < (hasTalent('hunt_relentless') ? 2 : 1)) lodgeShield(p, e); // skills.js Hunting Shield
                     } else if (p.type === 'ricochet') {
                         applyDamage(e, p.damage, 'ranged');
                         if (p.bounces > 0) {
@@ -852,10 +863,11 @@ function update(dt) {
                         e.rootedTimer = 2.0; e.netTimer = 2.0; e.nettedAt = fxTime; // combos.js Conductive Net
                     } else if (p.type === 'bramble_core') {
                         snareBurst(p.x, p.y, p.damage, p.sourceSkill); // druid.js
-                    } else { applyDamage(e, p.damage, activeClass.name === 'Ranger' ? 'ranged' : (p.source === 'fan_of_knives' ? 'assassin_skill' : 'magic'), Math.atan2(p.vy, p.vx)); }
+                    } else { applyDamage(e, p.damage * (p.markOn ? preyHit(p, e) : 1), activeClass.name === 'Ranger' ? 'ranged' : (p.source === 'fan_of_knives' ? 'assassin_skill' : 'magic'), Math.atan2(p.vy, p.vx)); } // skills.js preyHit: Hunter's Mark
                     
                     if (p.type === 'druid_spore') { druidBoltHit(e); if (p.call) pounceCall(e); } // druid.js: Packbond Bracers; Pounce Strike (combos.js)
                     if (p.burn) { e.burnTimer = 3.0; e.burnDps = p.burn; e.burnColor = p.burnColor; } // Dragon Breath: refreshes, doesn't stack
+                    if (p.sunder && !e.dead) sunderEnemy(e); // skills.js: Sundering Breath
 
                     if (p.type === 'censer_pulse') {
                         if (!buffs.zealLocked) {
@@ -877,6 +889,7 @@ function update(dt) {
         const e = enemies[i];
         if (e.dead) continue;
         if (e.pod) continue; // map_hive.js brood pods just sit there until popped or hatched
+        if (swStill(e)) continue; // spellweaver_evo.js: Time Stop, Stasis Field, Ward Prison, Counterspell hold it still
         if (e.spawnT > 0) { e.spawnT -= dt; continue; } // stage.js spawn: still forming
         const ccDt = e.type.startsWith('boss') ? dt * BOSS_CC_RATE : dt; // bosses shake crowd control off faster
         if (e.frozenTimer > 0) { e.frozenTimer -= ccDt; e.renderColor = '#90caf9'; }
@@ -1480,6 +1493,7 @@ function draw() {
     }
 
     drawDruidGround(); // druid.js: scent rings, brambles, leap slams
+    drawSpellweaverGround(); // spellweaver.js: runes, glyphs, wells, the anchor
     drawPaladinWorld();
 
     for (const e of enemies) {
@@ -1714,7 +1728,9 @@ function draw() {
     if (currentMap.type === 'castle') drawCastleAbove(); // map_castle.js: banners, the forge's smoke, chandeliers
     drawEnemyOverlay(); // enemysprites.js: lightning coming down from above
     drawFx(); // fx.js particles
+    drawSpellweaverWorld(); // spellweaver.js: the mirror, the ward, Time Stop's grey
     drawUltOverlay(); // skillfx_ult.js: things in the air above everything
+    drawDmgNumbers(); // fx.js
     ctx.restore(); // end camera shake
 
     drawStageScreen(); // stage.js: vignette, pointer to the cave

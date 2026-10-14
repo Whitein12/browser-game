@@ -45,16 +45,14 @@ function itemsOnCast(i, before) {
         effects.push({ type: 'text', text: '+25 Zeal', x: player.x, y: player.y - 40, color: '#ffd54f', life: 0.7, maxLife: 0.7 });
     }
     if (i !== 3) return;
-    if (n === 'Spellweaver' && hasItem('Blinkstep Slippers')) blinkEcho(before.x, before.y);
-    else if (n === 'Nightblade' && hasItem('Shadowstep Boots')) shadowPuff(before.x, before.y);
+    if (n === 'Nightblade' && hasItem('Shadowstep Boots')) shadowPuff(before.x, before.y);
     else if (n === 'Cleric' && hasItem("Pilgrim's Sandals")) pilgrimLight(before.x, before.y);
     else if (n === 'Ranger' && hasItem('Trailblazer Boots')) player.momentum = 0.20; // Vault fills Momentum
     else if (n === 'Machinist' && hasItem('Mag-Lock Boots') && before.anchor) magLock(before.anchor);
 }
 
-// Blinkstep Slippers: an arcane echo is left where the Spellweaver blinked from, and bursts a moment later
-function blinkEcho(x, y) {
-    const sk = activeClass.skills[3], dmg = calcDmg(sk.baseDmg, sk.level);
+// Blinkstep Slippers: an arcane echo is left where any movement spell took the Spellweaver from (spellweaver.js swMoved), and bursts a moment later
+function blinkEcho(x, y, dmg) {
     effects.push({ type: 'circle_burst', x, y, radius: 40, color: 'rgba(179, 136, 255, 0.6)', life: 0.5, maxLife: 0.5 });
     after(0.5, () => {
         effects.push({ type: 'circle_burst', x, y, radius: 100, color: 'rgba(124, 77, 255, 0.85)', life: 0.35, maxLife: 0.35 });

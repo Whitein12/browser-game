@@ -23,7 +23,7 @@ function powerParts() {
     if (n === 'Cleric' && buffs.aspectOfReaper > 0) P.push(['Aspect of the Reaper', 0.50, true]);
     if (n === 'Cleric' && buffs.ascension > 0) P.push(['Ascension', 0.25, true]);
     if (player.orbDmg > 0) P.push([`Power orbs${player.orbDmg >= ORB_DMG_CAP ? ' (max)' : ''}`, player.orbDmg]);
-    if (player.bonusDmg > 0) P.push(['Blessings', player.bonusDmg]);
+    if (player.treePower > 0) P.push(['Talents', player.treePower]); // skilltree.js: Might
     return P;
 }
 function powerMult() { return powerParts().reduce((s, p) => s + p[1], 0); }
@@ -42,7 +42,7 @@ function calcUtility(baseAmount, skillLevel = 1) {
     return baseAmount + (skillLevel > 1 ? (skillLevel - 1) * (baseAmount * RANK_SCALE) : 0);
 }
 
-// Shield breakers (Shatter Breath, Desecration): break a Bandit frontal shield, or pop every Slime Warden orb at once
+// Shield breakers (Sundering Breath, Desecration): break a Bandit frontal shield, or pop every Slime Warden orb at once
 // (it's stunned as if the last orb popped; the orbs regrow as usual)
 function shatterShields(e) {
     let broke = false;
@@ -68,7 +68,7 @@ function calcCooldown(baseCd, skillLevel = 1) {
 }
 
 // Only dashes (Space) and the Kensei's stance toggle get shorter with rank; every other skill keeps its base cooldown
-function rankScalesCooldown(slot) { return slot === 3 || (activeClass.name === 'Kensei' && slot === 2); }
+function rankScalesCooldown(slot) { return isSpellbook() ? !!(spellOf(slot) && spellOf(slot).move) : slot === 3 || (activeClass.name === 'Kensei' && slot === 2); } // the Spellweaver: its movement spells, on any key
 function skillBaseCd(slot, level) {
     const sk = activeClass.skills[slot];
     return rankScalesCooldown(slot) ? calcCooldown(sk.maxCd, level) : sk.maxCd;
@@ -77,6 +77,7 @@ function skillBaseCd(slot, level) {
 function getCDR() {
     let cdr = 1.0;
     if (equipment.amulet) cdr -= equipment.amulet.val; // every amulet's val is its CDR (class rares: 20%)
+    cdr -= player.treeCdr || 0; // skilltree.js: Focus
     if (activeClass && activeClass.name === 'Cleric' && buffs.aspectOfReaper > 0) cdr -= 0.50; // Aspect of the Reaper -50% CD
     return Math.max(1 - MAX_CDR, cdr);
 }
@@ -99,11 +100,13 @@ function generateItem(tierLevel) {
 
 function applyDamage(enemy, amount, source = 'player', projAngle = null) {
     if (enemy.dead || enemy.submerged) return; // the Amalgam's Undertow: nothing reaches it under the floor (no IMMUNE spam)
+    amount = swOnDamage(enemy, amount, source, projAngle); if (amount < 0) return; // spellweaver_evo.js: Time Stop holds the hit; shatters, shackles, Hex
     amount *= HIT_SCALE; // Global player damage reduction
 
     if (source === 'melee_basic') hitStopTimer = 0.04;
     if (enemy.isStaggered) amount *= 2.0;
     if (player.tether && player.tether.target === enemy) amount *= SHACKLE_VULN; // paladin.js Divine Tether: a shackled enemy takes +20% from you
+    amount *= talentDmgMult(enemy); // talents.js: Frostbite, Sunder
 
     if (enemy.invulnerable) { // immune phases stop everything, weak points included (and the mark isn't wasted)
         effects.push({ type: 'text', text: 'IMMUNE', x: enemy.x, y: enemy.y - 20, color: '#03a9f4', life: 0.6, maxLife: 0.6 });
@@ -149,6 +152,7 @@ function applyDamage(enemy, amount, source = 'player', projAngle = null) {
     if (enemy.reflective) takeDamage(amount * 0.5);
 
     enemy.hp -= amount + weak;
+    addDmgNumber(enemy, amount + weak, source); // fx.js
     spawnHitFx(enemy, source, projAngle);
     if (activeClass.name === 'Druid') druidOnHit(enemy, source); // druid.js: what you hit carries your Scent
     itemsOnHit(enemy, source); // items.js
@@ -256,6 +260,7 @@ function takeDamage(amount, isContinuous = false, sourceObj = null) {
 
     if (equipment.armor && equipment.armor.name === 'Hazard Suit' && (isContinuous || amount < 5)) return;
     amount = itemsDamageTaken(amount, isContinuous); // items.js: class armors (0 = dodged)
+    amount = talentsDamageTaken(amount, isContinuous, sourceObj); // talents.js: Scaled Hide
     if (amount <= 0) return;
     
     // Cleric Vestments of the Fractured Soul interaction
@@ -289,8 +294,9 @@ function takeDamage(amount, isContinuous = false, sourceObj = null) {
     if (!isContinuous) amount = Math.max(1, amount * (1 - armorReduction(pierce ? 0 : armor)));
     
     if (player.shield > 0) {
-        if (player.shield >= amount) { player.shield -= amount; return; }
-        else { amount -= player.shield; player.shield = 0; player.shieldTimer = 0; }
+        if (player.shield > amount) { player.shield -= amount; return; }
+        amount -= player.shield; player.shield = 0; player.shieldTimer = 0;
+        if (amount <= 0) return;
     }
     
     // Kensei, Razor's Edge (skills.js): a hit that gets through costs Flow. The Ronin's Silk Shroud softens it, and Airborne
@@ -318,6 +324,7 @@ function takeDamage(amount, isContinuous = false, sourceObj = null) {
     }
 
     if (player.hp <= 0 && trainingGod()) player.hp = 1; // training.js: god mode
+    if (player.hp <= 0) talentsLethal(); // talents.js: Undying Flame
     if (player.hp <= 0) playerDied();
     updateHUD();
 }
@@ -331,10 +338,15 @@ function playerDied() {
 }
 function showDeathScreen() { gameState = STATE.DEAD; el('death-wave').innerText = wave; el('death-screen').classList.remove('hidden'); }
 
+// XP from one level to the next: 50 at Lv. 1, then x1.5 a level (the old curve, kept until the campaign's balance pass)
+const XP_FIRST = 50, XP_GROWTH = 1.5;
+function xpToNext(level) { let x = XP_FIRST; for (let l = 1; l < level; l++) x = Math.floor(x * XP_GROWTH); return x; }
+
+// A level gives skill points; they wait on the skill web (skilltree.js), so the fight never stops for them
 function gainXP(amount) {
     player.xp += amount; let leveledUp = false;
-    while (player.xp >= player.maxXp) { player.level++; player.xp -= player.maxXp; player.maxXp = Math.floor(player.maxXp * 1.5); player.skillPoints++; leveledUp = true; }
-    if (leveledUp && gameState === STATE.PLAYING) triggerLevelUp();
+    while (player.xp >= player.maxXp) { player.level++; player.xp -= player.maxXp; player.maxXp = xpToNext(player.level); player.skillPoints += TREE_PTS_PER_LEVEL; leveledUp = true; }
+    if (leveledUp) levelUpNotice();
     updateHUD();
 }
 
@@ -343,6 +355,7 @@ function checkEnemyDeath(e) {
     if (e.hp <= 0 && !e.dead) {
         e.dead = true;
         enemyDeathFx(e); // enemysprites.js
+        talentsOnKill(e); // talents.js: Wildfire, Shatterfrost
         if (e.dummy) { trainingDummyDied(e); return; } // training.js: no loot, no XP, no wave; it's back on its post soon
         if (e.loot > 0) cutpurseLoot(e); // ai.js: a cutpurse killed with your gold drops it x1.5
 

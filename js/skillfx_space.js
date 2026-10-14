@@ -46,7 +46,7 @@ function updateDash(dt) {
     const px = player.x, py = player.y;
     player.x = lerp(d.x0, d.x1, e); player.y = lerp(d.y0, d.y1, e);
     clampToBounds(player, player.radius);
-    player.z = d.arc * Math.sin(q * Math.PI);
+    player.z = (d.z0 || 0) * (1 - q) + d.arc * Math.sin(q * Math.PI); // z0: a dive starts high (skills.js Meteor Dive)
     if (d.iFrames) player.iFrames = Math.max(player.iFrames, 0.05);
     if (d.trail) { d.trail.x2 = player.x; d.trail.y2 = player.y; }
     if (d.onStep) d.onStep(px, py, player.x, player.y);
@@ -202,6 +202,9 @@ function drawRuneRing(x, y, R, rot, color, alpha, ticks = 12) {
 // ==========================================
 
 function drawSpaceGround(ef) {
+    if (ef.type === 'molten_trail') { drawMoltenTrail(ef); return true; }
+    if (ef.type === 'meteor_mark') { drawMeteorMark(); return true; }
+    if (ef.type === 'gravity_pull' || ef.type === 'gravity_well') { drawGravity(ef); return true; }
     if (ef.type !== 'aftershock_zone') return false;
     // Dragonknight Aftershock: the landing zone charges up, chevrons closing in, until it detonates
     const p = 1 - clamp01(ef.life / ef.maxLife), R = ef.radius;
@@ -224,6 +227,58 @@ function drawSpaceGround(ef) {
     }
     ctx.restore();
     return true;
+}
+
+// Dragonknight Molten Aegis (skills.js moltenTrail): one clean line of fire, not pieces. Three passes (a soft ember glow, an orange
+// band, a thin hot core), each piece of the trail (a throw's line; brk starts another) stroked as ONE path with normal blending,
+// so nothing stacks into beads. The fade runs along a gradient from its old end to its new end (the lines are straight throws).
+const MOLTEN_PASSES = [[1.25, '214, 64, 24', 0.22], [0.5, '255, 138, 50', 0.55], [0, '255, 236, 179', 0.9]]; // [width x w (0: 3 px), rgb, alpha]
+function drawMoltenTrail(ef) {
+    const P = ef.pts; if (P.length < 2) return;
+    const flick = 0.9 + 0.1 * Math.sin(fxTime * 9), fade = q => clamp01(2.5 * (1 - (fxTime - q.t) / ef.dur));
+    ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    for (let s = 0; s < P.length - 1;) {
+        let e = s + 1; while (e + 1 < P.length && !P[e + 1].brk) e++; // the piece runs P[s]..P[e]
+        if (P[s + 1].brk) { s++; continue; }
+        const A = P[s], B = P[e];
+        for (const [wk, rgb, alpha] of MOLTEN_PASSES) {
+            const g = ctx.createLinearGradient(A.x, A.y, B.x, B.y);
+            g.addColorStop(0, `rgba(${rgb}, ${alpha * fade(A) * flick})`); g.addColorStop(1, `rgba(${rgb}, ${alpha * fade(B) * flick})`);
+            ctx.strokeStyle = g; ctx.lineWidth = wk ? ef.w * wk : 3;
+            ctx.beginPath(); ctx.moveTo(A.x, A.y); for (let i = s + 1; i <= e; i++) ctx.lineTo(P[i].x, P[i].y); ctx.stroke();
+        }
+        s = e;
+    }
+    ctx.restore();
+}
+// Dragonknight Meteor Dive: while you hang, where the dive will land and how big it's grown (skills.js meteorTarget)
+function drawMeteorMark() {
+    const h = player.hang; if (!h) return;
+    const [tx, ty] = meteorTarget(), k = Math.min(1, h.t / h.max), R = diveRadius(k), spin = fxTime * 2;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255, 171, 64, 0.25)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(player.x, player.y); ctx.lineTo(tx, ty); ctx.stroke();
+    ctx.fillStyle = `rgba(255, 112, 67, ${0.08 + 0.17 * k})`; ctx.beginPath(); ctx.arc(tx, ty, R, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = `rgba(255, 171, 64, ${0.55 + 0.35 * k})`; ctx.lineWidth = 2.5;
+    for (let i = 0; i < 4; i++) { const a = spin + i * Math.PI / 2; ctx.beginPath(); ctx.arc(tx, ty, R, a, a + 1.1); ctx.stroke(); }
+    ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(tx, ty, R * (0.35 + 0.65 * k), 0, Math.PI * 2); ctx.stroke(); // grows with the hang
+    for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 - spin; ctx.beginPath(); ctx.moveTo(tx + Math.cos(a) * 10, ty + Math.sin(a) * 10); ctx.lineTo(tx + Math.cos(a) * 22, ty + Math.sin(a) * 22); ctx.stroke(); }
+    ctx.restore();
+}
+// Dragonknight Gravity Slam: rings drawn inward (the pull), and Singularity's well, a slow dark swirl (skills.js gravitySlam)
+function drawGravity(ef) {
+    const R = ef.radius, el = ef.maxLife - ef.life, fade = clamp01(ef.life / 0.4);
+    ctx.save(); ctx.translate(ef.x, ef.y);
+    if (ef.type === 'gravity_well') {
+        const g = ctx.createRadialGradient(0, 0, 0, 0, 0, R);
+        g.addColorStop(0, `rgba(20, 10, 40, ${0.55 * fade})`); g.addColorStop(0.6, `rgba(103, 58, 183, ${0.18 * fade})`); g.addColorStop(1, 'rgba(103, 58, 183, 0)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = `rgba(179, 136, 255, ${0.5 * fade})`; ctx.lineWidth = 2;
+        for (let i = 0; i < 5; i++) { const a = -el * 2.2 + i * Math.PI * 2 / 5, r = R * (0.3 + 0.12 * i); ctx.beginPath(); ctx.arc(0, 0, r, a, a + 1.4); ctx.stroke(); }
+    } else {
+        ctx.lineWidth = 3;
+        for (let i = 0; i < 3; i++) { const q = (el / 0.35 + i / 3) % 1; ctx.strokeStyle = `rgba(179, 136, 255, ${0.7 * q * fade})`; ctx.beginPath(); ctx.arc(0, 0, R * (1 - q) + 8, 0, Math.PI * 2); ctx.stroke(); }
+    }
+    ctx.restore();
 }
 
 // ==========================================
@@ -275,7 +330,8 @@ function drawSpaceEffect(ef, p, k) {
             drawStreak(ef.x1, ef.y1, ef.x2, ef.y2, (ef.width || 16) * (0.4 + 0.6 * k), ef.color, k);
             return true;
         }
-        case 'aftershock_zone': return true; // drawn on the ground layer
+        case 'ballista_push': case 'storm_cloud': return true; // skills.js: logic only / drawn on the ground layer
+        case 'aftershock_zone': case 'molten_trail': case 'meteor_mark': case 'gravity_pull': case 'gravity_well': return true; // drawn on the ground layer
 
         case 'thunder_slam': { // Dragonknight Thunder Leap landing / Aftershock detonation
             const col = ef.color || '#ff7043', R = ef.radius;

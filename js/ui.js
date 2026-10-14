@@ -1,5 +1,5 @@
 // ==========================================
-// ui.js - Level up & evolution, wave cleared / victory, inventory, shop, tooltips, dev console
+// ui.js - Rank numbers for the skill tree, wave cleared / victory, inventory, shop, tooltips, dev console
 // ==========================================
 // The HUD itself lives in hud.js.
 
@@ -187,7 +187,7 @@ function renderShop() {
 }
 
 // ==========================================
-// Level up & evolution
+// Rank numbers (the skill tree's tooltips, skilltree.js)
 // ==========================================
 
 // What each rank changes, per skill: RANK_STATS[class][slot](rank, sk) → [[label, value], ...], real numbers at your current Power
@@ -197,21 +197,20 @@ const RH = (base, r, m = 1) => { const v = hitDmg(base, r) * m; return v < 10 ? 
      RU = (x, r) => calcUtility(x, r), RS = v => `${(+v).toFixed(1)}s`, RP = v => `${Math.round(v)} px`;
 const RANK_STATS = {
     Dragonknight: {
-        1: (r, sk) => [['Hit', RH(sk.baseDmg, r)], ['Shield', Math.round(RU(sk.selectedUpg === 'B' ? 100 : 50, r))], ['Shield time', RS(RU(5, r))]],
+        1: (r, sk) => [['Hit', RH(sk.baseDmg, r)], ['Shield', Math.round(RU(50, r))], ['Shield time', RS(RU(5, r))],
+            ...(sk.selectedUpg === 'A' ? [['Trail per second', RH(sk.baseDmg, r, MOLTEN_DPS)]] : sk.selectedUpg === 'B' ? [['Grind', RH(sk.baseDmg, r, GRIND_MULT)], ['Rip free', RH(sk.baseDmg, r, RIP_MULT)]] : [])],
         2: (r, sk) => [['Basic damage', `+${Math.round(RU(0.5, r) * 100)}%`], ['Burn per second', RH(sk.baseDmg, r, 0.3)]],
-        3: (r, sk) => [['Landing hit', RH(sk.baseDmg, r)]],
+        3: (r, sk) => [['Landing hit', RH(sk.baseDmg, r)], ...(sk.selectedUpg === 'B' ? [['Full dive', RH(sk.baseDmg, r, DIVE_MULT)]] : [])],
         4: (r, sk) => [['Per flame', RH(sk.baseDmg, r, 0.25)], ['Burn per second', RH(sk.baseDmg, r, 0.2)]],
     },
-    Spellweaver: {
-        1: (r, sk) => [['Hit', RH(sk.baseDmg, r)]],
-        2: (r, sk) => [['Hit', RH(sk.baseDmg, r)], ...(sk.selectedUpg === 'B' ? [['Ice shield', Math.round(RU(60, r))], ['Shield time', RS(RU(5, r))]] : [])],
-        3: (r, sk) => [['Range', RP(blinkReach(r))], ...(sk.selectedUpg ? [[sk.selectedUpg === 'A' ? 'Missile' : 'Frost burst', RH(sk.baseDmg, r)]] : [])],
-        4: (r, sk) => [['Hit', RH(sk.baseDmg, r)]],
+    Spellweaver: { // spellweaver.js: each spell lists its own (SPELLS[id].stats), whichever key it's on
+        1: (r, sk) => SPELLS[sk.spell].stats(r, sk), 2: (r, sk) => SPELLS[sk.spell].stats(r, sk),
+        3: (r, sk) => SPELLS[sk.spell].stats(r, sk), 4: (r, sk) => SPELLS[sk.spell].stats(r, sk),
     },
     Ranger: {
         1: (r, sk) => [['Full draw', RH(sk.baseDmg, r)]],
-        2: (r, sk) => [['Heal', Math.round(RU(sk.selectedUpg === 'A' ? 30 : 15, r))], ['Speed time', RS(RU(sk.selectedUpg === 'B' ? 4 : 2, r))]],
-        3: (r, sk) => [['Distance', RP(vaultReach({ selectedUpg: sk.selectedUpg, level: r }))], ...(sk.selectedUpg === 'A' ? [['Parting Shot', RH(sk.baseDmg, r)]] : [])],
+        2: (r, sk) => [['Heal', Math.round(RU(15, r) * (hasTalent('stride_herb') ? 1.5 : 1))], ['Speed time', RS(RU(2, r) + (hasTalent('stride_light') ? 1 : 0))]],
+        3: (r, sk) => [['Distance', RP(vaultReach({ level: r }))]],
         4: (r, sk) => [['Per arrow', RH(sk.baseDmg, r)]],
     },
     Nightblade: {
@@ -266,86 +265,6 @@ function skillStats(slot, sk, from, to) {
     return L.join('<br>');
 }
 
-function triggerLevelUp(customTitle = null) {
-    if (gameState === STATE.EVOLVE || player.skillPoints <= 0) return;
-    gameState = STATE.LEVELUP; isProcessingClick = false; uiOpenedAt = performance.now();
-
-    el('levelup-title').textContent = customTitle ? customTitle : 'Level Up';
-    el('levelup-sub').innerHTML = customTitle ? 'Pick the skill you start the run with' : `Level ${player.level} · ${player.skillPoints} skill point${player.skillPoints > 1 ? 's' : ''} to spend`;
-    el('levelup-screen').classList.remove('hidden');
-    const container = el('skill-buttons'); container.innerHTML = '';
-    const cid = activeClassId();
-
-    let allMaxed = true;
-    for (let i = 1; i <= 4; i++) {
-        const sk = activeClass.skills[i], card = document.createElement('div');
-        card.className = 'skill-card'; card.style.setProperty('--cc', classColor()); card.dataset.slot = i;
-        let action, stats = '', pick = null;
-        if (i === 4 && player.level < 5 && sk.level === 0) { action = 'Unlocks at Lv. 5'; card.classList.add('disabled'); } // the starting pick too (the Training Room is for testing it)
-        else if (sk.level >= 4) { action = `Mastered · ${sk.selectedUpg === 'B' ? sk.upgB.name : sk.upgA.name}`; card.classList.add('disabled'); }
-        else {
-            allMaxed = false;
-            if (sk.level === 0) { action = 'Unlock'; stats = skillStats(i, sk, 0, 1); }
-            else if (sk.level === 3) { action = 'Evolve'; card.classList.add('evolve'); stats = `<span style="color:#b39ddb">${sk.upgA.name}</span><br>or <span style="color:#ffab91">${sk.upgB.name}</span>` + (skillStats(i, sk, 3, 4) ? '<br>' + skillStats(i, sk, 3, 4) : ''); }
-            else { action = `Rank ${sk.level} → ${sk.level + 1}`; stats = skillStats(i, sk, sk.level, sk.level + 1); }
-            pick = () => {
-                if (isProcessingClick) return; isProcessingClick = true;
-                if (sk.level === 3) triggerEvolution(i); else { sk.level++; finishLevelUp(); }
-            };
-        }
-        const pips = [0, 1, 2, 3].map(k => `<i class="${k < sk.level ? 'on' : (k === sk.level && pick ? 'next' : '')}"></i>`).join('');
-        card.innerHTML = `<kbd class="sc-key">${i}</kbd><span class="sc-slot">${SLOT_KEYS[i] === 'SPC' ? 'Space' : SLOT_KEYS[i]}</span><img class="sc-icon" src="${skillIcon(cid, i)}">
-            <div class="sc-name">${sk.name}</div><div class="sc-pips">${pips}</div><div class="sc-action">${action}</div><div class="sc-stats">${stats}</div>`;
-        if (pick) card.onclick = pick;
-        container.appendChild(card);
-    }
-
-    if (allMaxed && !customTitle) {
-        const card = document.createElement('div'); card.className = 'skill-card bonus'; card.dataset.slot = 'bonus';
-        card.innerHTML = `<div class="sc-name">All skills mastered</div><div class="sc-action">Take a blessing</div><div class="sc-stats">Max HP <b>+20</b><br>Power <b>+5</b></div>`;
-        card.onclick = () => {
-            if (isProcessingClick) return; isProcessingClick = true;
-            player.bonusMaxHp += 20; recalcStats(); player.hp += 20; player.bonusDmg += 0.05; finishLevelUp();
-        };
-        container.appendChild(card);
-    }
-}
-
-function triggerEvolution(skillIndex) {
-    el('levelup-screen').classList.add('hidden'); gameState = STATE.EVOLVE; evolvingSkillId = skillIndex; uiOpenedAt = performance.now();
-    const sk = activeClass.skills[skillIndex];
-    el('upgrade-screen').classList.remove('hidden');
-    el('evolve-skill-icon').src = skillIcon(activeClassId(), skillIndex);
-    el('evolve-skill-name').textContent = sk.name;
-    el('upg-a-title').textContent = sk.upgA.name; el('upg-a-desc').textContent = sk.upgA.desc;
-    el('upg-b-title').textContent = sk.upgB.name; el('upg-b-desc').textContent = sk.upgB.desc;
-    isProcessingClick = false;
-}
-
-window.selectUpgrade = function(path) {
-    if (gameState !== STATE.EVOLVE || isProcessingClick) return; isProcessingClick = true;
-    const sk = activeClass.skills[evolvingSkillId]; sk.level++; sk.selectedUpg = path;
-    el('upgrade-screen').classList.add('hidden');
-    el('dev-screen').classList.add('hidden'); // Force hide dev menu if it was open behind the upgrade screen
-    gameState = STATE.LEVELUP;
-    finishLevelUp();
-}
-
-function finishLevelUp() {
-    player.skillPoints--;
-    if (player.skillPoints > 0) { triggerLevelUp(); }
-    else {
-        el('levelup-screen').classList.add('hidden'); updateHUD();
-        isProcessingClick = false; // Reset the click latch immediately when done!
-        if (wave === 0) startNextWave();
-        else if (enemiesToSpawn === 0 && activeEnemies === 0) onWaveCleared(); // stage.js
-        else {
-            gameState = STATE.PLAYING;
-            lastTime = performance.now();
-        }
-    }
-}
-
 // ==========================================
 // Wave cleared & victory
 // ==========================================
@@ -362,9 +281,8 @@ function showWaveCleared(o = {}) { // o: optional title / sub / next overrides (
         <div class="ui-divider"><span></span></div>
         ${statBoxes([[waveStats.kills, 'Kills'], [`+${gold}`, 'Gold'], [fmtTime(waveStats.time), 'Time'], [Math.round(waveStats.dmgTaken), 'Damage taken']])}
         <div class="next-wave${nextBoss ? ' boss' : ''}">Next: <b>${o.next ? o.next + ' · ' : ''}Wave ${wave + 1}${nextBoss ? ' · Boss' : ''}</b></div>
-        <div class="ui-hint" style="margin-top:0">Starting the next wave restores 30% of your health.</div>
+        <div class="ui-hint" style="margin-top:0">Starting the next wave restores 30% of your health &middot; <kbd>I</kbd> inventory &middot; <kbd>K</kbd> skill tree${player.skillPoints > 0 ? ` (<b style="color:var(--gold-hi)">${player.skillPoints}</b> point${player.skillPoints > 1 ? 's' : ''})` : ''}</div>
         <div class="ui-row" style="margin-top:18px">
-            <button class="btn" onclick="openInventory()">Inventory${inventory.length ? `<span class="badge">${inventory.length}</span>` : ''} <kbd>I</kbd></button>
             <button class="btn btn-gold${boss ? '' : ' hidden'}" id="btn-shop" onclick="openShop()">Visit Shop</button>
             <button class="btn btn-primary" onclick="startNextWave()">Next Wave <kbd>Enter</kbd></button>
         </div>`;
@@ -393,19 +311,16 @@ function showVictory() {
 window.addEventListener('keydown', e => {
     if (e.repeat || performance.now() - uiOpenedAt < 350) return;
     const k = e.key.toLowerCase(), open = id => !el(id).classList.contains('hidden');
-    if (gameState === STATE.LEVELUP && open('levelup-screen')) {
-        // Number keys, not Q/E/Space/R: level-ups pop mid-fight and a skill key pressed a moment too late shouldn't spend the point
-        const slot = { '1': 1, '2': 2, '3': 3, '4': 4, enter: 'bonus' }[k];
-        const card = slot && el('skill-buttons').querySelector(`[data-slot="${slot}"]`);
-        if (card && card.onclick) card.onclick();
-    } else if (gameState === STATE.EVOLVE && open('upgrade-screen')) {
-        if (k === '1' || k === 'arrowleft') selectUpgrade('A');
-        else if (k === '2' || k === 'arrowright') selectUpgrade('B');
+    if (gameState === STATE.TREE && open('tree-screen')) { // skilltree.js
+        if (tree.pending && k === 'enter') takeNode(tree.pending);
+        else if (tree.pending && k === 'escape') treeCancel();
+        else if (k === 'k' || k === 'escape') closeTree();
     } else if (gameState === STATE.INTERMISSION && open('intermission-screen')) {
         if (k === 'enter') startNextWave();
         else if (k === 'i') openInventory();
-    } else if (gameState === STATE.PLAYING && k === 'i') {
-        if (player.hp > 0 && !(stageEvent && stageEvent.blocking)) openInventory(); // any time in a fight: it pauses the game
+        else if (k === 'k') openTree();
+    } else if (gameState === STATE.PLAYING && (k === 'i' || k === 'k')) {
+        if (player.hp > 0 && !(stageEvent && stageEvent.blocking)) k === 'i' ? openInventory() : openTree(); // any time in a fight: they pause the game
     } else if (k === 'escape' || (k === 'i' && open('inventory-screen'))) {
         if (open('inventory-screen')) closeInventory();
         else if (open('shop-screen')) closeShop();
@@ -435,7 +350,7 @@ window.devJumpWave = function() {
         closeDevMenu(); startNextWave();
     }
 }
-window.devLevelUp = function() { gainXP(player.maxXp - player.xp); openDevMenu(); } // the points wait until the console closes
+window.devLevelUp = function() { gainXP(player.maxXp - player.xp); openDevMenu(); } // the point waits on the skill tree (K)
 window.devAddGold = function() { player.gold += 1000; updateHUD(); openDevMenu(); }
 window.devKillAll = function() {
     closeDevMenu(); // back to PLAYING first, so the last kill can trigger the wave-cleared screen

@@ -1,5 +1,5 @@
 /* ==========================================
-   ui.css - In-game UI: dark fantasy panels, HUD, level-up, wave screens, inventory, shop, dev console
+   ui.css - In-game UI: dark fantasy panels, HUD, skill tree, wave screens, inventory, shop, dev console
    ========================================== */
 
 :root {
@@ -82,7 +82,7 @@ kbd { display: inline-block; min-width: 14px; padding: 1px 5px; border: 1px soli
 .orb-wrap canvas { width: 150px; height: 150px; display: block; }
 .orb-text { position: absolute; left: 0; right: 0; text-align: center; font: bold 15px var(--mono); color: #fff; text-shadow: 0 1px 2px #000, 0 0 6px #000; }
 .orb-label { position: absolute; left: 0; right: 0; bottom: -2px; text-align: center; font: 11px var(--serif); letter-spacing: 3px; color: var(--gold); text-transform: uppercase; text-shadow: 0 1px 2px #000; }
-#hud-center { display: flex; flex-direction: column; align-items: center; margin: 0 -22px 8px; z-index: 1; }
+#hud-center { position: relative; display: flex; flex-direction: column; align-items: center; margin: 0 -22px 8px; z-index: 1; }
 #hud-chips { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; min-height: 24px; margin-bottom: 6px; max-width: 520px; }
 .chip { font: 12px var(--serif); padding: 3px 10px; border-radius: 12px; color: var(--text); background: rgba(16, 12, 9, 0.85); border: 1px solid var(--cc, var(--gold-lo)); box-shadow: 0 0 8px -2px var(--cc, transparent); white-space: nowrap; }
 .chip b { color: var(--cc, var(--gold-hi)); font-family: var(--mono); }
@@ -105,6 +105,14 @@ kbd { display: inline-block; min-width: 14px; padding: 1px 5px; border: 1px soli
 #xp-text { flex: 0 0 auto; font: 10px var(--mono); color: #c9b8f5; }
 .xp-hint { flex: 0 0 auto; font: italic 11px var(--serif); color: var(--dim); }
 .xp-hint kbd { font-size: 9px; padding: 0 4px; }
+/* Unspent skill points (skilltree.js) and the level-up banner above the skill bar */
+#xp-points { flex: 0 0 auto; height: 18px; padding: 0 6px; box-sizing: border-box; font: bold 11px/16px var(--mono); color: #120e0a; border-radius: 9px; background: var(--gold-hi); box-shadow: 0 0 8px var(--gold); animation: ptsPulse 0.9s infinite alternate; }
+@keyframes ptsPulse { to { box-shadow: 0 0 16px 2px var(--gold-hi); } }
+#lvl-toast { position: absolute; left: 50%; bottom: calc(100% + 14px); transform: translateX(-50%); white-space: nowrap; padding: 7px 18px; border-radius: 5px; font: 15px var(--serif); color: var(--text); background: linear-gradient(180deg, rgba(42, 26, 78, 0.94), rgba(18, 10, 36, 0.94)); border: 1px solid #6a4ea0; box-shadow: 0 0 0 1px #000, 0 0 22px -4px #a487ff; opacity: 0; pointer-events: none; }
+#lvl-toast b { color: #e4d6ff; letter-spacing: 1px; }
+#lvl-toast kbd { margin: 0 2px; }
+#lvl-toast.show { animation: lvlToast 3.2s ease-out forwards; }
+@keyframes lvlToast { 0% { opacity: 0; transform: translateX(-50%) translateY(10px); } 10% { opacity: 1; transform: translateX(-50%); } 80% { opacity: 1; } 100% { opacity: 0; transform: translateX(-50%) translateY(-6px); } }
 /* HUD pieces turn see-through while the hero or an enemy is behind them (hud.js) */
 #hp-wrap, #hud-center, #gauge-wrap, #wave-plaque, #boss-bar, #gold-plaque { transition: opacity 0.2s; }
 .hud-covered { opacity: 0.22; }
@@ -199,7 +207,7 @@ kbd { display: inline-block; min-width: 14px; padding: 1px 5px; border: 1px soli
     100% { opacity: 0; transform: scale(0.96) translateY(-12px); }
 }
 
-/* ---------- level up & evolution ---------- */
+/* ---------- shared cards (the Druid's companion choice) ---------- */
 
 .skill-cards { display: flex; gap: 16px; justify-content: center; margin-top: 22px; }
 .skill-card {
@@ -208,21 +216,8 @@ kbd { display: inline-block; min-width: 14px; padding: 1px 5px; border: 1px soli
 }
 .skill-card:hover:not(.disabled) { transform: translateY(-6px); border-color: var(--cc); box-shadow: 0 0 0 1px #000, 0 0 26px -4px var(--cc), 0 14px 26px rgba(0, 0, 0, 0.6); }
 .skill-card.disabled { cursor: default; opacity: 0.5; filter: grayscale(0.6); }
-.skill-card .sc-icon { width: 76px; height: 76px; border-radius: 8px; border: 2px solid var(--gold-lo); box-shadow: 0 0 0 1px #000, 0 0 18px -6px var(--cc); display: block; margin: 0 auto 10px; }
 .skill-card .sc-key { position: absolute; top: 10px; right: 10px; }
-.skill-card .sc-slot { position: absolute; top: 11px; left: 12px; font: bold 11px var(--mono); color: var(--cc); letter-spacing: 1px; }
 .skill-card .sc-name { font: bold 17px var(--serif); color: var(--text); min-height: 42px; display: flex; align-items: center; justify-content: center; }
-.skill-card .sc-pips { display: flex; gap: 7px; justify-content: center; margin: 8px 0; }
-.skill-card .sc-pips i { width: 9px; height: 9px; transform: rotate(45deg); border: 1px solid var(--gold-lo); background: #0b0807; }
-.skill-card .sc-pips i.on { background: var(--gold-hi); border-color: var(--gold-hi); box-shadow: 0 0 6px var(--gold); }
-.skill-card .sc-pips i.next { border-color: var(--gold-hi); animation: pipNext 0.9s infinite alternate; }
-@keyframes pipNext { to { background: rgba(241, 212, 138, 0.45); box-shadow: 0 0 8px var(--gold-hi); } }
-.skill-card .sc-action { font: 12px var(--serif); letter-spacing: 2px; text-transform: uppercase; color: var(--cc); margin-bottom: 8px; }
-.skill-card .sc-stats { font: 12px var(--mono); color: var(--dim); line-height: 1.6; }
-.skill-card .sc-stats b { color: var(--good); font-weight: normal; }
-.skill-card.evolve { border-color: var(--gold); background: radial-gradient(ellipse at 50% 0%, rgba(241, 212, 138, 0.18), transparent 65%), linear-gradient(180deg, #2a2016, #120e0a); }
-.skill-card.evolve .sc-action { color: var(--gold-hi); }
-.skill-card.bonus { --cc: #69f0ae; width: 300px; }
 /* Druid companion choice (druid.js showCompanionChoice) */
 .companion-card { width: 250px; padding-top: 16px; }
 .companion-card .cc-preview { display: block; width: 220px; height: 150px; margin: 0 auto 6px; border-radius: 8px; border: 2px solid var(--gold-lo); box-shadow: 0 0 0 1px #000, inset 0 0 30px rgba(0, 0, 0, 0.7), 0 0 18px -6px var(--cc); background: radial-gradient(ellipse at 50% 55%, #33402a, #141a10 75%); }
@@ -231,23 +226,31 @@ kbd { display: inline-block; min-width: 14px; padding: 1px 5px; border: 1px soli
 .companion-card .cc-desc { font: 13px var(--serif); color: var(--dim); line-height: 1.45; }
 .companion-card.last { border-color: #5a4a30; }
 .cc-back { cursor: pointer; }
+/* ---------- skill tree (skilltree.js): a constellation on a canvas, with its header, info panel and buttons over it ---------- */
 
-.evo-head { display: flex; flex-direction: column; align-items: center; margin-top: 16px; }
-.evo-head img { width: 84px; height: 84px; border-radius: 8px; border: 2px solid var(--gold); box-shadow: 0 0 0 1px #000, 0 0 30px -6px var(--gold-hi); }
-.evo-head .evo-name { font: bold 22px var(--serif); margin-top: 8px; color: var(--text); }
-.evo-fork { width: 420px; height: 40px; display: block; margin: 0 auto -4px; }
-.evo-paths { display: flex; gap: 30px; align-items: stretch; justify-content: center; }
-.evo-path { --pc: #b39ddb; width: 290px; padding: 22px 22px 18px; border-radius: 6px; cursor: pointer; text-align: center; transition: transform 0.15s, box-shadow 0.15s; border: 1px solid var(--pc); background: radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--pc) 22%, transparent), transparent 70%), linear-gradient(180deg, #1e1813, #110d0a); box-shadow: 0 0 0 1px #000, 0 8px 20px rgba(0, 0, 0, 0.5); }
-.evo-path:hover { transform: translateY(-6px); box-shadow: 0 0 0 1px #000, 0 0 30px -4px var(--pc); }
-.evo-path.b { --pc: #ffab91; }
-.evo-letter { width: 34px; height: 34px; margin: 0 auto 10px; display: flex; align-items: center; justify-content: center; border-radius: 50%; font: bold 18px var(--serif); color: #120e0a; background: var(--pc); box-shadow: 0 0 0 2px #000, 0 0 14px var(--pc); }
-.evo-path .ep-name { font: bold 21px var(--serif); color: var(--pc); margin-bottom: 8px; }
-.evo-path .ep-desc { font: 15px/1.45 var(--serif); color: var(--text); }
-.evo-or { align-self: center; font: italic 16px var(--serif); color: var(--faint); }
+#tree-screen { position: absolute; inset: 0; z-index: 40; background: #07060d; pointer-events: auto; }
+#tree-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; }
+#tree-head { position: absolute; left: 34px; top: 26px; pointer-events: none; text-align: left; }
+#tree-head .ui-title { text-align: left; font-size: 34px; }
+#tree-head .ui-sub { text-align: left; }
+#tree-head .ui-sub b { color: var(--gold-hi); font-style: normal; }
+#tree-info { position: absolute; right: 26px; top: 26px; width: 330px; padding: 20px 22px 18px; background: var(--corners), linear-gradient(180deg, rgba(30, 22, 48, 0.94), rgba(14, 10, 24, 0.94)); border-color: #4a3b6e; }
+#tree-info .ti-name { font: bold 22px var(--serif); letter-spacing: 1px; }
+#tree-info .ti-type { font: italic 13px var(--serif); color: var(--dim); margin: 2px 0 10px; }
+#tree-info .ti-body { font: 12px/1.6 var(--mono); color: var(--dim); }
+#tree-info .ti-body b { color: var(--good); font-weight: normal; }
+#tree-info .ti-body .tt-stat { font: 15px/1.45 var(--serif); color: var(--text); margin-bottom: 6px; }
+#tree-info .ti-foot { margin-top: 12px; padding-top: 8px; border-top: 1px solid rgba(201, 168, 106, 0.2); font: italic 13px var(--serif); color: var(--gold); }
+#tree-info .ui-row { margin-top: 12px; }
+#tree-info .btn { margin: 4px; padding: 9px 16px; font-size: 13px; }
+#tree-bar { position: absolute; left: 0; right: 0; bottom: 18px; display: flex; flex-direction: column; align-items: center; pointer-events: none; }
+#tree-bar .ui-hint { margin: 0 0 4px; color: var(--dim); text-shadow: 0 1px 3px #000; }
+#tree-bar .btn { pointer-events: auto; margin: 4px 8px; padding: 10px 22px; font-size: 13px; }
+
 
 /* ---------- wave cleared / victory ---------- */
 
-#intermission-screen .panel { width: 720px; text-align: center; }
+#intermission-screen .panel { width: 720px; max-width: 98vw; text-align: center; }
 #intermission-screen .ui-row { flex-wrap: nowrap; }
 #intermission-screen .btn { padding: 12px 20px; white-space: nowrap; }
 .stat-row { display: flex; justify-content: center; gap: 12px; margin: 6px 0 4px; }
@@ -354,3 +357,27 @@ kbd { display: inline-block; min-width: 14px; padding: 1px 5px; border: 1px soli
 .letter-text p { margin: 6px 0; }
 #letter-map { display: block; margin: 12px auto; max-width: 100%; height: auto; }
 .letter-btn { margin: 4px 0 0; }
+
+/* The Spellweaver's spellbook (spellweaver.js): four keys on top, the four schools below */
+.sb-panel { width: min(1180px, 96vw); max-height: 94vh; overflow-y: auto; }
+.sb-keys { display: flex; gap: 12px; justify-content: center; margin: 4px 0 14px; }
+.sb-key { position: relative; width: 150px; padding: 10px 8px 8px; border: 2px solid var(--gold-lo); border-radius: 10px; background: rgba(0, 0, 0, 0.35); text-align: center; cursor: pointer; }
+.sb-key.sel { border-color: var(--sc); box-shadow: 0 0 14px -2px var(--sc); }
+.sb-key kbd { position: absolute; top: 6px; left: 8px; }
+.sb-key img { width: 52px; height: 52px; display: block; margin: 0 auto 4px; }
+.sb-kname { font: 15px var(--serif); color: #f1e3c4; }
+.sb-tag { font: italic 12px var(--serif); color: var(--sc); }
+.sb-schools { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.sb-school { border: 1px solid rgba(255, 255, 255, 0.08); border-top: 3px solid var(--sc); border-radius: 8px; padding: 8px; background: rgba(0, 0, 0, 0.25); }
+.sb-sname { font: 17px var(--serif); color: var(--sc); }
+.sb-stag { font: italic 12px var(--serif); color: var(--dim); margin-bottom: 6px; }
+.sb-spell { display: flex; gap: 8px; padding: 6px; border-radius: 6px; cursor: pointer; border: 1px solid transparent; }
+.sb-spell:hover { background: rgba(255, 255, 255, 0.05); border-color: var(--gold-lo); }
+.sb-spell.on { background: rgba(255, 255, 255, 0.07); border-color: var(--sc); }
+.sb-spell.greater .sb-spname { color: #ffe082; }
+.sb-spell img { width: 38px; height: 38px; flex: none; }
+.sb-spname { font: 14px var(--serif); color: #f1e3c4; }
+.sb-spname kbd { font-size: 10px; padding: 0 4px; }
+.sb-spmeta { font: 11px Consolas, monospace; color: var(--dim); }
+.sb-spdesc { font: 12px var(--serif); color: var(--dim); line-height: 1.35; margin-top: 2px; }
+@media (max-width: 900px) { .sb-schools { grid-template-columns: repeat(2, 1fr); } .sb-key { width: 120px; } }

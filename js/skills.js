@@ -7,6 +7,7 @@ function attackSpeedBonus() {
     let bonus = equipment.gloves ? equipment.gloves.val : 0;
     if (activeClass.name === 'Kensei' && player.stance === 'airborne') bonus += (player.flow / player.maxFlow) * 0.5; // up to +50% in airborne
     if (activeClass.name === 'Dragonknight') bonus += player.frenzyStacks * 0.02; // Frenzy: +2% per stack
+    if (buffs.focus > 0 && hasTalent('focus_haste')) bonus += 0.3; // Ranger Hunter's Focus, Steady Rhythm (talents.js)
     return bonus;
 }
 
@@ -115,20 +116,311 @@ function steerShot(p, dt) {
 }
 
 // Rank effects for skills whose ranks would otherwise do nothing (the level-up cards read these too, ui.js RANK_STATS)
-function blinkReach(level) { return calcUtility(350, level); }                                  // Spellweaver Blink: 350 → 560 px
-function vaultReach(sk) { return sk.selectedUpg === 'B' ? 500 : 300 + 40 * (sk.level - 1); }  // Ranger Vault: 300 → 420 px (Acrobatics 500)
+function vaultReach(sk) { return 300 + 40 * (Math.max(1, sk.level) - 1) + (hasTalent('vault_far') ? 80 : 0); } // Ranger Vault: 300 → 420 px (talents.js Long Strides +80)
 function shadowStepReach(level) { return 300 + 40 * (level - 1) + (hasItem('Windwalker Steps') ? 100 : 0); } // Kensei Shadow Step: 300 → 420 px
 function grappleMissPenalty(level) { return Math.max(0, 2.5 - 0.5 * level); }                  // Machinist: +2 → +0.5 s for grappling open ground
 const FLOW_GRACE = 3, FLOW_DECAY = 8; // Kensei in hand (main.js): Flow holds 3 s after the last gain, then fades 8/s (was 1.5 s and 15/s: dodging a crowd drained the bar before the blade could go out)
 function airborneDrain(level) { return 1 - 0.1 * (Math.max(1, level) - 1); }                    // Kensei E: the airborne blade drains Flow 10% slower per rank
 
-// Dragonknight Shield Throw: the shield came back to hand (main.js). Aegis Catch doubles the shield.
-function catchShield(sk) {
-    const amt = sk && sk.selectedUpg === 'B' ? 100 : 50, level = sk ? sk.level : 1;
-    addShield(calcUtility(amt, level), calcUtility(5.0, level)); // combat.js: capped
-    effects.push({ type: 'circle_burst', x: player.x, y: player.y, radius: 40, color: sk && sk.selectedUpg === 'B' ? 'rgba(79, 195, 247, 0.8)' : 'rgba(224, 224, 224, 0.8)', life: 0.25, maxLife: 0.25 });
+// Dragonknight Shield Throw: the shield came back to hand (main.js), for a shield. Molten Aegis's Flashpoint sets its trail off.
+function catchShield(sk, p) {
+    const level = sk ? sk.level : 1;
+    addShield(calcUtility(50, level), calcUtility(5.0, level)); // combat.js: capped
+    if (p && p.trail && hasTalent('molten_flash')) flashpoint(p.trail, p.damage);
+    effects.push({ type: 'circle_burst', x: player.x, y: player.y, radius: 40, color: 'rgba(224, 224, 224, 0.8)', life: 0.25, maxLife: 0.25 });
     burst(player.x, player.y, 0, Math.PI * 2, 8, { kind: 'spark', color: '#e0e0e0', size: 2, life: 0.25, speed: [120, 280], drag: 6 });
     updateHUD();
+}
+
+// Shield Throw A, Molten Aegis: the white-hot shield leaves dragonfire along its whole path, out and back. One effect holds the
+// whole line (points dropped every 30 px, each burning for its own time), so a long throw costs one effect, not dozens of puddles.
+// talents.js: Slag slows, Searing Path burns longer and hotter, Dragon's Wake is twice as wide and sets what crosses it burning.
+const MOLTEN_DPS = 0.4, MOLTEN_TIME = 3, MOLTEN_W = 24;
+function moltenTrail(p) {
+    const sear = hasTalent('molten_sear'), wake = hasTalent('molten_wake');
+    const tr = { type: 'molten_trail', pts: [], shield: p, life: 99, maxLife: 99, dur: sear ? 5 : MOLTEN_TIME, w: wake ? MOLTEN_W * 2 : MOLTEN_W,
+        dps: p.damage * MOLTEN_DPS * (sear ? 1.5 : 1), slow: hasTalent('molten_slag') ? 0.4 : 0, ignite: wake ? p.damage * 0.3 : 0,
+        customUpdate: (dt, ef) => {
+            const s = ef.shield, live = s && projectiles.includes(s), last = ef.pts[ef.pts.length - 1];
+            if (live && (!last || Math.hypot(s.x - last.x, s.y - last.y) >= 24)) {
+                // on its way home it runs back along the line it drew: no second line over the first, only where it strays (brk: a new piece)
+                if (s.returning && ef.pts.some(q => Math.hypot(q.x - s.x, q.y - s.y) < ef.w * 0.8)) ef.gap = true;
+                else { ef.pts.push({ x: s.x, y: s.y, t: fxTime, brk: !last || !!ef.gap }); ef.gap = false; }
+            }
+            while (ef.pts.length && fxTime - ef.pts[0].t > ef.dur) ef.pts.shift();
+            ef.life = live || ef.pts.length ? 99 : 0;
+            if (ef.pts.length < 2) return;
+            if (Math.random() < dt * 6) { const q = ef.pts[(Math.random() * ef.pts.length) | 0]; spawnParticle({ kind: 'dot', color: '#ffab40', x: q.x + jitter(ef.w * 0.6), y: q.y + jitter(ef.w * 0.6), vx: jitter(15), vy: -30 - Math.random() * 40, size: 1.6, life: 0.5, drag: 1, grow: 0, spin: 0, rot: 0 }); }
+            for (const e of enemies) {
+                if (e.dead || e.pod || e.submerged) continue;
+                let inside = false;
+                for (let i = 1; i < ef.pts.length && !inside; i++) inside = !ef.pts[i].brk && distToSegment(e.x, e.y, ef.pts[i - 1].x, ef.pts[i - 1].y, ef.pts[i].x, ef.pts[i].y) <= ef.w + e.size / 2;
+                if (!inside) continue;
+                applyDamage(e, ef.dps * dt, 'dot');
+                if (ef.slow && !(e.slowTimer > 0 && e.slowAmount > ef.slow)) { e.slowTimer = Math.max(e.slowTimer || 0, 0.4); e.slowAmount = ef.slow; }
+                if (ef.ignite && !e.dead) igniteEnemy(e, ef.ignite);
+            }
+        } };
+    p.trail = tr; effects.push(tr);
+}
+// Flashpoint (talents.js): the catch sets the trail off, from its far end back to the hero
+function flashpoint(tr, dmg) {
+    const pts = tr.pts.filter((_, i) => i % 3 === 0).sort((a, b) => Math.hypot(b.x - player.x, b.y - player.y) - Math.hypot(a.x - player.x, a.y - player.y));
+    tr.pts = []; tr.shield = null; // the line is spent
+    pts.forEach((q, i) => after(0.035 * i, () => {
+        effects.push({ type: 'fiery_explosion', x: q.x, y: q.y, radius: tr.w + 36, life: 0.35, maxLife: 0.35 });
+        for (const e of enemies) if (!e.dead && !e.pod && Math.hypot(e.x - q.x, e.y - q.y) <= tr.w + 36 + e.size / 2) applyDamage(e, dmg, 'magic');
+    }));
+    if (pts.length) addShake(2.5);
+}
+
+// Shield Throw B, Hunting Shield: the shield lodges in the first enemy it hits on the way out and grinds it for 2.5 s, then
+// comes home; a full slam on that enemy (the 'sword' basic) rips it free first, for triple damage and a burst around it.
+// talents.js: Serrated Edge grinds twice as often, Marked Prey (talentDmgMult), Tear Free stuns and refunds, Relentless Hunt
+// sends it on to a second prey (p.lodges counts them).
+const LODGE_TIME = 2.5, GRIND_GAP = 0.5, GRIND_MULT = 0.5, RIP_MULT = 3, RIP_R = 100;
+function lodgeShield(p, e) {
+    p.lodged = { e, t: LODGE_TIME, tick: GRIND_GAP }; p.lodges = (p.lodges || 0) + 1; p.homeTarget = null;
+    p.vx = p.vy = 0; e.lodgedShield = p;
+    burst(e.x, e.y, 0, Math.PI * 2, 8, { kind: 'spark', color: '#e0e0e0', size: 2.5, life: 0.3, speed: [140, 320], drag: 5 });
+    addShake(1.5);
+}
+function updateLodged(p, dt) { // main.js shield update, while it's lodged
+    const L = p.lodged, e = L.e;
+    if (e.dead || !enemies.includes(e) || (L.t -= dt) <= 0) { releaseShield(p); return; }
+    p.x = e.x; p.y = e.y; p.life = Math.max(p.life, 1.5); // it can't run out (or turn home) while it's in there
+    if ((L.tick -= dt) <= 0) {
+        L.tick = hasTalent('hunt_serrated') ? GRIND_GAP / 2 : GRIND_GAP;
+        applyDamage(e, p.damage * GRIND_MULT, 'melee');
+        burst(e.x, e.y, Math.random() * Math.PI * 2, 1.2, 4, { kind: 'spark', color: '#fff3e0', size: 2, life: 0.22, speed: [120, 260], drag: 6 });
+    }
+}
+function releaseShield(p) {
+    const e = p.lodged && p.lodged.e;
+    if (e && e.lodgedShield === p) e.lodgedShield = null;
+    p.lodged = null; p.returning = true; p.hitList = [];
+}
+function ripShield(p, e) { // the 'sword' basic: a full slam tore it out
+    releaseShield(p);
+    applyDamage(e, p.damage * RIP_MULT, 'melee');
+    effects.push({ type: 'shield_blast', x: e.x, y: e.y, radius: RIP_R, life: 0.35, maxLife: 0.35 });
+    for (const o of enemies) if (o !== e && !o.dead && !o.pod && Math.hypot(o.x - e.x, o.y - e.y) <= RIP_R + o.size / 2) applyDamage(o, p.damage, 'melee');
+    addShake(3);
+    if (hasTalent('hunt_tear')) { if (!e.dead) e.stunTimer = Math.max(e.stunTimer || 0, 1.5); cooldowns.s1 *= 0.5; }
+    if (hasTalent('hunt_relentless') && p.lodges < 2) { // on to the next prey, steering after it (main.js steerShot)
+        let next = null, bd = 350;
+        for (const o of enemies) { if (o === e || o.dead || o.pod || o.submerged) continue; const d = Math.hypot(o.x - p.x, o.y - p.y); if (d < bd) { bd = d; next = o; } }
+        if (next) { const a = Math.atan2(next.y - p.y, next.x - p.x); p.returning = false; p.homeTarget = next; p.hitList = [e]; p.vx = Math.cos(a) * 900; p.vy = Math.sin(a) * 900; p.life = 2.0; }
+    }
+}
+
+// Thunder Leap A, Gravity Slam: the landing pulls everything within 260 px into the impact point (bosses only tugged 60 px) and
+// staggers it. talents.js: Event Horizon reaches farther, Implosion claps again in the middle, Crushing Weight stuns, Singularity
+// leaves a well that keeps pulling for 3 s.
+const GRAV_R = 260, GRAV_WIDE = 340, GRAV_PULL_TIME = 0.2, GRAV_WELL_R = 220;
+function gravitySlam(x, y, dmg) {
+    const R = hasTalent('grav_horizon') ? GRAV_WIDE : GRAV_R, caught = [];
+    for (const e of enemies) {
+        if (e.dead || e.pod || e.submerged) continue;
+        const d = Math.hypot(e.x - x, e.y - y);
+        if (d < 1 || d > R + e.size / 2) continue;
+        const boss = e.type.startsWith('boss'), keep = Math.min(d, boss ? Math.max(e.size / 2 + 30, d - 60) : e.size / 2 + 22 + Math.random() * 24); // never pushed outward
+        caught.push({ e, x0: e.x, y0: e.y, x1: x + (e.x - x) / d * keep, y1: y + (e.y - y) / d * keep });
+        if (!boss) e.stunTimer = Math.max(e.stunTimer || 0, hasTalent('grav_heavy') ? 1.2 : 0.5);
+    }
+    effects.push({ type: 'gravity_pull', x, y, radius: R, life: 0.45, maxLife: 0.45, customUpdate: (dt, ef) => {
+        const q = easeOut(Math.min(1, (ef.maxLife - ef.life) / GRAV_PULL_TIME));
+        for (const c of caught) if (!c.e.dead) { c.e.x = lerp(c.x0, c.x1, q); c.e.y = lerp(c.y0, c.y1, q); clampToBounds(c.e, c.e.size / 2); }
+    } });
+    if (caught.length) addShake(2);
+    if (hasTalent('grav_implode')) after(0.3, () => {
+        effects.push({ type: 'thunder_slam', x, y, radius: 130, color: '#b388ff', big: true, life: 0.5, maxLife: 0.5 });
+        for (const e of enemies) if (!e.dead && !e.pod && Math.hypot(e.x - x, e.y - y) <= 130 + e.size / 2) applyDamage(e, dmg, 'melee');
+    });
+    if (hasTalent('grav_singularity')) effects.push({ type: 'gravity_well', x, y, radius: GRAV_WELL_R, life: 3, maxLife: 3, customUpdate: dt => {
+        for (const e of enemies) {
+            if (e.dead || e.pod || e.type.startsWith('boss')) continue;
+            const d = Math.hypot(e.x - x, e.y - y);
+            if (d > 12 && d <= GRAV_WELL_R + e.size / 2) { const st = Math.min(d - 12, 150 * dt); e.x += (x - e.x) / d * st; e.y += (y - e.y) / d * st; clampToBounds(e, e.size / 2); }
+        }
+    } });
+}
+
+// Thunder Leap B, Meteor Dive: Space held (main.js startCharge) lifts the knight into the air to hang, untouchable, while the
+// cursor steers the landing (a reticle on the ground, skillfx_space.js); letting go (or running out of breath) dives. The
+// longer the hang, the harder and wider the slam: up to x2.5 and 200 px. talents.js: Thin Air hangs longer, Comet Trail burns,
+// Impact Crater widens, Starfall calls three more meteors after a full dive. Dragon Breath pressed while hanging is a Wyrmfall.
+const HANG_MAX = 1.5, HANG_AIR = 2.5, HANG_Z = 150, DIVE_MULT = 2.5, DIVE_GROW = 80, DIVE_CRATER = 140;
+function startHang() {
+    player.hang = { t: 0, max: hasTalent('dive_air') ? HANG_AIR : HANG_MAX };
+    dustPuff(player.x, player.y, 0, Math.PI * 2, 8);
+    effects.push({ type: 'meteor_mark', life: 1, maxLife: 1, customUpdate: (dt, ef) => { ef.life = player.hang ? 1 : 0; } });
+    return { max: player.hang.max, slow: 0 };
+}
+function updateHang(dt) { // main.js update
+    const h = player.hang;
+    if (!player.charge || player.charge.slot !== 3) { player.hang = null; player.z = 0; return; } // the hold was lost (a blur, a cutscene)
+    h.t += dt;
+    player.z = HANG_Z * easeOut(Math.min(1, h.t / 0.35));
+    player.iFrames = Math.max(player.iFrames, 0.1);
+    if (h.t >= h.max) releaseCharge(3); // out of breath: it dives by itself
+}
+function leapReach() { return (hasItem('Thunderstride Greaves') ? 500 : 400) + (hasTalent('leap_far') ? 100 : 0); } // items.js; talents.js Great Leap
+function meteorTarget() {
+    const [dx, dy, d] = getVector(player.x, player.y, mouseX, mouseY), m = Math.min(d, leapReach());
+    return d > 0 ? [player.x + dx / d * m, player.y + dy / d * m] : [player.x, player.y];
+}
+function diveRadius(k) { return (hasTalent('leap_wide') ? 165 : 120) + (hasTalent('dive_crater') ? DIVE_CRATER : DIVE_GROW) * k; }
+function starfall(x, y, dmg) { // Starfall: three more meteors round a full dive
+    for (let i = 0; i < 3; i++) after(0.22 + 0.13 * i, () => {
+        const a = Math.random() * Math.PI * 2, r = 90 + Math.random() * 90, mx = x + Math.cos(a) * r, my = y + Math.sin(a) * r;
+        effects.push({ type: 'wyrmfall_pillar', x: mx, y: my, frost: false, life: 0.4, maxLife: 0.4 }); // skillfx_ult.js
+        effects.push({ type: 'thunder_slam', x: mx, y: my, radius: 95, color: '#ffab40', life: 0.45, maxLife: 0.45 });
+        for (const e of enemies) if (!e.dead && !e.pod && Math.hypot(e.x - mx, e.y - my) <= 95 + e.size / 2) applyDamage(e, dmg, 'melee');
+        addShake(2);
+    });
+}
+// Sundering Breath (Dragon Breath B): the flames crack open whatever they touch: +20% damage from you for 6 s (talents.js
+// Deep Wounds: +30%, 8 s; talentDmgMult reads it). Bandit shields and Slime Warden orbs still shatter. Wyrmfall's rings Sunder too.
+const SUNDER_MULT = 0.2, SUNDER_TIME = 6, SUNDER_DEEP_MULT = 0.3, SUNDER_DEEP_TIME = 8;
+function sunderEnemy(e) {
+    shatterShields(e); // combat.js
+    const deep = hasTalent('sunder_deep');
+    e.sunderUntil = fxTime + (deep ? SUNDER_DEEP_TIME : SUNDER_TIME); e.sunderMult = 1 + (deep ? SUNDER_DEEP_MULT : SUNDER_MULT);
+}
+// Dragon's Roar (talents.js): the Sundering breath ends in a roar that throws everything back
+function dragonRoar() {
+    effects.push({ type: 'thunder_slam', x: player.x, y: player.y, radius: 300, color: '#ff7043', big: true, life: 0.6, maxLife: 0.6 });
+    effects.push({ type: 'text', text: 'ROAR', x: player.x, y: player.y - 60, color: '#ffab40', life: 1.0, maxLife: 1.0 });
+    addShake(4);
+    for (const e of enemies) {
+        if (e.dead || e.pod || Math.hypot(e.x - player.x, e.y - player.y) > 300 + e.size / 2) continue;
+        if (e.type.startsWith('boss')) { const a = Math.atan2(e.y - player.y, e.x - player.x); e.x += Math.cos(a) * 40; e.y += Math.sin(a) * 40; clampToBounds(e, e.size / 2); }
+        else { knockFrom(e, player.x, player.y, 120); e.stunTimer = Math.max(e.stunTimer || 0, 1.0); }
+    }
+}
+
+// ---------- Ranger evolutions (talents.js has the nodes under them) ----------
+
+// Storm Arrow A, Ballista Shot: a full draw hurls everything on the line back along it over 0.22 s (bosses only 40 px). Whatever
+// is stopped on the way (a wall, a pillar, the map's edge) has been slammed: stunned 1.5 s (Pinned 2.5), hit again (Crushing
+// Impact). Domino: a hurled body knocks whoever it runs into along, half as far, and stuns them 1 s.
+const BALLISTA_PUSH = 220, BALLISTA_FAR = 320, BALLISTA_STUN = 1.5, BALLISTA_PIN = 2.5, BALLISTA_TIME = 0.22;
+function ballistaPush(list, ang, hit) {
+    const D = hasTalent('ballista_far') ? BALLISTA_FAR : BALLISTA_PUSH, cx = Math.cos(ang), cy = Math.sin(ang);
+    const movers = list.filter(e => !e.dead && !e.pod).map(e => ({ e, x0: e.x, y0: e.y, d: e.type.startsWith('boss') ? 40 : D, t: 0 }));
+    const slam = m => {
+        m.done = true; const e = m.e;
+        e.stunTimer = Math.max(e.stunTimer || 0, hasTalent('ballista_pin') ? BALLISTA_PIN : BALLISTA_STUN);
+        if (hasTalent('ballista_crush')) applyDamage(e, hit, 'ranged');
+        effects.push({ type: 'circle_burst', x: e.x, y: e.y, radius: e.size / 2 + 26, color: 'rgba(200, 230, 201, 0.85)', life: 0.3, maxLife: 0.3 });
+        dustPuff(e.x, e.y, ang + Math.PI, 2.4, 6); addShake(2);
+    };
+    effects.push({ type: 'ballista_push', life: BALLISTA_TIME + 0.3, maxLife: BALLISTA_TIME + 0.3, customUpdate: dt => {
+        for (const m of movers) {
+            if (m.done || m.e.dead) continue;
+            m.t = Math.min(1, m.t + dt / BALLISTA_TIME);
+            const want = m.d * easeOut(m.t), tx = m.x0 + cx * want, ty = m.y0 + cy * want, e = m.e;
+            const clip = clipToWalls(e.x, e.y, tx, ty, e.size / 2, false); // stage.js: rock on the way
+            if (clip) { e.x = clip[0]; e.y = clip[1]; } else { e.x = tx; e.y = ty; }
+            clampToBounds(e, e.size / 2);
+            if (clip || Math.hypot(e.x - tx, e.y - ty) > 10) { slam(m); continue; }
+            if (hasTalent('ballista_domino') && m.d > 40) for (const o of enemies) { // Domino
+                if (o === e || o.dead || o.pod || movers.some(n => n.e === o) || Math.hypot(o.x - e.x, o.y - e.y) > (o.size + e.size) / 2) continue;
+                o.stunTimer = Math.max(o.stunTimer || 0, 1.0);
+                movers.push({ e: o, x0: o.x, y0: o.y, d: o.type.startsWith('boss') ? 0 : (m.d - want) * 0.5 + 40, t: 0 });
+            }
+            if (m.t >= 1) m.done = true;
+        }
+    } });
+}
+
+// Storm Arrow B, Hunter's Mark: the prey is Marked for 6 s (Long Hunt 10): basic arrows curve to it (the 'bow' basic) and deal
+// x1.4 to it (main.js, preyHit). Open Wound: skills +20% (talentDmgMult). Pack Hunter: the Mark leaps on when it dies.
+// Hunter's Harvest: every 5th basic arrow on it calls lightning (half of Storm Arrow's hit).
+const MARK_TIME = 6, MARK_LONG = 10, MARK_BASIC = 1.4, HARVEST_EVERY = 5, HARVEST_MULT = 0.5;
+function markPrey(e) {
+    for (const o of enemies) if (o !== e) o.huntMarkUntil = 0;
+    e.huntMarkUntil = fxTime + (hasTalent('mark_long') ? MARK_LONG : MARK_TIME); e.markHits = 0; player.prey = e;
+    effects.push({ type: 'circle_burst', x: e.x, y: e.y, radius: e.size / 2 + 18, color: 'rgba(178, 255, 89, 0.8)', life: 0.3, maxLife: 0.3 });
+}
+function preyTarget() { const e = player.prey; return e && !e.dead && e.huntMarkUntil > fxTime && enemies.includes(e) ? e : null; }
+function preyHit(p, e) { // main.js: a basic arrow loosed at the prey reached something; the multiplier for it
+    if (p.markOn !== e || !(e.huntMarkUntil > fxTime)) return 1;
+    if (hasTalent('mark_harvest') && ++e.markHits % HARVEST_EVERY === 0) after(0.05, () => {
+        if (e.dead) return;
+        const Q = activeClass.skills[1];
+        effects.push({ type: 'lightning', x1: e.x + jitter(40), y1: e.y - 280, x2: e.x, y2: e.y, color: '#b2ff59', life: 0.25, maxLife: 0.25 });
+        applyDamage(e, calcDmg(Q.baseDmg, Q.level) * HARVEST_MULT, 'magic');
+    });
+    return MARK_BASIC;
+}
+function rangerOnKill(e) { // talents.js talentsOnKill
+    if (e === player.prey && hasTalent('mark_spread')) { const n = getNearestEnemyFromPoint(e.x, e.y, 400, [e]); if (n) markPrey(n); } // Pack Hunter
+    if (activeClass.skills[3].selectedUpg === 'B' && player.vaultCharges < vaultMax()) { player.vaultCharges++; if (player.vaultCharges >= vaultMax()) player.vaultRecharge = 0; cooldowns.s3 = Math.min(cooldowns.s3, 0); } // Twin Vault
+}
+
+// Vault B, Twin Vault: two charges (Third Wind three); each comes back after Vault's cooldown, one at a time, and a kill gives
+// one back at once. cooldowns.s3 shows the next charge only when none is left.
+const VAULT_GAP = 0.25;
+function vaultMax() { return hasTalent('tv_three') ? 3 : 2; }
+function vaultRechargeTime() { return skillBaseCd(3, activeClass.skills[3].level) * getCDR(); }
+function spendVaultCharge() { // the Space handler, after castSkill set the cooldown
+    if (player.vaultCharges === undefined || player.vaultCharges > vaultMax()) player.vaultCharges = vaultMax();
+    player.vaultCharges = Math.max(0, player.vaultCharges - 1);
+    if (!(player.vaultRecharge > 0)) player.vaultRecharge = vaultRechargeTime();
+    cooldowns.s3 = devNoCooldowns ? 0 : player.vaultCharges > 0 ? VAULT_GAP : player.vaultRecharge; cooldownMax.s3 = player.vaultCharges > 0 ? VAULT_GAP : vaultRechargeTime();
+}
+
+// Volley A, Storm Rain: the arrows keep falling for 4 s (Monsoon 6) at RAIN_RATE a second, each RAIN_MULT of the hit with no
+// falloff. The cloud (skillfx_ult.js drawUltGround) drifts onto enemies (Following Storm), slows under it (Downpour) and throws
+// lightning at the toughest enemy below every 0.8 s (Thunderhead).
+const RAIN_TIME = 4, RAIN_LONG = 6, RAIN_RATE = 5, RAIN_MULT = 0.45, RAIN_BOLT = 0.8, RAIN_BOLT_MULT = 1.5, BARRAGE_FULL = 6, BARRAGE_FINALE = 4;
+function stormCloud(rain, life, dmg) {
+    let bolt = RAIN_BOLT;
+    effects.push({ type: 'storm_cloud', rain, life, maxLife: life, customUpdate: (dt, ef) => {
+        if (hasTalent('rain_follow')) { const e = getNearestEnemyFromPoint(rain.x, rain.y, 450); if (e) { const [vx, vy, d] = getVector(rain.x, rain.y, e.x, e.y); const st = Math.min(d, 90 * dt); if (d > 1) { rain.x += vx / d * st; rain.y += vy / d * st; } } }
+        const under = enemies.filter(e => !e.dead && !e.pod && Math.hypot(e.x - rain.x, e.y - rain.y) <= rain.radius + e.size / 2);
+        if (hasTalent('rain_slow')) for (const e of under) if (!(e.slowTimer > 0 && e.slowAmount > 0.3)) { e.slowTimer = Math.max(e.slowTimer || 0, 0.3); e.slowAmount = 0.3; }
+        if (hasTalent('rain_thunder') && (bolt -= dt) <= 0 && ef.maxLife - ef.life > 0.45) {
+            bolt = RAIN_BOLT;
+            const e = under.sort((a, b) => b.hp - a.hp)[0];
+            if (e) { effects.push({ type: 'lightning', x1: e.x + jitter(30), y1: e.y - 260, x2: e.x, y2: e.y, color: '#80d8ff', life: 0.25, maxLife: 0.25 }); applyDamage(e, dmg * RAIN_BOLT_MULT, 'magic'); }
+        }
+    } });
+}
+
+// Nature's Stride's evolutions and Disengage tick here (main.js update): Windwalk's end (Gale Burst), Focus, the spread's window,
+// Twin Vault's recharge, and the wind round a windwalker
+function updateRanger(dt) {
+    if (buffs.windwalk > 0 && (buffs.windwalk -= dt) <= 0 && hasTalent('ww_gale')) galeBurst();
+    if (buffs.windwalk > 0) emit(26, dt, () => { const a = Math.random() * Math.PI * 2; spawnParticle({ kind: 'dot', color: '#e0f7fa', x: player.x + Math.cos(a) * 24, y: player.y + Math.sin(a) * 24, vx: -Math.sin(a) * 120, vy: Math.cos(a) * 120, size: 1.8, life: 0.35, drag: 2, grow: 0, spin: 0, rot: 0 }); });
+    if (buffs.focus > 0) buffs.focus -= dt;
+    if (buffs.disengage > 0) buffs.disengage -= dt;
+    if (buffs.tvGuard > 0) buffs.tvGuard -= dt;
+    if (activeClass.skills[3].selectedUpg === 'B' && player.vaultCharges !== undefined) {
+        const max = vaultMax();
+        if (player.vaultCharges < max && (player.vaultRecharge -= dt) <= 0) { player.vaultCharges++; player.vaultRecharge = player.vaultCharges < max ? vaultRechargeTime() : 0; }
+        if (player.vaultCharges > 0 && cooldowns.s3 > VAULT_GAP) cooldowns.s3 = 0; // a charge came back
+        if (player.vaultCharges === 0) cooldowns.s3 = Math.max(cooldowns.s3, player.vaultRecharge);
+    }
+}
+function galeBurst() { // Gale Burst (talents.js): Windwalk ends in a gust
+    effects.push({ type: 'circle_burst', x: player.x, y: player.y, radius: 220, color: 'rgba(224, 247, 250, 0.7)', life: 0.35, maxLife: 0.35 });
+    burst(player.x, player.y, 0, Math.PI * 2, 18, { kind: 'dot', color: '#e0f7fa', size: 2.4, life: 0.5, speed: [200, 420], drag: 3 });
+    addShake(2);
+    for (const e of enemies) {
+        if (e.dead || e.pod || Math.hypot(e.x - player.x, e.y - player.y) > 220 + e.size / 2) continue;
+        knockFrom(e, player.x, player.y, 150);
+        e.slowTimer = Math.max(e.slowTimer || 0, 2); e.slowAmount = Math.max(e.slowAmount || 0, 0.5);
+    }
+}
+// Windwalk (main.js): an enemy shot that would hit passes through; Return to Sender throws it back as a wind blade
+function windwalkShot(p) {
+    if (!hasTalent('ww_reflect')) return;
+    const sp = Math.hypot(p.vx, p.vy) || 1;
+    projectiles.push({ x: p.x, y: p.y, vx: -p.vx / sp * 900, vy: -p.vy / sp * 900, radius: 9, color: '#e0f7fa', life: 1.0, type: 'basic', shape: 'arrow', damage: calcDmg(activeClass.basicDmg) * 1.5, pierce: false, hitList: [], isEnemy: false });
+    burst(p.x, p.y, Math.atan2(-p.vy, -p.vx), 0.8, 6, { kind: 'dot', color: '#e0f7fa', size: 2, life: 0.3, speed: [150, 300], drag: 4 });
 }
 
 // Machinist Sentry Turret. upg: 'A' = Laser Optics, 'B' = Volatile Casing
@@ -815,76 +1107,81 @@ var SkillRegistry = {
     'Dragonknight': {
         1: (sk, dmg) => {
             const [dx, dy, dist] = getVector(player.x, player.y, mouseX, mouseY);
-            if(dist>0) projectiles.push({ x: player.x, y: player.y, vx: (dx/dist)*600, vy: (dy/dist)*600, radius: 14, color: '#e0e0e0', life: 2.0, type: 'shield_throw', shape: 'shield', damage: dmg, pierce: true, hitList: [], isEnemy: false, returning: false, sourceSkill: sk, startX: player.x, startY: player.y });
+            if (!(dist > 0)) return;
+            const spd = 600 * (hasTalent('shield_far') ? 1.3 : 1), a0 = Math.atan2(dy, dx); // talents.js Long Arm: faster, so farther
+            const p = { x: player.x, y: player.y, vx: Math.cos(a0) * spd, vy: Math.sin(a0) * spd, radius: 14, color: sk.selectedUpg === 'A' ? '#ffccbc' : '#e0e0e0', life: 2.0, type: 'shield_throw', shape: 'shield', damage: dmg, pierce: true, hitList: [], isEnemy: false, returning: false, sourceSkill: sk, startX: player.x, startY: player.y };
+            projectiles.push(p);
+            if (sk.selectedUpg === 'A') moltenTrail(p); // Molten Aegis
         },
         2: (sk) => { // Dragonfire Blade: the greatsword catches dragonfire (the swing itself is the 'sword' basic below)
-            buffs.dragonfire = DRAGONFIRE_TIME;
+            buffs.dragonfire = DRAGONFIRE_TIME + (hasTalent('fire_long') ? 3 : 0); // talents.js Slow Burn
+            if (hasTalent('fire_kindling')) addFrenzy(4);
+            player.undyingReady = hasTalent('wyrm_undying'); // Undying Flame: once per cast (talents.js talentsLethal)
             effects.push({ type: 'dragonfire_ignite', x: player.x, y: player.y, upg: sk.selectedUpg, life: 0.5, maxLife: 0.5 }); // skillfx_e.js
             addShake(1.5);
         },
-        3: (sk, dmg) => { // Thunder Leap: an arcing jump that comes down with a thunderclap
-            const [dx, dy, dist] = getVector(player.x, player.y, mouseX, mouseY);
+        3: (sk, dmg, k) => { // Thunder Leap: an arcing jump that comes down with a thunderclap (Meteor Dive: a dive from the hang)
+            const hang = player.hang, dive = !!hang; player.hang = null;
             const greaves = hasItem('Thunderstride Greaves'); // items.js: farther, and the landing throws enemies back
-            const moveDist = Math.min(dist, greaves ? 500 : 400);
-            dustPuff(player.x, player.y, Math.atan2(dy, dx) + Math.PI, 2.4, 5);
+            let tx, ty;
+            if (dive) [tx, ty] = meteorTarget(); // where the reticle stood
+            else {
+                const [dx, dy, dist] = getVector(player.x, player.y, mouseX, mouseY), moveDist = Math.min(dist, leapReach());
+                tx = dist > 0 ? player.x + (dx / dist) * moveDist : player.x; ty = dist > 0 ? player.y + (dy / dist) * moveDist : player.y;
+                dustPuff(player.x, player.y, Math.atan2(dy, dx) + Math.PI, 2.4, 5);
+            }
+            const moveDist = Math.hypot(tx - player.x, ty - player.y), power = dive ? Math.min(1, k || 0) : 0;
             const leap = startDash({
-                x: player.x + (dx / dist) * moveDist, y: player.y + (dy / dist) * moveDist,
-                dur: 0.2 + moveDist / 2700, arc: 25 + moveDist * 0.12, kind: 'thunder_leap',
+                x: tx, y: ty,
+                dur: dive ? 0.18 : 0.2 + moveDist / 2700, arc: dive ? 0 : 25 + moveDist * 0.12, z0: dive ? player.z : 0, kind: 'thunder_leap',
                 shields: projectiles.filter(p => p.type === 'shield_throw'), // combos.js Skyfall Catch: the shields already flying
-                ghost: { color: '#ff7043', glow: false, every: 0.035 },
+                ghost: { color: dive ? '#ffab40' : '#ff7043', glow: dive, every: dive ? 0.02 : 0.035 },
                 onArrive: () => {
-                    if (leap.wyrmfall) leap.wyrmfall(); // combos.js Wyrmfall: Dragon Breath cast mid-leap
-                    if (sk.selectedUpg === 'A') {
-                        const tx = player.x; const ty = player.y;
-                        effects.push({ type: 'aftershock_zone', x: tx, y: ty, radius: 100, life: 1.0, maxLife: 1.0 });
-                        after(1.0, () => {
-                            effects.push({ type: 'thunder_slam', x: tx, y: ty, radius: 100, color: '#e53935', big: true, life: 0.5, maxLife: 0.5 });
-                            for(let i=enemies.length-1; i>=0; i--) if (Math.hypot(tx-enemies[i].x, ty-enemies[i].y) <= 100 + enemies[i].size/2) applyDamage(enemies[i], dmg*1.5, 'melee');
-                        });
-                    } else if (sk.selectedUpg === 'B') {
-                        for(let r=0; r<4; r++) { const angle = (Math.PI*2/4) * r; projectiles.push({ x: player.x, y: player.y, vx: Math.cos(angle)*500, vy: Math.sin(angle)*500, radius: 8, color: '#ffca28', life: 1.0, type: 'basic', shape: 'shrapnel', damage: dmg, pierce: false, isEnemy: false }); }
-                    }
-                    const sky = leap.skyfall, R = sky ? SKYFALL_RADIUS : 120; // combos.js: the shield was caught mid-air, so it comes down as a slam
-                    effects.push({ type: 'thunder_slam', x: player.x, y: player.y, radius: R, color: sky ? '#ffca28' : '#ff7043', big: sky, life: sky ? 0.65 : 0.5, maxLife: sky ? 0.65 : 0.5 });
+                    if (leap.wyrmfall) leap.wyrmfall(); // combos.js Wyrmfall: Dragon Breath cast mid-leap (or while hanging)
+                    const sky = leap.skyfall, mult = sky ? SKYFALL_MULT : 1 + (DIVE_MULT - 1) * power;
+                    const R = sky ? SKYFALL_RADIUS : dive ? diveRadius(power) : hasTalent('leap_wide') ? 165 : 120; // combos.js: the shield was caught mid-air, so it comes down as a slam; talents.js Thunderclap
+                    effects.push({ type: 'thunder_slam', x: player.x, y: player.y, radius: R, color: sky ? '#ffca28' : dive ? '#ffab40' : '#ff7043', big: sky || power > 0.5, life: sky ? 0.65 : 0.5, maxLife: sky ? 0.65 : 0.5 });
                     if (sky) { effects.push({ type: 'shield_blast', x: player.x, y: player.y, radius: 70, life: 0.35, maxLife: 0.35 }); comboText(); }
+                    if (dive) { addShake(2 + 3 * power); if (power > 0.5) effects.push({ type: 'wyrmfall_pillar', x: player.x, y: player.y, frost: false, life: 0.4, maxLife: 0.4 }); }
                     for(let i=enemies.length-1; i>=0; i--) {
                         const e = enemies[i];
                         if (Math.hypot(player.x-e.x, player.y-e.y) > R + e.size/2) continue;
-                        applyDamage(e, dmg * (sky ? SKYFALL_MULT : 1), 'melee');
+                        applyDamage(e, dmg * mult, 'melee');
                         if (!e.type.startsWith('boss')) e.stunTimer = Math.max(e.stunTimer || 0, sky ? SKYFALL_STUN : 0.5); // the thunderclap staggers
+                        if (dive && hasTalent('dive_comet') && !e.dead) igniteEnemy(e, dmg * 0.3); // Comet Trail
                         if (greaves && !e.type.startsWith('boss') && !e.dead) { const ka = Math.atan2(e.y - player.y, e.x - player.x); e.x += Math.cos(ka) * 60; e.y += Math.sin(ka) * 60; clampToBounds(e, e.size / 2); }
                     }
+                    if (sk.selectedUpg === 'A') gravitySlam(player.x, player.y, dmg); // after the clap: the pack is drawn in for what comes next
+                    if (dive && power >= 0.99 && hasTalent('dive_starfall')) starfall(player.x, player.y, dmg);
                 }
             });
+            if (hang && hang.wyrmfall) leap.wyrmfall = hang.wyrmfall; // R pressed while hanging
             skyfallHold(leap); // combos.js: an outgoing shield the leap is aimed at waits in the air
         },
         4: (sk, dmg, k, opt = {}) => {
             const attackAngle = Math.atan2(mouseY - player.y, mouseX - player.x);
             let color = sk.selectedUpg === 'A' ? '#2196f3' : '#ff5722';
             const breath = sk.selectedUpg === 'A' ? 'frost' : sk.selectedUpg === 'B' ? 'shatter' : 'fire';
-            if (opt.wyrmfall) { player.dash.wyrmfall = () => wyrmfall(sk, dmg, breath, color); return; } // combos.js: cast mid-leap, it pours down on landing
-            const head = { type: 'dragon_head', angle: attackAngle, breath, tracking: true, life: 1.25, maxLife: 1.25 };
+            if (opt.wyrmfall) { (player.dash || player.hang).wyrmfall = () => wyrmfall(sk, dmg, breath, color); return; } // combos.js: cast mid-leap (or hanging in a Meteor Dive), it pours down on landing
+            // talents.js: Deep Lungs (longer), Long Breath (farther), Wide Maw (wider)
+            const long = hasTalent('breath_long'), speed = 700 * (hasTalent('breath_far') ? 1.3 : 1), spreadW = hasTalent('sunder_wide') ? 1.25 : 0.8, sunder = sk.selectedUpg === 'B';
+            const head = { type: 'dragon_head', angle: attackAngle, breath, tracking: true, life: long ? 1.75 : 1.25, maxLife: long ? 1.75 : 1.25 };
             effects.push(head); // skillfx_ult.js: the head turns to follow the cursor, and the flames go where it faces
-            every(0.05, 21, () => {
-                let spread = head.angle + (Math.random() - 0.5) * 0.8;
-                projectiles.push({ x: player.x + Math.cos(spread)*20, y: player.y + Math.sin(spread)*20, vx: Math.cos(spread)*700, vy: Math.sin(spread)*700, radius: 15 + Math.random()*15, color: color, life: 0.6, type: 'pierce', shape: 'breath', breath, damage: dmg * 0.25, pierce: true, hitList: [], isEnemy: false, burn: dmg * 0.2, burnColor: color }); // burn: x0.2/s for 3 s on whatever it touches (main.js)
+            every(0.05, long ? 29 : 21, () => {
+                let spread = head.angle + (Math.random() - 0.5) * spreadW;
+                projectiles.push({ x: player.x + Math.cos(spread)*20, y: player.y + Math.sin(spread)*20, vx: Math.cos(spread)*speed, vy: Math.sin(spread)*speed, radius: 15 + Math.random()*15, color: color, life: 0.6, type: 'pierce', shape: 'breath', breath, damage: dmg * 0.25, pierce: true, hitList: [], isEnemy: false, burn: dmg * 0.2, burnColor: color, sunder }); // burn: x0.2/s for 3 s on whatever it touches (main.js); Sundering Breath: every flame Sunders (main.js)
             });
-            
-            if (sk.selectedUpg === 'A') {
-                for(let i=enemies.length-1; i>=0; i--) {
-                    if (Math.hypot(player.x-enemies[i].x, player.y-enemies[i].y) <= 400 + enemies[i].size/2) {
-                        let diff = Math.atan2(enemies[i].y-player.y, enemies[i].x-player.x) - attackAngle; while(diff < -Math.PI) diff += Math.PI*2; while(diff > Math.PI) diff -= Math.PI*2;
-                        if (Math.abs(diff) <= 0.4) { enemies[i].slowTimer = 3.0; enemies[i].slowAmount = 0.7; }
-                    }
-                }
-            } else if (sk.selectedUpg === 'B') {
-                for(let i=enemies.length-1; i>=0; i--) {
-                    if (Math.hypot(player.x-enemies[i].x, player.y-enemies[i].y) <= 400 + enemies[i].size/2) {
-                        let diff = Math.atan2(enemies[i].y-player.y, enemies[i].x-player.x) - attackAngle; while(diff < -Math.PI) diff += Math.PI*2; while(diff > Math.PI) diff -= Math.PI*2;
-                        if (Math.abs(diff) <= 0.4) shatterShields(enemies[i]); // combat.js: Bandit shields and Slime Warden orbs
-                    }
-                }
+
+            // Glacial chills everything in the cone as the breath starts (talents.js: frozen first, farther and wider, marked for Frostbite and Shatterfrost)
+            const cone = hasTalent('frost_wide') ? 0.6 : 0.4, reach = hasTalent('frost_wide') ? 500 : 400;
+            if (sk.selectedUpg === 'A') for (const e of enemies) {
+                if (e.dead || Math.hypot(player.x - e.x, player.y - e.y) > reach + e.size / 2) continue;
+                const diff = Math.atan2(e.y - player.y, e.x - player.x) - attackAngle;
+                if (Math.abs(Math.atan2(Math.sin(diff), Math.cos(diff))) > cone) continue;
+                e.slowTimer = 3.0; e.slowAmount = 0.7; e.chilledUntil = fxTime + 3;
+                if (hasTalent('frost_freeze')) e.frozenTimer = Math.max(e.frozenTimer || 0, 1.0);
             }
+            if (hasTalent('sunder_roar')) after(head.maxLife, dragonRoar);
         },
         'rmb': () => {
             const attackAngle = Math.atan2(mouseY - player.y, mouseX - player.x);
@@ -897,81 +1194,10 @@ var SkillRegistry = {
                     if (Math.abs(diff) <= (Math.PI/1.5)/2) applyDamage(e, calcDmg(80), 'melee');
                 }
             }
-        }
+        },
+        charge: { 3: sk => sk.selectedUpg === 'B' ? startHang() : null }, // Meteor Dive: the hold is the hang (main.js startCharge)
     },
-    'Spellweaver': {
-        1: (sk, dmg) => {
-            addResonance(sk.selectedUpg === 'A' ? 2 : 1); // Velocity: each Fireball stores two charges
-            const angle = Math.atan2(mouseY - player.y, mouseX - player.x);
-            const staffTipX = player.x + Math.cos(angle) * 45; const staffTipY = player.y + Math.sin(angle) * 45;
-            const [dx, dy, dist] = getVector(staffTipX, staffTipY, mouseX, mouseY);
-            let speed = sk.selectedUpg === 'A' ? 800 : 500;
-            if(dist>0) projectiles.push({ x: staffTipX, y: staffTipY, vx: (dx/dist)*speed, vy: (dy/dist)*speed, radius: 12, color: '#ff5722', life: 2.0, type: 'fireball', shape: 'fireball', damage: dmg, pierce: false, isEnemy: false, sourceSkill: sk });
-        },
-        2: (sk, dmg) => {
-            addResonance(1);
-            let spikes = [];
-            for(let k=0; k<15; k++) {
-                let dist = Math.random() * 180;
-                let ang = Math.random() * Math.PI * 2;
-                spikes.push({ xOffset: Math.cos(ang)*dist, yOffset: Math.sin(ang)*dist, size: 10 + Math.random()*15 });
-            }
-            effects.push({ type: 'random_ice_spikes', x: player.x, y: player.y, radius: 180, color: '#81d4fa', life: 0.6, maxLife: 0.6, spikes: spikes });
-            if (sk.selectedUpg === 'B') addShield(calcUtility(60, sk.level), calcUtility(5.0, sk.level));
-            for(let i=enemies.length-1; i>=0; i--) {
-                if (Math.hypot(player.x-enemies[i].x, player.y-enemies[i].y) <= 180 + enemies[i].size/2) {
-                    applyDamage(enemies[i], dmg, 'magic');
-                    // Base nova chills (60% slow); Deep Freeze freezes solid
-                    if (sk.selectedUpg === 'A') enemies[i].frozenTimer = 3.0;
-                    else { enemies[i].slowTimer = 3.0; enemies[i].slowAmount = 0.6; }
-                }
-            }
-            frostfireNova(); // combos.js: cast as your Meteor lands, it turns the impact to frostfire
-            iceWallNova(); // combos.js: cast right after Arcane Beam, the beam's line freezes into a wall
-        },
-        3: (sk, dmg) => {
-            addResonance(1); const [dx, dy, dist] = getVector(player.x, player.y, mouseX, mouseY);
-            const moveDist = Math.min(dist, blinkReach(sk.level)); const startX = player.x; const startY = player.y; // ranks: farther
-            spawnDashGhost('#82b1ff', true, 0.4, Math.atan2(dy, dx));
-            player.x += (dx / dist) * moveDist; player.y += (dy / dist) * moveDist; clampToBounds(player, player.radius);
-            effects.push({ type: 'blink', x0: startX, y0: startY, x1: player.x, y1: player.y, life: 0.45, maxLife: 0.45 });
-            if (sk.selectedUpg === 'A') {
-                let target = getNearestEnemyFromPoint(player.x, player.y, 400);
-                if (target) {
-                    const [tx, ty, td] = getVector(player.x, player.y, target.x, target.y);
-                    projectiles.push({ x: player.x, y: player.y, vx: (tx/td)*700, vy: (ty/td)*700, radius: 8, color: '#e040fb', life: 1.5, type: 'basic', shape: 'arcane_missile', damage: dmg, pierce: false, isEnemy: false });
-                }
-            }
-            if (sk.selectedUpg === 'B') {
-                effects.push({ type: 'random_ice_spikes', x: startX, y: startY, radius: 100, color: '#81d4fa', life: 0.4, maxLife: 0.4, spikes: [{xOffset: 0, yOffset: 0, size: 25}, {xOffset: 20, yOffset: 20, size: 15}, {xOffset: -20, yOffset: -20, size: 15}] });
-                for(let i=enemies.length-1; i>=0; i--) { if (Math.hypot(startX-enemies[i].x, startY-enemies[i].y) <= 100 + enemies[i].size/2) { applyDamage(enemies[i], dmg, 'magic'); enemies[i].slowTimer = 2.0; enemies[i].slowAmount = 0.6; } }
-            }
-        },
-        4: (sk, dmg) => {
-            addResonance(1);
-            const tx = Math.max(currentMap.left, Math.min(currentMap.right, mouseX)); 
-            const ty = Math.max(currentMap.top, Math.min(currentMap.bottom, mouseY)); 
-            let delay = sk.selectedUpg === 'A' ? 0.75 : 1.0;
-            effects.push({ type: 'meteor_fall', x: tx, y: ty, radius: 150, life: delay, maxLife: delay }); // skillfx_ult.js
-            const meteor = trackMeteor(tx, ty, fxTime + delay, 150, dmg); // combos.js Frostfire
-            
-            after(delay, () => {
-                effects.push({ type: 'fiery_explosion', x: tx, y: ty, radius: 150, life: 0.5, maxLife: 0.5 });
-                effects.push({ type: 'molten_scorch', x: tx, y: ty, radius: 120, life: 3.0, maxLife: 3.0 });
-                burst(tx, ty, 0, Math.PI * 2, 14, { kind: 'debris', color: '#4e342e', size: 5, life: 0.7, speed: [150, 380], drag: 4 });
-                for(let i=enemies.length-1; i>=0; i--) { if (Math.hypot(tx-enemies[i].x, ty-enemies[i].y) <= 150 + enemies[i].size/2) applyDamage(enemies[i], dmg, 'magic'); }
-                meteorLanded(meteor); // combos.js: a Frost Nova cast just before turns it to frostfire
-                if (sk.selectedUpg === 'A') addResonance(resonanceMax()); // Accelerated Drop: the impact fills Resonance
-                if (sk.selectedUpg === 'B') {
-                    effects.push({ type: 'echo_charge', x: tx, y: ty, radius: 80, life: 1.5, maxLife: 1.5 });
-                    after(1.5, () => {
-                        effects.push({ type: 'fiery_explosion', x: tx, y: ty, radius: 80, life: 0.5, maxLife: 0.5 });
-                        effects.push({ type: 'molten_scorch', x: tx, y: ty, radius: 70, life: 2.0, maxLife: 2.0 });
-                        for(let i=enemies.length-1; i>=0; i--) { if (Math.hypot(tx-enemies[i].x, ty-enemies[i].y) <= 80 + enemies[i].size/2) applyDamage(enemies[i], dmg*0.5, 'magic'); }
-                    });
-                }
-            });
-        },
+    'Spellweaver': { // the spells live in spellweaver.js (castSpell replaces 1-4); Arcane Beam stays here
         'rmb': () => {
             const angle = Math.atan2(mouseY - player.y, mouseX - player.x); const endX = player.x + Math.cos(angle) * 500; const endY = player.y + Math.sin(angle) * 500;
             effects.push({ type: 'arcane_beam', x1: player.x + Math.cos(angle) * 45, y1: player.y + Math.sin(angle) * 45, x2: endX, y2: endY, life: 0.45, maxLife: 0.45 });
@@ -990,110 +1216,141 @@ var SkillRegistry = {
     'Ranger': {
         // Storm Arrow: hold Q to draw (slower while drawing, no basics), release to fire (main.js startCharge / releaseCharge).
         // k (0..1) is how far it was drawn: 40% damage on a tap, 100% fully drawn, and the line widens. The streak it
-        // leaves strikes the line again a moment later (Thunderhead: full damage and a stun). Quickdraw: half the draw time, no slow.
+        // leaves strikes the line again a moment later at half. Ballista Shot: a full draw hurls the line back; Hunter's Mark:
+        // the first enemy hit is the prey (talents.js: Steady Hands, Broadhead and the paths under them).
         1: (sk, dmg, k = 1, opt = {}) => { // opt.skyline: loosed from a Vault (combos.js Skyline Shot), drawn and x1.25
-            const ang = Math.atan2(mouseY - player.y, mouseX - player.x), full = k >= 1, thunder = sk.selectedUpg === 'B';
-            const hit = dmg * (0.4 + 0.6 * k) * (opt.skyline ? SKYLINE_MULT : 1), width = 14 + 16 * k;
+            const ang = Math.atan2(mouseY - player.y, mouseX - player.x), full = k >= 1;
+            const hit = dmg * (0.4 + 0.6 * k) * (opt.skyline ? SKYLINE_MULT : 1), width = (14 + 16 * k) * (hasTalent('storm_broad') ? 1.5 : 1);
             const x1 = player.x + Math.cos(ang) * 20, y1 = player.y + Math.sin(ang) * 20;
             let x2 = player.x + Math.cos(ang) * STORM_RANGE, y2 = player.y + Math.sin(ang) * STORM_RANGE;
             const wall = clipToWalls(x1, y1, x2, y2, 0, true); if (wall) [x2, y2] = wall; // stage.js: rock stops it
             const onLine = e => !e.dead && distToSegment(e.x, e.y, x1, y1, x2, y2) < e.size / 2 + width / 2;
-            for (const e of enemies) if (onLine(e)) applyDamage(e, hit, 'ranged', ang);
+            const struck = enemies.filter(onLine);
+            for (const e of struck) applyDamage(e, hit, 'ranged', ang);
+            if (sk.selectedUpg === 'B') { // Hunter's Mark: the first one it reached
+                const first = struck.filter(e => !e.dead && !e.pod).sort((a, b) => Math.hypot(a.x - x1, a.y - y1) - Math.hypot(b.x - x1, b.y - y1))[0];
+                if (first) markPrey(first);
+            }
+            if (full && sk.selectedUpg === 'A') ballistaPush(struck, ang, hit);
             if (full) thunderstormVolley(x1, y1, x2, y2); // combos.js: a full draw through a Volley still falling turns its arrows to lightning
             effects.push({ type: 'thunderclap', x: x1, y: y1, angle: ang, life: 0.25, maxLife: 0.25 });
             effects.push({ type: 'storm_shot', x1, y1, x2, y2, width, charge: k, life: 0.55, maxLife: 0.55 });
             addShake(full ? 2.5 : 1);
             if (full && hasItem('Eye of the Storm')) cooldowns.s4 = Math.max(0, cooldowns.s4 - 2); // items.js: a full draw hurries the Volley
             after(STORM_STRIKE_DELAY, () => {
-                effects.push({ type: 'storm_strike', x1, y1, x2, y2, width, charge: thunder ? 1 : k, life: 0.35, maxLife: 0.35 });
-                for (const e of enemies) {
-                    if (!onLine(e)) continue;
-                    applyDamage(e, hit * (thunder ? 1.0 : 0.5), 'magic', ang);
-                    if (thunder && !e.type.startsWith('boss')) e.stunTimer = Math.max(e.stunTimer || 0, 0.5);
-                }
+                effects.push({ type: 'storm_strike', x1, y1, x2, y2, width, charge: k, life: 0.35, maxLife: 0.35 });
+                for (const e of enemies) if (onLine(e)) applyDamage(e, hit * 0.5, 'magic', ang);
             });
         },
-        2: (sk, dmg) => {
-            let healAmt = sk.selectedUpg === 'A' ? 30 : 15; player.hp = Math.min(player.maxHp, player.hp + calcUtility(healAmt, sk.level)); buffs.msBoost = sk.selectedUpg === 'B' ? calcUtility(4.0, sk.level) : calcUtility(2.0, sk.level);
-            effects.push({ type: 'wind_swirl', x: player.x, y: player.y, radius: 60, color: '#4caf50', life: 0.6, maxLife: 0.6 }); updateHUD();
+        2: (sk) => { // Nature's Stride: a heal and a burst of speed; Windwalk: shots pass through you; Hunter's Focus: a turret window
+            player.hp = Math.min(player.maxHp, player.hp + calcUtility(15, sk.level) * (hasTalent('stride_herb') ? 1.5 : 1));
+            buffs.msBoost = calcUtility(2.0, sk.level) + (hasTalent('stride_light') ? 1 : 0);
+            if (sk.selectedUpg === 'A') { buffs.windwalk = hasTalent('ww_long') ? 3.5 : 2; player.slipUsed = false; }
+            if (sk.selectedUpg === 'B') buffs.focus = hasTalent('focus_long') ? 6 : 4;
+            effects.push({ type: 'wind_swirl', x: player.x, y: player.y, radius: 60, color: sk.selectedUpg === 'A' ? '#e0f7fa' : '#4caf50', life: 0.6, maxLife: 0.6 }); updateHUD();
             galeVolley(); // combos.js: a Volley still falling is caught by the gust
         },
-        3: (sk, dmg) => { // Vault: a quick hop through the air; Parting Shot fires from the top of the jump
-            const [dx, dy, dist] = getVector(player.x, player.y, mouseX, mouseY);
-            const moveDist = Math.min(dist, vaultReach(sk)); // ranks: farther; Acrobatics 500
+        3: (sk, dmg) => { // Vault: a quick hop through the air. Disengage flips you away from the cursor; Twin Vault has charges.
+            const away = sk.selectedUpg === 'A';
+            let [dx, dy, dist] = getVector(player.x, player.y, mouseX, mouseY);
+            if (!(dist > 0)) { dx = 1; dy = 0; dist = 1; }
+            if (away) { dx = -dx; dy = -dy; }
+            const moveDist = away ? vaultReach(sk) : Math.min(dist, vaultReach(sk)); // ranks: farther; Long Strides
             const ang = Math.atan2(dy, dx);
             dustPuff(player.x, player.y, ang + Math.PI, 1.8, 4);
             burst(player.x, player.y, ang + Math.PI, 1.6, 5, { kind: 'leaf', color: '#81c784', size: 6, life: 0.5, speed: [80, 180], drag: 4 });
+            if (away) { // Disengage: the next basic is a spread (talents.js: brambles behind, a quicker escape, three spreads)
+                buffs.disengage = 2; player.disengageShots = hasTalent('dis_hitrun') ? 3 : 1;
+                if (hasTalent('dis_bramble')) effects.push({ type: 'thorn_patch', x: player.x, y: player.y, radius: 75, life: 3, maxLife: 3, dmg: calcDmg(activeClass.basicDmg) * 0.5, slow: 0.5 });
+                if (hasTalent('dis_quick') && getNearestEnemyFromPoint(player.x, player.y, 150)) cooldowns.s3 *= 0.6;
+            }
+            if (sk.selectedUpg === 'B') spendVaultCharge();
+            if (hasTalent('tv_momentum')) player.momentum = 0.20;
+            if (hasTalent('tv_guard')) buffs.tvGuard = 1.5;
             startDash({
                 x: player.x + (dx / dist) * moveDist, y: player.y + (dy / dist) * moveDist,
                 dur: 0.2 + moveDist / 3000, arc: 20 + moveDist * 0.08, kind: 'vault',
                 ghost: { color: '#a5d6a7', glow: false, every: 0.04 },
-                onApex: () => {
-                    if (sk.selectedUpg !== 'A') return;
-                    let target = getNearestEnemyFromPoint(player.x, player.y, 400);
-                    if (target) {
-                        const [tx, ty, td] = getVector(player.x, player.y, target.x, target.y);
-                        projectiles.push({ x: player.x, y: player.y, vx: (tx/td)*1200, vy: (ty/td)*1200, radius: 8, color: '#00e676', life: 1.5, type: 'basic', shape: 'arrow', damage: dmg, pierce: false, isEnemy: false });
-                        burst(player.x, player.y - player.z, Math.atan2(ty, tx), 0.8, 6, { kind: 'spark', color: '#b9f6ca', size: 2, life: 0.2, speed: [150, 300], drag: 5 });
+                onArrive: () => {
+                    effects.push({ type: 'vault_land', x: player.x, y: player.y, life: 0.35, maxLife: 0.35 });
+                    if (hasTalent('tv_storm')) { // Storm Hopper
+                        const e = getNearestEnemyFromPoint(player.x, player.y, 300);
+                        if (e) { effects.push({ type: 'lightning', x1: e.x + jitter(40), y1: e.y - 260, x2: e.x, y2: e.y, color: '#80d8ff', life: 0.25, maxLife: 0.25 }); applyDamage(e, dmg * 2, 'magic'); }
                     }
-                },
-                onArrive: () => effects.push({ type: 'vault_land', x: player.x, y: player.y, life: 0.35, maxLife: 0.35 })
+                }
             });
         },
-        4: (sk, dmg) => { // Volley: arrows loosed into the sky rain down on the target area
-            const heavy = sk.selectedUpg === 'A', rain = sk.selectedUpg === 'B';
+        4: (sk, dmg) => { // Volley: arrows loosed into the sky rain down on the target area (Storm Rain: a cloud that keeps raining;
+            // Focused Barrage: every arrow on one enemy)
+            const storm = sk.selectedUpg === 'A', focus = sk.selectedUpg === 'B';
             const [dx, dy, dist] = getVector(player.x, player.y, mouseX, mouseY);
             const reach = Math.min(dist, 500);
-            const [tx, ty] = clampPointToMap(player.x + (dx/dist)*reach, player.y + (dy/dist)*reach, 20);
-            const radius = rain ? 150 : 110, count = rain ? 18 : 10, hitR = heavy ? 36 : 24;
-            const delay = 0.45, spread = 0.35;
+            const [tx, ty] = dist > 0 ? clampPointToMap(player.x + (dx/dist)*reach, player.y + (dy/dist)*reach, 20) : [player.x, player.y];
+            const radius = 110 * (hasTalent('volley_wide') ? 1.3 : 1), hitR = 24;
+            const T = storm ? (hasTalent('rain_long') ? RAIN_LONG : RAIN_TIME) : 0;
+            const count = storm ? Math.round(RAIN_RATE * T) : focus && hasTalent('barrage_more') ? 14 : 10;
+            const delay = 0.45, spread = storm ? T : 0.35;
             const arrows = [];
+            const inCircle = (e, cx, cy) => !e.dead && !e.pod && !(e.spawnT > 0) && Math.hypot(e.x - cx, e.y - cy) <= radius + e.size / 2;
             // The arrows spread over the enemies inside the circle and follow them until they land; with nobody inside they scatter.
-            // Per volley, the first arrow on an enemy deals full damage and every further one VOLLEY_FALLOFF.
-            const inside = enemies.filter(e => !e.dead && !e.pod && !(e.spawnT > 0) && Math.hypot(e.x - tx, e.y - ty) <= radius + e.size / 2).sort(() => Math.random() - 0.5);
-            const hits = new Map();
+            // Per volley, the first arrow on an enemy deals full damage and every further one VOLLEY_FALLOFF (Barrage: the first 6 full).
+            const inside = enemies.filter(e => inCircle(e, tx, ty)).sort(() => Math.random() - 0.5);
+            let prey = focus ? enemies.filter(e => inCircle(e, tx, ty)).sort((a, b) => Math.hypot(a.x - mouseX, a.y - mouseY) - Math.hypot(b.x - mouseX, b.y - mouseY))[0] : null;
+            const hits = new Map(); let landed = 0;
             // volley: combos.js can still change the arrows that haven't landed (Gale Volley: E, Thunderstorm: a Storm Arrow through it)
-            const rainFx = { type: 'arrow_rain', volley: true, castAt: fxTime, x: tx, y: ty, sx: player.x, sy: player.y, radius, arrows, heavy, life: delay + spread + 1.6, maxLife: delay + spread + 1.6 };
-            // One arrow coming down. prev: a Gale Volley second strike, which reuses what the arrow did to each enemy (falloff included)
-            const strike = (ax, ay, mult, storm, prev) => {
-                if (storm) thunderstormFx(ax, ay); else arrowImpactFx(ax, ay, heavy); // combos.js / skillfx_ult.js
+            const rainFx = { type: 'arrow_rain', volley: true, castAt: fxTime, x: tx, y: ty, sx: player.x, sy: player.y, radius, arrows, heavy: false, life: delay + spread + 1.6, maxLife: delay + spread + 1.6 };
+            // One arrow coming down. prev: a Gale Volley second strike, which reuses what the arrow did to each enemy (falloff included);
+            // flat: Storm Rain's arrows, no falloff
+            const strike = (ax, ay, mult, thunder, prev, flat) => {
+                if (thunder) thunderstormFx(ax, ay); else arrowImpactFx(ax, ay, false); // combos.js / skillfx_ult.js
                 const got = new Map();
                 for (let k = enemies.length - 1; k >= 0; k--) {
                     const e = enemies[k];
                     if (e.dead || Math.hypot(e.x - ax, e.y - ay) > hitR + e.size / 2) continue;
                     let f;
                     if (prev) f = prev.has(e) ? prev.get(e) : VOLLEY_FALLOFF;
-                    else { const n = hits.get(e) || 0; hits.set(e, n + 1); f = n ? VOLLEY_FALLOFF : 1; }
+                    else if (flat) f = 1;
+                    else { const n = hits.get(e) || 0; hits.set(e, n + 1); f = n < (focus ? BARRAGE_FULL : 1) ? 1 : VOLLEY_FALLOFF; }
                     got.set(e, f);
-                    applyDamage(e, dmg * f * mult, storm ? 'magic' : 'ranged');
+                    applyDamage(e, dmg * f * mult, thunder ? 'magic' : 'ranged');
                     if (e.dead) continue;
-                    if (heavy) { // Heavy Shafts: the impact staggers
-                        if (!(e.slowTimer > 0) || e.slowAmount < 0.5) e.slowAmount = 0.5;
-                        e.slowTimer = Math.max(e.slowTimer || 0, 1.0);
-                    }
-                    if (storm && !e.type.startsWith('boss')) e.stunTimer = Math.max(e.stunTimer || 0, THUNDERSTORM_STUN);
+                    if (thunder && !e.type.startsWith('boss')) e.stunTimer = Math.max(e.stunTimer || 0, THUNDERSTORM_STUN);
+                    if (hasTalent('volley_bleed')) { e.bleedTimer = 3; e.bleedDmg = Math.max(e.bleedDmg || 0, dmg * 0.15); } // Barbed Tips
+                    if (focus && e === prey && hasTalent('barrage_pin')) { if (!(e.slowTimer > 0) || e.slowAmount < 0.5) e.slowAmount = 0.5; e.slowTimer = Math.max(e.slowTimer || 0, 0.6); }
                 }
                 return got;
             };
             for (let i = 0; i < count; i++) {
                 const a = Math.random() * Math.PI * 2, r = Math.sqrt((i + Math.random()) / count) * radius; // even coverage of the circle
-                const target = inside.length ? inside[i % inside.length] : null, ox = target ? jitter(target.size * 0.5) : 0, oy = target ? jitter(target.size * 0.5) : 0;
-                const arrow = { x: tx + Math.cos(a) * r, y: ty + Math.sin(a) * r, t: delay + Math.random() * spread };
+                let target = prey || (!storm && inside.length ? inside[i % inside.length] : null);
+                const ox = jitter(18), oy = jitter(18);
+                const arrow = { x: tx + Math.cos(a) * r, y: ty + Math.sin(a) * r, t: storm ? delay + (i + Math.random()) / count * T : delay + Math.random() * spread };
                 arrows.push(arrow);
                 after(arrow.t, () => {
-                    if (target) { arrow.x = target.x + ox; arrow.y = target.y + oy; } // where it is now (or where it fell)
-                    const storm = rainFx.storm, got = strike(arrow.x, arrow.y, storm ? THUNDERSTORM_MULT : 1, storm);
+                    if (storm) { // a storm arrow picks its mark as it falls: anyone under the cloud now
+                        const under = enemies.filter(e => inCircle(e, rainFx.x, rainFx.y));
+                        target = under.length ? under[(Math.random() * under.length) | 0] : null;
+                        if (!target) { const aa = Math.random() * Math.PI * 2, rr = Math.sqrt(Math.random()) * radius; arrow.x = rainFx.x + Math.cos(aa) * rr; arrow.y = rainFx.y + Math.sin(aa) * rr; }
+                    }
+                    if (focus && prey && prey.dead && hasTalent('barrage_split')) { prey = getNearestEnemyFromPoint(prey.x, prey.y, 300); target = prey; } // Overflow
+                    if (target && !target.dead) { arrow.x = target.x + (storm ? jitter(target.size * 0.4) : ox * 0.5); arrow.y = target.y + (storm ? jitter(target.size * 0.4) : oy * 0.5); } // where it is now (or where it fell)
+                    const last = ++landed === count && focus && hasTalent('barrage_finale'), thunder = rainFx.storm || last;
+                    const got = strike(arrow.x, arrow.y, (last ? BARRAGE_FINALE : 1) * (rainFx.storm ? THUNDERSTORM_MULT : 1) * (storm ? RAIN_MULT : 1), thunder, null, storm);
+                    if (last && target && !target.dead) target.stunTimer = Math.max(target.stunTimer || 0, 1.0); // Final Shaft
+                    if (last && focus && prey && !prey.dead && hasTalent('barrage_pin')) prey.rootedTimer = Math.max(prey.rootedTimer || 0, 1.0);
                     if (rainFx.gale) after(GALE_DELAY, () => { // the gust drives it in again
-                        const gx = target && !target.dead ? target.x + ox : arrow.x, gy = target && !target.dead ? target.y + oy : arrow.y;
-                        galeStrikeFx(gx, gy, rainFx); strike(gx, gy, GALE_MULT * (storm ? THUNDERSTORM_MULT : 1), storm, got);
+                        const gx = target && !target.dead ? target.x : arrow.x, gy = target && !target.dead ? target.y : arrow.y;
+                        galeStrikeFx(gx, gy, rainFx); strike(gx, gy, GALE_MULT * (rainFx.storm ? THUNDERSTORM_MULT : 1) * (storm ? RAIN_MULT : 1), rainFx.storm, got);
                     });
                 });
             }
+            if (focus && hasTalent('barrage_pin') && !hasTalent('barrage_finale')) after(delay + spread + 0.05, () => { if (prey && !prey.dead) prey.rootedTimer = Math.max(prey.rootedTimer || 0, 1.0); });
+            if (storm) stormCloud(rainFx, T + delay, dmg); // the cloud overhead: it drifts, slows, throws lightning (talents.js)
             effects.push(rainFx);
         },
         charge: { 1: (sk) => { // Storm Arrow is held, not tapped
             effects.push({ type: 'storm_charge', life: 1, maxLife: 1, customUpdate: (dt, ef) => { ef.life = player.charge ? 1 : 0; } }); // skillfx_rmb.js: aim line while held
-            return sk.selectedUpg === 'A' ? { max: STORM_CHARGE_TIME / 2, slow: 1 } : { max: STORM_CHARGE_TIME, slow: 0.7 }; // Quickdraw
+            return { max: STORM_CHARGE_TIME * (hasTalent('storm_steady') ? 0.7 : 1), slow: 0.7 }; // talents.js Steady Hands
         } },
         'rmb': () => { // Chain Lightning (Stormcaller Bow): three lightning bolts in a fan, each jumping between enemies
             const base = Math.atan2(mouseY - player.y, mouseX - player.x), target = aimAssistTarget();
@@ -1409,20 +1666,25 @@ var BasicAttackRegistry = {
             }
             if (hitList.length) addFrenzy(1); // a slam stokes an extra stack, so the slower rhythm still builds Frenzy
         }
+        if (full) for (const e of hitList) if (e.lodgedShield && e.lodgedShield.lodged) ripShield(e.lodgedShield, e); // Hunting Shield: the slam tears it out
+        if (full && hasTalent('sunder_brittle')) for (const e of hitList) if (!e.dead && e.sunderUntil > fxTime && !e.type.startsWith('boss')) e.stunTimer = Math.max(e.stunTimer || 0, 1.0); // talents.js Brittle Scales
         if (fire && hitList.length) {
             const burn = calcDmg(E.baseDmg, E.level) * 0.3; // per second for 3 s; refreshes, doesn't stack (main.js)
             for (const e of hitList) if (!e.dead) igniteEnemy(e, burn);
             if (E.selectedUpg === 'B') { // Wyrmblood: the fire feeds you
                 addShield(calcUtility(5, E.level) * Math.min(3, hitList.length), 4.0);
-                player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.01);
+                player.hp = Math.min(player.maxHp, player.hp + player.maxHp * (hasTalent('wyrm_heal') ? 0.02 : 0.01)); // talents.js Ember Heart
             }
         }
         if (fire && full) batShield(attackAngle, reach, half, calcDmg(E.baseDmg, E.level) * 0.3); // combos.js Rebound: a burning full slam bats the returning shield back out
         if (fire && full && E.selectedUpg === 'A') { // Inferno Edge: the slam erupts in a ring of fire around you
-            effects.push({ type: 'inferno_ring', x: player.x, y: player.y, radius: 150, life: 0.5, maxLife: 0.5 }); // skillfx.js
-            const ring = calcDmg(E.baseDmg, E.level);
-            for (const e of enemies) if (!e.dead && Math.hypot(e.x - player.x, e.y - player.y) <= 150 + e.size / 2) { applyDamage(e, ring, 'magic'); if (!e.dead) igniteEnemy(e, ring * 0.3); }
+            const RR = hasTalent('inferno_wide') ? 210 : 150, ring = calcDmg(E.baseDmg, E.level); // talents.js Firestorm
+            effects.push({ type: 'inferno_ring', x: player.x, y: player.y, radius: RR, life: 0.5, maxLife: 0.5 }); // skillfx.js
+            for (const e of enemies) if (!e.dead && Math.hypot(e.x - player.x, e.y - player.y) <= RR + e.size / 2) { applyDamage(e, ring, 'magic'); if (!e.dead) igniteEnemy(e, ring * 0.3); }
+            if (hasTalent('inferno_scorch')) effects.push({ type: 'fire_puddle', x: player.x, y: player.y, radius: RR, color: 'rgba(255, 87, 34, 0.3)', life: 3, maxLife: 3, dmg: ring }); // Scorched Earth (main.js burns what stands in it)
         }
+        if (fire && k < 0 && !whirl && hasTalent('inferno_wave')) // Flame Wave: a light swing sends the fire on ahead
+            projectiles.push({ x: player.x + Math.cos(attackAngle) * 40, y: player.y + Math.sin(attackAngle) * 40, vx: Math.cos(attackAngle) * 760, vy: Math.sin(attackAngle) * 760, radius: 22, color: '#ff7043', life: 230 / 760, type: 'pierce', shape: 'breath', breath: 'fire', damage: dmg * 0.5, pierce: true, hitList: [], isEnemy: false });
         if (player.frenzyStacks >= 10 && hasItem('Berserker Gauntlets')) basicHitHeal(hitList.length); // items.js (10+ stacks, so the Wyrmheart Pendant's higher cap doesn't put it out of reach)
     },
     'staff': (dmg, isResonance) => {
@@ -1437,7 +1699,12 @@ var BasicAttackRegistry = {
     'bow': (dmg) => {
         const [dx, dy, dist] = getVector(player.x, player.y, mouseX, mouseY);
         if (dist > 0) {
-            projectiles.push({ x: player.x, y: player.y, vx: (dx/dist)*1000, vy: (dy/dist)*1000, radius: 9, color: '#e0e0e0', life: 1.05, type: 'basic', shape: 'arrow', damage: dmg, pierce: false, hitList: [], isEnemy: false, resonance: false, homeTarget: aimAssistTarget() });
+            // Hunter's Mark: arrows curve to the prey; Disengage: the next basic is a spread; Hunter's Focus: two (or three) arrows
+            const a = Math.atan2(dy, dx), prey = preyTarget(), home = prey && Math.hypot(prey.x - player.x, prey.y - player.y) < 900 ? prey : aimAssistTarget();
+            let offs = [0], pierce = false, fan = false;
+            if (buffs.disengage > 0 && player.disengageShots > 0) { player.disengageShots--; const n = hasTalent('dis_spread') ? 7 : 5; offs = Array.from({ length: n }, (_, i) => (i - (n - 1) / 2) * 0.12); pierce = hasTalent('dis_spread'); fan = true; }
+            else if (buffs.focus > 0) { offs = hasTalent('focus_triple') ? [-0.06, 0, 0.06] : [-0.035, 0.035]; pierce = hasTalent('focus_pierce'); }
+            for (const off of offs) projectiles.push({ x: player.x, y: player.y, vx: Math.cos(a + off) * 1000, vy: Math.sin(a + off) * 1000, radius: 9, color: '#e0e0e0', life: 1.05, type: 'basic', shape: 'arrow', damage: dmg, pierce, hitList: [], isEnemy: false, resonance: false, homeTarget: fan ? null : home, markOn: prey });
             if (hasItem("Fletcher's Grips") && (player.fletch = ((player.fletch || 0) + 1) % 4) === 0) { // items.js: every 4th arrow splits
                 const a = Math.atan2(dy, dx);
                 for (const off of [-0.15, 0.15]) projectiles.push({ x: player.x, y: player.y, vx: Math.cos(a + off) * 1000, vy: Math.sin(a + off) * 1000, radius: 9, color: '#e0e0e0', life: 1.05, type: 'basic', shape: 'arrow', damage: dmg, pierce: false, hitList: [], isEnemy: false, resonance: false });

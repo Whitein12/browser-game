@@ -130,7 +130,7 @@ const SKYLINE_MULT = 1.25;
 // lands: a column of fire slams onto the knight, then 3 rings of fire roll out over the ground 0.35 s apart (300 px, each hits
 // an enemy once as it passes: x0.45 and the breath's burn), and the ground burns 140 px wide for 3 s (x0.3/s). All round
 // rather than a cone, so a pack around you takes more and a boss far less: a choice. Frost breath slows instead of burning
-// the ground; Shatter breaks shields all round. Wyrm Whirl still follows. (First a spinning head breathing a spiral: "goofy".)
+// the ground; Sundering Breath Sunders all round. Wyrm Whirl still follows. (First a spinning head breathing a spiral: "goofy".)
 const WYRMFALL_RINGS = 3, WYRMFALL_GAP = 0.35, WYRMFALL_RING_TIME = 0.45, WYRMFALL_MULT = 0.45, WYRMFALL_GROUND = 140, WYRMFALL_BURN = 0.3, WYRMFALL_TIME = 3, WYRMFALL_REACH = 300;
 function wyrmfall(sk, dmg, breath, color) { // skills.js Thunder Leap's landing runs it
     const x = player.x, y = player.y, frost = breath === 'frost';
@@ -148,7 +148,7 @@ function wyrmfall(sk, dmg, breath, color) { // skills.js Thunder Leap's landing 
                 applyDamage(e, dmg * WYRMFALL_MULT, 'magic');
                 if (e.dead) continue;
                 if (frost) { e.slowTimer = 3.0; e.slowAmount = 0.7; }
-                else { e.burnTimer = 3.0; e.burnDps = dmg * 0.2; e.burnColor = color; if (breath === 'shatter') shatterShields(e); } // the breath's own burn (main.js)
+                else { e.burnTimer = 3.0; e.burnDps = dmg * 0.2; e.burnColor = color; if (breath === 'shatter') sunderEnemy(e); } // the breath's own burn (main.js); Sundering Breath (skills.js)
             }
         } }));
 }
@@ -576,9 +576,9 @@ const COMBO_SKILLS = {
 };
 function comboSkill(slot) {
     const c = (COMBO_SKILLS[activeClass.name] || {})[slot];
-    const air = player.dash && player.dash.combo;
+    const air = (player.dash && player.dash.combo) || player.hang; // skills.js Meteor Dive: hanging counts as the air
     if (!c || (c.when && !c.when()) || !(air || (comboOpen && !c.air))) return false;
-    if (!c.keep) { if (air) player.dash.combo = false; else takeCombo(); comboQueued = false; } // spent: no finisher window after this one
+    if (!c.keep) { if (air && player.dash) player.dash.combo = false; else takeCombo(); comboQueued = false; } // spent: no finisher window after this one
     c.cast();
     comboText();
     return true;

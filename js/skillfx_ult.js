@@ -449,6 +449,17 @@ function drawUltProjectile(p) {
 
 function drawUltGround(ef) {
     switch (ef.type) {
+        case 'storm_cloud': { // Ranger Storm Rain (skills.js stormCloud): the cloud's dark shadow on the ground, following its circle
+            const R = ef.rain.radius, el = ef.maxLife - ef.life, a = Math.min(1, el / 0.4, ef.life / 0.5);
+            ctx.save();
+            const g = ctx.createRadialGradient(ef.rain.x, ef.rain.y, R * 0.2, ef.rain.x, ef.rain.y, R * 1.15);
+            g.addColorStop(0, `rgba(20, 30, 45, ${0.32 * a})`); g.addColorStop(1, 'rgba(20, 30, 45, 0)');
+            ctx.fillStyle = g; ctx.beginPath(); ctx.arc(ef.rain.x, ef.rain.y, R * 1.15, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = `rgba(176, 190, 197, ${0.35 * a})`; ctx.lineWidth = 1.5;
+            for (let i = 0; i < 3; i++) { const s = el * 0.5 + i * 2.1; ctx.beginPath(); ctx.arc(ef.rain.x, ef.rain.y, R * (0.55 + 0.15 * i), s, s + 1.6); ctx.stroke(); }
+            ctx.restore();
+            return true;
+        }
         case 'breath_scorch': { // Dragon Breath scorch / frost marks
             const k = clamp01(ef.life / ef.maxLife), frost = ef.breath === 'frost';
             ctx.save();

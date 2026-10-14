@@ -420,7 +420,7 @@ function drawRetributionBolt(p) {
 // Enemy status overlays
 // ==========================================
 
-// Ice casing (frozen), crackling arcs (shocked), a shackle ring (rooted), circling stars (stunned)
+// Ice casing (frozen), crackling arcs (shocked), a shackle ring (rooted), circling stars (stunned), a cracked amber ring (Sundered)
 function drawEnemyStatus(e) {
     const r = e.size / 2;
     if (e.frozenTimer > 0) {
@@ -448,6 +448,20 @@ function drawEnemyStatus(e) {
         ctx.save();
         ctx.strokeStyle = 'rgba(176, 190, 197, 0.9)'; ctx.lineWidth = 2; ctx.setLineDash([4, 3]);
         ctx.beginPath(); ctx.ellipse(e.x, e.y + r * 0.6, r + 6, (r + 6) * 0.45, 0, 0, Math.PI * 2); ctx.stroke();
+        ctx.restore();
+    }
+    if (e.huntMarkUntil > fxTime) { // skills.js Hunter's Mark: a green reticle over the prey, its ticks closing in as the Mark runs out
+        const left = clamp01((e.huntMarkUntil - fxTime) / MARK_TIME), R = r + 9 + 6 * left, y = e.y - r - 14;
+        ctx.save(); ctx.strokeStyle = 'rgba(178, 255, 89, 0.9)'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(e.x, e.y, R, 0, Math.PI * 2); ctx.stroke();
+        for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + fxTime * 0.6; ctx.beginPath(); ctx.moveTo(e.x + Math.cos(a) * (R - 5), e.y + Math.sin(a) * (R - 5)); ctx.lineTo(e.x + Math.cos(a) * (R + 6), e.y + Math.sin(a) * (R + 6)); ctx.stroke(); }
+        ctx.fillStyle = '#b2ff59'; ctx.beginPath(); ctx.moveTo(e.x, y + 6); ctx.lineTo(e.x - 5, y - 2); ctx.lineTo(e.x + 5, y - 2); ctx.closePath(); ctx.fill(); // a marker over its head
+        ctx.restore();
+    }
+    if (e.sunderUntil > fxTime) { // skills.js Sundering Breath: a ring of amber shards with gaps, slowly turning, fading as it runs out
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, (e.sunderUntil - fxTime) / 1.5) * 0.85; ctx.strokeStyle = '#ffab40'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+        for (let i = 0; i < 4; i++) { const a = fxTime * 0.8 + i * Math.PI / 2; ctx.beginPath(); ctx.arc(e.x, e.y, r + 7, a, a + 1.05); ctx.stroke(); }
         ctx.restore();
     }
     if (e.stunTimer > 0 && !e.type.startsWith('boss')) {

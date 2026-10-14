@@ -61,8 +61,46 @@ function spawnHitFx(enemy, source, projAngle) {
     else if (selectedClassId === 'machinist' && source === 'ranged' && Math.hypot(enemy.x - player.x, enemy.y - player.y) < 140) addShake(2);
 }
 
+// Damage numbers: what an enemy took, merged per enemy over a short window (DMG_WINDOW for hits, DOT_WINDOW for burns
+// and bleeds), so a flurry or a DoT makes one number, not dozens. At most DMG_MAX on screen, flat text only (combat.js
+// applyDamage feeds them; drawn above everything by main.js draw).
+const DMG_WINDOW = 0.18, DOT_WINDOW = 0.6, DMG_LIFE = 0.75, DMG_MAX = 40;
+const dmgNumbers = [], dmgPending = new Map();
+function addDmgNumber(e, v, source) {
+    if (!(v > 0)) return;
+    let p = dmgPending.get(e);
+    if (!p) { p = { v: 0, dot: true, at: fxTime + DOT_WINDOW }; dmgPending.set(e, p); }
+    p.v += v;
+    if (source !== 'dot') { p.dot = false; p.at = Math.min(p.at, fxTime + DMG_WINDOW); }
+}
+function updateDmgNumbers(dt) {
+    for (const [e, p] of dmgPending) {
+        if (fxTime < p.at && !e.dead) continue;
+        dmgPending.delete(e);
+        if (dmgNumbers.length >= DMG_MAX) dmgNumbers.shift();
+        const big = !p.dot && activeClass && p.v >= hitDmg(activeClass.basicDmg) * 3; // a big blow reads bigger (combat.js hitDmg: a basic hit now)
+        dmgNumbers.push({ x: e.x + jitter(12), y: e.y - e.size / 2 - 8, v: p.v, dot: p.dot, big, t: 0 });
+    }
+    for (let i = dmgNumbers.length - 1; i >= 0; i--) if ((dmgNumbers[i].t += dt) >= DMG_LIFE) dmgNumbers.splice(i, 1);
+}
+function drawDmgNumbers() {
+    if (!dmgNumbers.length) return;
+    ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    let font = '';
+    for (const n of dmgNumbers) {
+        const k = n.t / DMG_LIFE, f = n.big ? 'bold 17px Georgia, serif' : 'bold 12px Georgia, serif', y = n.y - 24 * Math.sqrt(k);
+        if (f !== font) { ctx.font = font = f; }
+        const txt = n.v < 10 ? n.v.toFixed(1).replace(/\.0$/, '') : Math.round(n.v);
+        ctx.globalAlpha = k < 0.6 ? 1 : 1 - (k - 0.6) / 0.4;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'; ctx.fillText(txt, n.x + 1, y + 1);
+        ctx.fillStyle = n.dot ? '#ffb74d' : n.big ? '#ffe082' : '#f5f5f5'; ctx.fillText(txt, n.x, y);
+    }
+    ctx.restore();
+}
+
 function updateFx(dt) {
     fxTime += dt;
+    updateDmgNumbers(dt);
     for (let i = particles.length - 1; i >= 0; i--) {
         const p = particles[i];
         p.life -= dt;

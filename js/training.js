@@ -3,6 +3,7 @@
 // ==========================================
 // Picked from the "Training Room" box on the dungeon map (menu.js), then a class as usual. No waves, no loot, no XP:
 // the hero starts with every skill at rank 1 and a panel (T) to set ranks, evolutions, gear and cheats, and to place dummies.
+// The skill tree (K, skilltree.js) is free here: no points, no level gates, respec any time.
 //   1 / 2 / 3 at the cursor: a target dummy, a boss dummy (counts as a boss: boss bar, CC shaken off faster, weak points x1.5),
 //   a sparring dummy (a telegraphed swing in reach, a slow bolt from further away: parries, Counter Step, Razor's Edge).
 //   0 clears them, G fills the class gauge. Each dummy shows the damage it took over the last 5 s and in total.
@@ -28,8 +29,8 @@ BOSS_NAMES.boss_dummy = 'Training Dummy'; // hud.js boss bar
 // ---------- the run ----------
 
 function startTraining() { // main.js startGame, in place of the starting-skill pick and the first wave
-    for (let i = 1; i <= 4; i++) activeClass.skills[i].level = Math.max(1, activeClass.skills[i].level);
-    player.skillPoints = 0; wave = 1; isBossWave = false; enemiesToSpawn = 0; activeEnemies = 0; enemySpawnTimer = 1e9; waveBreak = 0;
+    for (let i = 1; i <= 4; i++) player.tree[`s${i}_learn`] = true; // skilltree.js: every skill learned; the tree (K) is free here
+    applyTree(); player.skillPoints = 0; wave = 1; isBossWave = false; enemiesToSpawn = 0; activeEnemies = 0; enemySpawnTimer = 1e9; waveBreak = 0;
     waveStats = { kills: 0, gold0: 0, time: 0, dmgTaken: 0, peak: 0 };
     training.place = null;
     buildTrainingPanel();
@@ -205,10 +206,17 @@ function setTrainingKit(on) { // the late-game kit of the DPS tests: the class's
     player.orbDmg = on ? 0.8 : 0;
     recalcStats(); player.hp = player.maxHp; hud.sig = null; updateHUD();
 }
+// The panel's rank and evolution buttons write the skill's branch of the tree (skilltree.js): rank 4 is an evolution,
+// so picking A or B means rank 4, and a lower rank drops the evolution and whatever grew from it
 function setSkill(slot, level, upg) {
-    const sk = activeClass.skills[slot];
-    if (level !== undefined) sk.level = level;
-    if (upg !== undefined) sk.selectedUpg = upg;
+    const sk = activeClass.skills[slot], p = `s${slot}_`, T = player.tree;
+    if (level === undefined) level = upg ? 4 : Math.min(sk.level, 3);
+    if (!sk.upgA) { level = Math.min(level, 3); upg = null; } // spellweaver.js: spells have no evolutions yet
+    if (level === 4 && !upg) upg = sk.selectedUpg || 'A';
+    ['learn', 'r2', 'r3', 'evoA', 'evoB'].forEach(k => delete T[p + k]);
+    ['learn', 'r2', 'r3'].slice(0, Math.min(level, 3)).forEach(k => T[p + k] = true);
+    if (level === 4) T[p + 'evo' + upg] = true;
+    treePrune(); applyTree(); // skilltree.js: the twigs and the nodes under an evolution go with what they grew from
     if (activeClass.name === 'Paladin') resetPaladinState(); // a changed Q or E: the hammer back in hand
     renderTrainingPanel(); updateHUD();
 }
@@ -232,20 +240,20 @@ function renderTrainingPanel() {
     const tog = (id, on, label) => `<button class="tr-btn ${on ? 'on' : ''}" data-act="${id}">${label}</button>`;
     const skills = [1, 2, 3, 4].map(i => {
         const sk = activeClass.skills[i];
-        const ranks = [0, 1, 2, 3, 4].map(r => `<button class="tr-rank ${sk.level === r ? 'on' : ''}" data-act="rank" data-slot="${i}" data-v="${r}">${r}</button>`).join('');
-        const evo = [[null, 'Base'], ['A', sk.upgA.name], ['B', sk.upgB.name]].map(([v, n]) =>
+        const ranks = (sk.upgA ? [0, 1, 2, 3, 4] : [0, 1, 2, 3]).map(r => `<button class="tr-rank ${sk.level === r ? 'on' : ''}" data-act="rank" data-slot="${i}" data-v="${r}">${r}</button>`).join('');
+        const evo = !sk.upgA ? '' : [[null, 'Base'], ['A', sk.upgA.name], ['B', sk.upgB.name]].map(([v, n]) =>
             `<button class="tr-evo ${(sk.selectedUpg || null) === v ? 'on' : ''}" data-act="evo" data-slot="${i}" data-v="${v || ''}" title="${v ? (v === 'A' ? sk.upgA.desc : sk.upgB.desc).replace(/"/g, '&quot;') : 'No evolution'}">${v ? n : 'Base'}</button>`).join('');
-        return `<div class="tr-skill"><span class="tr-key">${keys[i]}</span><span class="tr-name">${sk.name}</span><div class="tr-row">${ranks}</div><div class="tr-row">${evo}</div></div>`;
+        return `<div class="tr-skill"><span class="tr-key">${keys[i]}</span><span class="tr-name">${sk.name}</span><div class="tr-row">${ranks}</div>${evo ? `<div class="tr-row">${evo}</div>` : ''}</div>`;
     }).join('');
     p.innerHTML = `<div class="ui-label">Training Room</div>
-        <div class="tr-hint"><kbd>T</kbd> hide this · <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> dummy at the cursor · <kbd>0</kbd> clear · <kbd>G</kbd> fill gauge</div>
+        <div class="tr-hint"><kbd>T</kbd> hide this · <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> dummy at the cursor · <kbd>0</kbd> clear · <kbd>G</kbd> fill gauge · <kbd>K</kbd> skill tree (free here)</div>
         <div class="tr-sec">Dummies</div>
         <div class="tr-row">${tog('place-target', training.place === 'target', 'Target')}${tog('place-boss', training.place === 'boss', 'Boss')}${tog('place-spar', training.place === 'spar', 'Sparring')}<button class="tr-btn" data-act="clear">Clear</button></div>
         <div class="tr-row">${tog('immortal', training.immortal, 'Immortal dummies')}${tog('god', training.god, 'God mode')}</div>
         <div class="tr-sec">Cheats</div>
         <div class="tr-row">${tog('cds', devNoCooldowns, 'No cooldowns')}<button class="tr-btn" data-act="gauge">Fill gauge</button><button class="tr-btn" data-act="reset">Reset cooldowns</button></div>
         <div class="tr-row">${tog('kit', training.kit, 'Late-game kit (rare set, +80 Power)')}</div>
-        <div class="tr-sec">Skills: rank · evolution</div>${skills}
+        <div class="tr-sec">Skills: rank · evolution</div>${isSpellbook() ? '<div class="tr-row"><button class="tr-btn" data-act="spellbook">Spellbook: change spells</button></div>' : ''}${skills}
         <div class="tr-row" style="margin-top:10px"><button class="tr-btn tr-exit" data-act="exit">Leave the Training Room</button></div>`;
 }
 function onTrainingClick(ev) {
@@ -261,6 +269,7 @@ function onTrainingClick(ev) {
     else if (act === 'kit') setTrainingKit(!training.kit);
     else if (act === 'rank') { setSkill(+b.dataset.slot, +b.dataset.v); return; }
     else if (act === 'evo') { setSkill(+b.dataset.slot, undefined, b.dataset.v || null); return; }
+    else if (act === 'spellbook') { b.blur(); showSpellbook(null, true); return; } // spellweaver.js: any spell on any key, free here
     else if (act === 'exit') { location.reload(); return; } // as End Run does
     b.blur(); renderTrainingPanel(); updateHUD();
 }

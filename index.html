@@ -92,9 +92,10 @@
                 <div class="orb-label">Health</div>
             </div>
             <div id="hud-center">
+                <div id="lvl-toast"></div>
                 <div id="hud-chips"></div>
                 <div id="skill-bar"></div>
-                <div id="xp-bar"><div id="xp-level"></div><div class="xp-track"><div id="xp-fill"></div></div><div id="xp-text"></div><div class="xp-hint"><kbd>Tab</kbd> stats &middot; <kbd>I</kbd> items</div></div>
+                <div id="xp-bar"><div id="xp-level"></div><div id="xp-points" class="hidden"></div><div class="xp-track"><div id="xp-fill"></div></div><div id="xp-text"></div><div class="xp-hint"><kbd>Tab</kbd> stats &middot; <kbd>I</kbd> items &middot; <kbd>K</kbd> skills</div></div>
             </div>
             <div class="orb-wrap" id="gauge-wrap">
                 <canvas id="orb-gauge"></canvas>
@@ -211,13 +212,21 @@
             </div>
         </div>
 
-        <div id="levelup-screen" class="modal-overlay hidden">
-            <div class="panel">
-                <h1 class="ui-title" id="levelup-title">Level Up</h1>
-                <div class="ui-sub" id="levelup-sub"></div>
+        <div id="tree-screen" class="hidden">
+            <canvas id="tree-canvas"></canvas>
+            <div id="tree-head"><h1 class="ui-title" id="tree-title">Skill Tree</h1><div class="ui-sub" id="tree-sub"></div></div>
+            <div id="tree-info" class="panel"></div>
+            <div id="tree-bar"><div class="ui-hint" id="tree-hint"></div><div class="ui-row" id="tree-buttons"></div></div>
+        </div>
+
+        <div id="spellbook-screen" class="modal-overlay hidden">
+            <div class="panel sb-panel">
+                <h1 class="ui-title">The Spellbook</h1>
+                <div class="ui-sub">Choose four spells, one per key. At most one Greater spell (it opens at Lv. 5).</div>
                 <div class="ui-divider"><span></span></div>
-                <div class="skill-cards" id="skill-buttons"></div>
-                <div class="ui-hint">Click a skill or press <kbd>1</kbd>&ndash;<kbd>4</kbd></div>
+                <div class="sb-keys" id="sb-keys"></div>
+                <div class="sb-schools" id="sb-schools"></div>
+                <div class="ui-hint">Click a key, then a spell for it (a spell already on a key swaps over) &middot; <span class="cc-back" onclick="closeSpellbook(false)"><kbd>Enter</kbd> begin</span> &middot; <span class="cc-back" onclick="closeSpellbook(true)"><kbd>Esc</kbd> back</span></div>
             </div>
         </div>
 
@@ -228,21 +237,6 @@
                 <div class="ui-divider"><span></span></div>
                 <div class="skill-cards" id="companion-cards"></div>
                 <div class="ui-hint">Click a companion or press <kbd>1</kbd> / <kbd>2</kbd> &middot; <span class="cc-back" onclick="closeCompanionChoice()"><kbd>Esc</kbd> back</span></div>
-            </div>
-        </div>
-
-        <div id="upgrade-screen" class="modal-overlay hidden">
-            <div class="panel">
-                <h1 class="ui-title">Rank 4 Evolution</h1>
-                <div class="ui-sub">This choice is permanent for the run</div>
-                <div class="evo-head"><img id="evolve-skill-icon"><div class="evo-name" id="evolve-skill-name"></div></div>
-                <svg class="evo-fork" viewBox="0 0 420 40"><path d="M210 0 V12 Q210 20 190 20 H90 Q70 20 70 40 M210 12 Q210 20 230 20 H330 Q350 20 350 40" fill="none" stroke="#6e5630" stroke-width="2"/></svg>
-                <div class="evo-paths">
-                    <div class="evo-path" onclick="selectUpgrade('A')"><div class="evo-letter">A</div><div class="ep-name" id="upg-a-title">Path A</div><div class="ep-desc" id="upg-a-desc"></div></div>
-                    <div class="evo-or">or</div>
-                    <div class="evo-path b" onclick="selectUpgrade('B')"><div class="evo-letter">B</div><div class="ep-name" id="upg-b-title">Path B</div><div class="ep-desc" id="upg-b-desc"></div></div>
-                </div>
-                <div class="ui-hint">Click a path or press <kbd>1</kbd> / <kbd>2</kbd></div>
             </div>
         </div>
 
@@ -337,8 +331,12 @@
     <script src="js/ai.js"></script>
     <script src="js/combat.js"></script>
     <script src="js/ui.js"></script>
+    <script src="js/talents.js"></script>
+    <script src="js/skilltree.js"></script>
     <script src="js/paladin.js"></script>
     <script src="js/druid.js"></script>
+    <script src="js/spellweaver.js"></script>
+    <script src="js/spellweaver_evo.js"></script>
     <script src="js/items.js"></script>
     <script src="js/sprites.js"></script>
     <script src="js/portraits.js"></script>

@@ -16,7 +16,7 @@ const hasRmbSkill = () => equipment.weapon && equipment.weapon.rarity === 'rare'
 // (Re)build the skill bar when the class or the rare-weapon slot changes
 function buildSkillBar() {
     const cid = activeClassId(), bar = el('skill-bar'), rmb = hasRmbSkill();
-    hud.sig = cid + (rmb ? ':rmb' : ''); hud.slots = {}; bar.innerHTML = '';
+    hud.sig = cid + (rmb ? ':rmb' : '') + spellKey(); hud.slots = {}; bar.innerHTML = '';
     const make = (slot) => {
         const w = document.createElement('div'); w.className = 'slot-wrap';
         w.innerHTML = `<div class="slot${slot === 'rmb' ? ' slot-rmb' : ''}"><img src="${skillIcon(cid, slot)}"><div class="cd"></div><div class="cd-num"></div><div class="key">${SLOT_KEYS[slot]}</div></div>`
@@ -54,6 +54,10 @@ function hudChips() {
     if (buffs.dragonfire > 0) c.push(['#ff7043', 'Dragonfire Blade', `+${Math.round(dragonfireBonus() * 100)}% basics · ${Math.ceil(buffs.dragonfire)}s`]); // skills.js
     if (n === 'Machinist' && activeClass.skills[1].level > 0) c.push(['#ffb74d', 'Turrets', `${projectiles.filter(p => p.type === 'turret').length} / ${turretCap()}`]); // skills.js
     if (n === 'Machinist' && buffs.overclockTimer > 0) c.push(['#ffb74d', 'Overclock', `${buffs.overclockTimer.toFixed(1)}s`]); // the gauge orb shows Scrap now
+    if (n === 'Ranger' && buffs.windwalk > 0) c.push(['#e0f7fa', 'Windwalk', `${buffs.windwalk.toFixed(1)}s`]); // skills.js evolutions
+    if (n === 'Ranger' && buffs.focus > 0) c.push(['#b2ff59', 'Hunter\'s Focus', `${buffs.focus.toFixed(1)}s`]);
+    if (n === 'Ranger' && activeClass.skills[3].selectedUpg === 'B') c.push(['#a5d6a7', 'Vault', `${player.vaultCharges === undefined ? vaultMax() : player.vaultCharges} / ${vaultMax()}`]);
+    if (n === 'Ranger' && preyTarget()) c.push(['#b2ff59', 'Prey', `${(player.prey.huntMarkUntil - fxTime).toFixed(1)}s`]);
     if (n === 'Druid' && buffs.feralSurge > 0) c.push(['#b2ff59', 'Feral Surge', `${buffs.feralSurge.toFixed(1)}s`]);
     if (n === 'Druid' && buffs.direWolf > 0) c.push(['#ffab40', companion().big, `${buffs.direWolf.toFixed(1)}s`]);
     if (n === 'Druid' && player.wolves && player.wolves.length > 1) c.push(['#76ff03', companion().spirits, `${player.wolves.length - 1} · ${Math.max(...player.wolves.slice(1).map(w => w.life)).toFixed(1)}s`]); // druid.js; the gauge orb shows Bond
@@ -65,13 +69,15 @@ function hudChips() {
 
 function updateHUD() {
     if (!activeClass) return;
-    if (hud.sig !== activeClassId() + (hasRmbSkill() ? ':rmb' : '')) buildSkillBar();
+    if (hud.sig !== activeClassId() + (hasRmbSkill() ? ':rmb' : '') + spellKey()) buildSkillBar(); // spellweaver.js: a new loadout
 
     el('hp-text').textContent = `${Math.ceil(player.hp)} / ${Math.round(player.maxHp)}`;
     el('shield-text').textContent = player.shield > 0 ? `+${Math.ceil(player.shield)} shield` : '';
     el('xp-level').textContent = player.level;
     el('xp-text').textContent = `${Math.floor(player.xp)} / ${player.maxXp}`;
     el('xp-fill').style.width = Math.max(0, Math.min(100, player.xp / player.maxXp * 100)) + '%';
+    const pts = el('xp-points'), unspent = player.skillPoints > 0 && !isTraining(); // skilltree.js: points waiting for K
+    pts.classList.toggle('hidden', !unspent); if (unspent) pts.textContent = `+${player.skillPoints}`;
 
     // Class gauge captions (the orb itself is painted in drawHudOrbs)
     const g = classGauge(), sig = `${g.name}|${g.big}|${g.small}|${g.warn}`;
@@ -286,25 +292,27 @@ function renderTabSheet() {
     if (frenzy) h += row(`Frenzy &times;${player.frenzyStacks}`, `${pct(frenzy)} speed`, 'sub temp');
     h += row('Cooldown reduction', `${Math.round((1 - getCDR()) * 100)}%`);
     if (equipment.amulet) h += row(equipment.amulet.name, pct(equipment.amulet.val), 'sub');
+    if (player.treeCdr) h += row('Talents', pct(player.treeCdr), 'sub'); // skilltree.js: Focus
 
     // Defense
     const gearHp = equipment.armor ? equipment.armor.val : 0;
     h += `<h4>Defense</h4>` + row('Max health', Math.round(player.maxHp));
     h += row('Class base', activeClass.baseMaxHp, 'sub');
     if (gearHp) h += row(equipment.armor.name, `+${Math.round(gearHp)}`, 'sub');
-    if (player.bonusMaxHp) h += row('Blessings', `+${player.bonusMaxHp}`, 'sub');
+    if (player.treeHp) h += row('Talents', `+${player.treeHp}`, 'sub'); // skilltree.js: Vitality
     const armorNow = player.armor * (typeof paladinArmorMult === 'function' && n === 'Paladin' ? paladinArmorMult() : 1);
     h += row('Armor', Math.round(armorNow * 10) / 10) + `<div class="note">blocks ${Math.round(armorReduction(armorNow) * 100)}% of every hit</div>`;
     if (player.shield > 0) h += row('Shield', Math.ceil(player.shield), 'sub temp');
     h += row('Move speed', Math.round(player.speed));
     if (equipment.boots) h += row(equipment.boots.name, `+${Math.round(equipment.boots.val)}`, 'sub');
+    if (player.treeSpeed) h += row('Talents', `+${player.treeSpeed}`, 'sub'); // skilltree.js: Fleetness
     if (n === 'Ranger' && player.momentum > 0) h += row('Momentum', `${pct(player.momentum)} speed`, 'sub temp');
 
     // Skills: rank, evolution and what they do now
     h += `<h4>Skills</h4>`;
     const cid = activeClassId();
     for (let i = 1; i <= 4; i++) {
-        const sk = activeClass.skills[i], evo = sk.selectedUpg ? sk['upg' + sk.selectedUpg].name : null;
+        const sk = activeClass.skills[i], talents = treeNodes().filter(n => n.slot === i && n.name && hasTalent(n.id)).length, evo = [sk.selectedUpg ? sk['upg' + sk.selectedUpg].name : null, talents ? `${talents} talent${talents > 1 ? 's' : ''}` : null].filter(Boolean).join(' &middot; '); // skilltree.js
         const v = sk.level ? [sk.baseDmg > 0 ? `${Math.round(hitDmg(sk.baseDmg, sk.level))} dmg` : '', sk.maxCd ? `${(skillBaseCd(i, sk.level) * getCDR()).toFixed(1)}s cd` : ''].filter(Boolean).join('<br>') : 'locked';
         h += `<div class="sk"><img class="${sk.level ? '' : 'off'}" src="${skillIcon(cid, i)}"><div class="n">${SLOT_KEYS[i]} &middot; ${sk.name}<i>${sk.level ? `Rank ${sk.level}` : 'Not learned'}${evo ? ` &middot; ${evo}` : ''}</i></div><div class="v">${v}</div></div>`;
     }
