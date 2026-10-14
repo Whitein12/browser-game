@@ -429,13 +429,6 @@ function drawUltProjectile(p) {
             const g = ctx.createRadialGradient(p.x, p.y, 4, p.x, p.y, 34);
             g.addColorStop(0, `rgba(255, 82, 0, ${0.35 + 0.2 * heat})`); g.addColorStop(1, 'rgba(255, 61, 0, 0)');
             ctx.fillStyle = g; ctx.beginPath(); ctx.arc(p.x, p.y, 34, 0, Math.PI * 2); ctx.fill();
-            // Nuclear Payload: hazard flashes in the last stretch before the turrets blow
-            if (p.type === 'turret' && activeClass.skills[4].selectedUpg === 'A' && buffs.overclockTimer < 1.2 && Math.sin(fxTime * 30) > 0) {
-                ctx.strokeStyle = 'rgba(255, 235, 59, 0.9)'; ctx.lineWidth = 3; ctx.setLineDash([6, 4]);
-                ctx.beginPath(); ctx.arc(p.x, p.y, 28, 0, Math.PI * 2); ctx.stroke();
-                ctx.setLineDash([]);
-                ctx.fillStyle = 'rgba(255, 82, 82, 0.9)'; ctx.font = 'bold 16px monospace'; ctx.textAlign = 'center'; ctx.fillText('!', p.x, p.y - 30);
-            }
             ctx.restore();
         }
         return false; // the turret itself is drawn as usual on top

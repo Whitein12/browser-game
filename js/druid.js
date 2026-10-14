@@ -44,6 +44,19 @@ const COMPANIONS = {
 };
 function companion() { return COMPANIONS[player.companion] || COMPANIONS.wolf; }
 
+// The web's talents (talents.js TALENT_WEBS.druid): Hunting Ground's thickets, Alpha Leap's clock, Apex Predator's count
+const drw = { thickets: [], leapAt: -99, direBites: 0 };
+function druidThicket(w) { return drw.thickets.find(t => Math.hypot(w.x - t.x, w.y - t.y) <= t.r) || null; }
+function tandemLeap(w) { // Tandem Leap: the companion bounds to your landing and bites what's there
+    wolfLeapTo(w, player.x + 26, player.y + 10, 0.28, 30, () => { const t = getNearestEnemyFromPoint(w.x, w.y, 140); if (t && wolfCanHunt(t)) wolfBite(w, t); }, true);
+}
+function spiritStampede(w) { // an expiring spirit charges through the nearest enemies
+    const t = getNearestEnemyFromPoint(w.x, w.y, 400); if (!t) return;
+    const a = Math.atan2(t.y - w.y, t.x - w.x), x1 = w.x + Math.cos(a) * 320, y1 = w.y + Math.sin(a) * 320, dmg = calcDmg(activeClass.basicDmg) * WOLF_BITE * 1.5;
+    effects.push({ type: 'lightning', x1: w.x, y1: w.y, x2: x1, y2: y1, color: '#b2ff59', lineWidth: 6, life: 0.3, maxLife: 0.3 });
+    for (const e of enemies) if (!e.dead && distToSegment(e.x, e.y, w.x, w.y, x1, y1) <= e.size / 2 + 24) applyDamage(e, dmg, 'wolf', a);
+}
+const drPower = () => isDruid() && buffs.feralSurge > 0 && druidUpg(2) === 'A' && hasTalent('dr_rage_fury') ? 0.15 : 0; // combat.js powerParts: Primal Fury
 function isDruid() { return activeClass && activeClass.name === 'Druid'; }
 function mainWolf() { return isDruid() && player.wolves ? player.wolves[0] : null; }
 function hasHeartwood() { return equipment.weapon && equipment.weapon.name === 'Gnarled Heartwood Totem'; }
@@ -59,6 +72,7 @@ function makeWolf(x, y, o = {}) {
 // Called on game start (newRun) and at the start of every wave, after the hero is placed: the wolf comes back to heel.
 // Bond carries over between waves; it decays on its own when the wolf goes without prey.
 function resetDruidState(newRun) {
+    drw.thickets.length = 0; drw.leapAt = -99;
     if (newRun) { player.bond = 0; player.bondIdle = 0; player.freeMaul = false; if (isDruid()) applyCompanionText(); }
     player.wolves = null;
     buffs.feralSurge = 0; buffs.direWolf = 0; // (the bark shell keeps its shield; updateDruid ends it with the shield)
@@ -148,21 +162,21 @@ SkillRegistry['Druid'] = {
         projectiles.push({ x: player.x, y: player.y, vx: (dx/dist)*700, vy: (dy/dist)*700, radius: 8, color: '#8bc34a', life: Math.max(0.05, Math.min(dist, 500) / 700), type: 'bramble_core', shape: 'circle', damage: dmg, pierce: false, hitList: [], isEnemy: false, sourceSkill: sk });
     },
     2: (sk) => { // Feral Surge: nature magic poured into the wolf; the Druid gets a bark shell
-        const surge = calcUtility(SURGE_TIME, sk.level); // ranks: longer (5 → 8 s) and a thicker shell
+        const surge = calcUtility(SURGE_TIME, sk.level) + (hasTalent('dr_surge_long') ? 2 : 0); // ranks: longer (5 → 8 s) and a thicker shell; Long Surge
         buffs.feralSurge = surge; buffs.barkburstUsed = false;
-        player.shield = 100 + sk.level * 20; player.shieldTimer = surge;
+        player.shield = (100 + sk.level * 20) * (hasTalent('dr_surge_bark') ? 1.5 : 1); player.shieldTimer = surge; // Thick Bark
         buffs.barkskin = true; // the bark shell (skillfx_e.js) and the Mantle of the Living Grove's roots; ends with the shield
         buffs.slowed = 0; buffs.rooted = 0;
         effects.push({ type: 'bark_form', x: player.x, y: player.y, life: 0.35, maxLife: 0.35 });
         const w = mainWolf();
         if (w) effects.push({ type: 'feral_surge', wolf: w, life: 0.6, maxLife: 0.6 });
-        if (sk.selectedUpg === 'B') spawnSpiritWolves(1, KINDRED_TIME, w || player); // Kindred Howl: stays on after the surge
+        if (sk.selectedUpg === 'B') spawnSpiritWolves(hasTalent('dr_kin_twin') ? 2 : 1, hasTalent('dr_kin_long') ? 12 : KINDRED_TIME, w || player, SPIRIT_DMG * (hasTalent('dr_kin_fangs') ? 1.3 : 1)); // Kindred Howl: stays on after the surge (Twin Spirits, Spirit Fangs)
     },
     // Spirit Leap: you leap and land hard; the companion stays on its prey (it no longer leaves a nearly dead enemy to follow
     // you) and answers your landing with a rake where it stands
     3: (sk, dmg) => {
         const ang = Math.atan2(mouseY - player.y, mouseX - player.x);
-        const reach = Math.max(LEAP_MIN, Math.min(LEAP_MAX, Math.hypot(mouseX - player.x, mouseY - player.y)));
+        const reach = Math.max(LEAP_MIN, Math.min(LEAP_MAX + (hasTalent('dr_leap_far') ? 80 : 0), Math.hypot(mouseX - player.x, mouseY - player.y))); // Far Leap
         dustPuff(player.x, player.y, ang + Math.PI, 1.6, 4, '#6d5d4b');
         startDash({
             x: player.x + Math.cos(ang) * reach, y: player.y + Math.sin(ang) * reach,
@@ -173,23 +187,29 @@ SkillRegistry['Druid'] = {
                 barkburst(dmg); // Barkburst: leaping during Feral Surge
                 const w = mainWolf();
                 if (w && !w.leap) wolfSlam(w, sk, dmg, w.target && !w.target.dead ? Math.atan2(w.target.y - w.y, w.target.x - w.x) : w.angle);
+                if (w && !w.leap && sk.selectedUpg === 'A' && hasTalent('dr_alpha_tandem')) tandemLeap(w); // Tandem Leap
             }
         });
     },
     4: (sk, dmg) => { // Call of the Wild: the wolf howls (hit + stun around it), then the pack answers
         const w = mainWolf(); if (!w) return;
         w.howl = 0.6;
-        effects.push({ type: 'wolf_howl', x: w.x, y: w.y, radius: HOWL_RADIUS, life: 0.8, maxLife: 0.8 });
+        const HR = HOWL_RADIUS * (hasTalent('dr_call_howl') ? 1.4 : 1); // Thunderous Howl
+        effects.push({ type: 'wolf_howl', x: w.x, y: w.y, radius: HR, life: 0.8, maxLife: 0.8 });
         for (const e of enemies) {
-            if (e.dead || e.pod || Math.hypot(e.x - w.x, e.y - w.y) > HOWL_RADIUS + e.size / 2) continue;
+            if (e.dead || e.pod || Math.hypot(e.x - w.x, e.y - w.y) > HR + e.size / 2) continue;
             applyDamage(e, dmg, 'magic');
             if (!e.dead) e.stunTimer = Math.max(e.stunTimer || 0, 1.0);
         }
         if (sk.selectedUpg === 'A') { // Dire Aspect: one huge beast instead of a pack
-            buffs.direWolf = DIRE_TIME;
+            buffs.direWolf = hasTalent('dr_dire_long') ? 11 : DIRE_TIME; drw.direBites = 0; // Elder Blood
+            if (hasTalent('dr_dire_terror')) for (const e of enemies) { // Terror: the pack scatters before it
+                if (e.dead || e.pod || e.prop || e.type.startsWith('boss') || Math.hypot(e.x - w.x, e.y - w.y) > 250 + e.size / 2) continue;
+                const a = Math.atan2(e.y - w.y, e.x - w.x); e.tauntTimer = 1.5; e.tauntX = e.x + Math.cos(a) * 400; e.tauntY = e.y + Math.sin(a) * 400;
+            }
             effects.push({ type: 'text', text: companion().big.toUpperCase(), x: w.x, y: w.y - 40, color: '#ffab40', life: 1.0, maxLife: 1.0 });
             burst(w.x, w.y, 0, Math.PI * 2, 14, { kind: 'leaf', color: '#7cb342', size: 8, life: 0.8, speed: [120, 300], drag: 3 });
-        } else spawnSpiritWolves(sk.selectedUpg === 'B' ? 4 : 2, SPIRIT_TIME, w, SPIRIT_DMG * calcUtility(1, sk.level)); // Wild Hunt: four; ranks: harder bites
+        } else spawnSpiritWolves(sk.selectedUpg === 'B' ? 4 : 2, sk.selectedUpg === 'B' && hasTalent('dr_hunt_long') ? 16 : SPIRIT_TIME, w, SPIRIT_DMG * calcUtility(1, sk.level)); // Wild Hunt: four (The Long Hunt: 16 s); ranks: harder bites
     },
     'rmb': () => { // Thistle-Grip Claws (Gnarled Heartwood Totem): a giant spirit paw rakes a wide cone and pins what it catches
         const angle = Math.atan2(mouseY - player.y, mouseX - player.x);
@@ -252,10 +272,17 @@ function barkburst(dmg) {
 
 // Bramble Snare's burst (main.js calls this where the seed lands or hits)
 function snareBurst(x, y, dmg, sk) {
-    effects.push({ type: 'snare_burst', x, y, radius: SNARE_RADIUS, life: 0.5, maxLife: 0.5 });
+    const vines = sk && sk.selectedUpg === 'B', R = vines && hasTalent('dr_vines_reach') ? 220 : SNARE_RADIUS * (hasTalent('dr_snare_wide') ? 1.3 : 1); // talents: Wide Snare, Long Vines
+    const root = vines && hasTalent('dr_vines_strangle') ? 2 : hasTalent('dr_snare_root') ? 1.5 : SNARE_ROOT; // Strangle, Deep Roots
+    effects.push({ type: 'snare_burst', x, y, radius: R, life: 0.5, maxLife: 0.5 });
+    if (sk && sk.selectedUpg === 'A') drw.thickets.push({ x, y, r: R, t: hasTalent('dr_ground_long') ? 6 : 4, killUsed: false }); // Hunting Ground (Old Growth)
+    if (vines && hasTalent('dr_vines_bloom')) after(root, () => { // Bloom: the vines burst when the root ends
+        effects.push({ type: 'snare_burst', x, y, radius: R, life: 0.5, maxLife: 0.5 });
+        for (const e of enemies) if (!e.dead && Math.hypot(e.x - x, e.y - y) <= R + e.size / 2) { applyDamage(e, dmg, 'magic'); if (!e.dead) { e.slowTimer = Math.max(e.slowTimer || 0, 2); e.slowAmount = Math.max(e.slowAmount || 0, 0.5); } }
+    });
     const caught = [];
     for (const e of enemies) {
-        if (e.dead || Math.hypot(e.x - x, e.y - y) > SNARE_RADIUS + e.size / 2) continue;
+        if (e.dead || Math.hypot(e.x - x, e.y - y) > R + e.size / 2) continue;
         applyDamage(e, dmg, 'magic');
         if (e.dead || e.pod) continue;
         if (sk && sk.selectedUpg === 'B' && !e.type.startsWith('boss')) { // Grasping Vines: dragged in to the centre first
@@ -264,9 +291,10 @@ function snareBurst(x, y, dmg, sk) {
                 burst(e.x, e.y, Math.atan2(dy, dx), 0.5, 4, { kind: 'leaf', color: '#7cb342', size: 5, life: 0.4, speed: [120, 260], drag: 3 });
                 effects.push({ type: 'lightning', x1: e.x, y1: e.y, x2: x, y2: y, color: '#7cb342', life: 0.25, maxLife: 0.25 }); // a vine snapping taut
                 e.x += (dx / d) * pull; e.y += (dy / d) * pull; clampToBounds(e, e.size / 2);
+                if (hasTalent('dr_vines_thorn')) { e.bleedTimer = 3; e.bleedDmg = Math.max(e.bleedDmg || 0, dmg * 0.3); } // Thorns
             }
         }
-        e.rootedTimer = Math.max(e.rootedTimer || 0, SNARE_ROOT); e.snaredAt = fxTime; // bosses shake it off 3x as fast (combat.js BOSS_CC_RATE); Thorn Rake reads snaredAt
+        e.rootedTimer = Math.max(e.rootedTimer || 0, root); e.snaredAt = fxTime; // bosses shake it off 3x as fast (combat.js BOSS_CC_RATE); Thorn Rake reads snaredAt
         if (!(e.slowTimer > 0) || (e.slowAmount || 0) < SNARE_SLOW) e.slowAmount = SNARE_SLOW; // then the thorns drag at them
         e.slowTimer = Math.max(e.slowTimer || 0, SNARE_SLOW_TIME);
         caught.push(e);
@@ -280,12 +308,15 @@ function leapSlam(sk, dmg, ang) {
     for (const e of enemies) {
         if (e.dead || Math.hypot(e.x - player.x, e.y - player.y) > LEAP_SLAM + e.size / 2) continue;
         applyDamage(e, dmg, 'magic');
-        if (sk.selectedUpg === 'B' && !e.dead && !e.type.startsWith('boss')) { // Scatter the Herd
-            const a = Math.atan2(e.y - player.y, e.x - player.x);
-            e.x += Math.cos(a) * 80; e.y += Math.sin(a) * 80; clampToBounds(e, e.size / 2);
+        if (sk.selectedUpg === 'A' && hasTalent('dr_alpha_shock') && !e.dead) e.stunTimer = Math.max(e.stunTimer || 0, 0.8); // Pounce Shock
+        if (sk.selectedUpg === 'B' && !e.dead && !e.type.startsWith('boss')) { // Scatter the Herd (Stampede: farther; Trampled: slowed)
+            const a = Math.atan2(e.y - player.y, e.x - player.x), d = hasTalent('dr_scatter_far') ? 140 : 80;
+            e.x += Math.cos(a) * d; e.y += Math.sin(a) * d; clampToBounds(e, e.size / 2);
+            if (hasTalent('dr_scatter_trample')) { e.slowTimer = Math.max(e.slowTimer || 0, 2); e.slowAmount = Math.max(e.slowAmount || 0, 0.4); }
         }
     }
-    if (sk.selectedUpg === 'A' || hasItem('Pathfinder Wraps')) addBond((sk.selectedUpg === 'A' ? 25 : 0) + (hasItem('Pathfinder Wraps') ? 15 : 0)); // Alpha Leap / Pathfinder Wraps
+    if (sk.selectedUpg === 'A') drw.leapAt = fxTime; // Apex: a Maul soon after hits harder
+    if (sk.selectedUpg === 'A' || hasItem('Pathfinder Wraps')) addBond((sk.selectedUpg === 'A' ? (hasTalent('dr_alpha_bond') ? 40 : 25) : 0) + (hasItem('Pathfinder Wraps') ? 15 : 0)); // Alpha Leap (Bonded) / Pathfinder Wraps
 }
 
 function wolfSlam(w, sk, dmg, ang) {
@@ -294,9 +325,13 @@ function wolfSlam(w, sk, dmg, ang) {
         if (e.dead || Math.hypot(e.x - w.x, e.y - w.y) > WOLF_SLAM + e.size / 2) continue;
         applyDamage(e, dmg, 'wolf', ang);
     }
-    if (sk.selectedUpg === 'B') { // Scatter the Herd: the wolf whirls where it stands and snaps at everything close to it
-        const prey = enemies.filter(e => wolfCanHunt(e) && Math.hypot(e.x - w.x, e.y - w.y) <= 150 + e.size / 2).slice(0, 8);
-        const bite = calcDmg(activeClass.basicDmg) * WOLF_BITE * 0.5;
+    if (sk.selectedUpg === 'B') { wolfWhirl(w); if (hasTalent('dr_scatter_spirits')) player.wolves.slice(1).forEach(s => wolfWhirl(s, 0.6)); } // Spirit Scatter: the spirits whirl too
+}
+// Scatter the Herd: the companion whirls where it stands and snaps at everything close to it (Frenzied Whirl: 12 at x0.75)
+function wolfWhirl(w, scale = 1) {
+    {
+        const fr = hasTalent('dr_scatter_whirl'), prey = enemies.filter(e => wolfCanHunt(e) && Math.hypot(e.x - w.x, e.y - w.y) <= 150 + e.size / 2).slice(0, fr ? 12 : 8);
+        const bite = calcDmg(activeClass.basicDmg) * WOLF_BITE * (fr ? 0.75 : 0.5) * scale;
         prey.forEach((e, i) => after(0.08 + i * 0.07, () => {
             if (e.dead) return;
             const a = Math.atan2(e.y - w.y, e.x - w.x);
@@ -333,7 +368,7 @@ function pickWolfPrey(w) {
         if (snared(e)) score += 450;
         if (scented(e)) score += 300;
         if (e === w.target) score += 80; // don't flip-flop between two equal choices
-        if (w.spirit) for (const o of player.wolves) if (o !== w && o.target === e) score -= WOLF_CROWD; // your own wolf never gives way
+        if (w.spirit) for (const o of player.wolves) if (o !== w && o.target === e) score -= hasTalent('dr_hunt_encircle') ? 5000 : WOLF_CROWD; // your own wolf never gives way; Encircle: each its own prey
         if (currentMap.grid && !walkClear(w.x, w.y, e.x, e.y)) score -= 400; // stage.js: prey behind rock
         if (score > bestScore) { bestScore = score; best = e; }
     }
@@ -348,26 +383,29 @@ function wolfLeapTo(w, x, y, dur, arc, onArrive, pounce = false) {
 }
 
 function wolfBite(w, e) {
-    const main = w === player.wolves[0], dire = main && buffs.direWolf > 0, surge = main && buffs.feralSurge > 0;
-    const freeMaul = main && player.freeMaul, maul = main && (player.bond >= BOND_MAX || freeMaul), wasScented = scented(e), wasSnared = snared(e); // freeMaul: a Pincer's
-    const feed = druidUpg(1) === 'A' && (wasSnared || e.slowTimer > 0) ? 2 : 1; // Feeding Ground: double Bond on held or slowed prey
+    const main = w === player.wolves[0], dire = main && buffs.direWolf > 0, surge = main && buffs.feralSurge > 0, th = main ? druidThicket(w) : null; // th: Hunting Ground
+    if (th && hasTalent('dr_ground_kill') && !th.killUsed && snared(e)) { th.killUsed = true; player.freeMaul = true; } // Killing Field
+    const direMaul = dire && hasTalent('dr_dire_apex') && (++drw.direBites % 3 === 0); // Apex Predator: every 3rd dire bite
+    const bondMax = surge && druidUpg(2) === 'A' && hasTalent('dr_rage_rampage') ? 50 : BOND_MAX; // Rampage
+    const freeMaul = main && player.freeMaul, maul = main && (player.bond >= bondMax || freeMaul || direMaul), wasScented = scented(e), wasSnared = snared(e); // freeMaul: a Pincer's
+    const feed = th && hasTalent('dr_ground_bond') ? 1.5 : 1; // Blood Trail
     const k = companion().rhythm;
     let mult = WOLF_BITE * k * w.dmgMult;
     if (dire) mult *= DIRE_MULT;
     if (wasSnared) mult *= 1 + SNARE_BONUS;
-    if (maul) mult *= 1 + (MAUL_MULT - 1) / k; // the same extra damage per Maul as the wolf's x4 (the jaguar's heavier bite: x3)
+    if (maul) mult *= (1 + (MAUL_MULT - 1) / k) * (fxTime - drw.leapAt < 3 && hasTalent('dr_alpha_apex') ? 1.5 : 1); // the same extra damage per Maul as the wolf's x4 (the jaguar's heavier bite: x3); Apex
     const dmg = calcDmg(activeClass.basicDmg) * mult;
     const ang = Math.atan2(e.y - w.y, e.x - w.x);
     w.angle = ang; w.biteAnim = WOLF_BITE_ANIM;
-    w.biteCd = (surge ? SURGE_BITE_CD : WOLF_BITE_CD) * k / (1 + attackSpeedBonus()); // skills.js: gloves quicken the wolf too
+    w.biteCd = (surge ? SURGE_BITE_CD : WOLF_BITE_CD) * k / (1 + attackSpeedBonus()) / (th ? 1.5 : 1) / (main && hasTalent('dr_kin_leader') && player.wolves.length > 1 ? 1.25 : 1); // skills.js: gloves quicken the wolf too; Hunting Ground, Pack Leader
 
     applyDamage(e, dmg, 'wolf', ang);
     effects.push({ type: 'wolf_bite', x: e.x, y: e.y, angle: ang, radius: Math.max(14, e.size * 0.6) * (maul ? 1.6 : dire ? 1.3 : 1), life: 0.35, maxLife: 0.35 }); // fx.js
-    if (surge || dire) { // big bites tear into whatever stands next to the prey
+    if (surge || dire || th) { // big bites tear into whatever stands next to the prey (and in the Hunting Ground)
         for (const o of enemies) if (o !== e && wolfCanHunt(o) && Math.hypot(o.x - e.x, o.y - e.y) <= CLEAVE_RADIUS + o.size / 2) applyDamage(o, dmg * CLEAVE_MULT, 'wolf', ang);
     }
     if (maul) {
-        if (freeMaul) player.freeMaul = false; else player.bond = 0; // a Pincer's Maul keeps your Bond
+        if (freeMaul) player.freeMaul = false; else if (!direMaul) player.bond = 0; // a Pincer's Maul keeps your Bond (and an Apex Predator's)
         if (!e.dead) e.stunTimer = Math.max(e.stunTimer || 0, 1.0);
         effects.push({ type: 'wolf_maul', x: e.x, y: e.y, radius: e.size / 2 + 40, life: 0.45, maxLife: 0.45 });
         effects.push({ type: 'text', text: 'MAUL!', x: e.x, y: e.y - e.size / 2 - 14, color: '#ff7043', life: 0.8, maxLife: 0.8 });
@@ -378,7 +416,16 @@ function wolfBite(w, e) {
     } else if (main && wasScented) addBond(BOND_PER_BITE * k * (dire ? 2 : 1) * feed);
     else if (main && dire) addBond(BOND_PER_BITE * k * feed); // the dire wolf bonds over anything it bites
 
-    if (main && surge && druidUpg(2) === 'A') player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.015 * k); // Bloodrage
+    if (main && surge && druidUpg(2) === 'A') { // Bloodrage (Feeding Frenzy heals more, Barkblood regrows the shell with the overflow)
+        const heal = player.maxHp * (hasTalent('dr_rage_more') ? 0.025 : 0.015) * k, over = player.hp + heal - player.maxHp;
+        player.hp = Math.min(player.maxHp, player.hp + heal);
+        if (over > 0 && hasTalent('dr_rage_bark')) addShield(over, Math.max(1, buffs.feralSurge));
+    }
+    if (dire && hasTalent('dr_dire_feast')) player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.01); // Blood Feast
+    if (w.spirit) { // Pack Bond, Encircle
+        if (hasTalent('dr_hunt_bond') && wasScented) addBond(BOND_PER_BITE * 0.5);
+        if (hasTalent('dr_hunt_encircle') && !e.dead) { e.slowTimer = Math.max(e.slowTimer || 0, 1); e.slowAmount = Math.max(e.slowAmount || 0, 0.3); }
+    }
 }
 
 function updateWolfLeap(w, dt) {
@@ -458,11 +505,13 @@ function updateDruid(dt) {
     player.bondIdle += dt;
     if (player.bond < BOND_MAX && player.bondIdle > BOND_DECAY_AFTER) player.bond = Math.max(0, player.bond - BOND_DECAY * dt);
 
+    for (let i = drw.thickets.length - 1; i >= 0; i--) { const t = drw.thickets[i]; if ((t.t -= dt) <= 0) drw.thickets.splice(i, 1); else if (hasTalent('dr_ground_den') && Math.hypot(player.x - t.x, player.y - t.y) <= t.r) player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.02 * dt); } // Hunting Ground; Verdant Den
     for (let i = 0; i < player.wolves.length; i++) updateWolf(player.wolves[i], i, dt);
     separateWolves();
     for (let i = player.wolves.length - 1; i > 0; i--) {
         const w = player.wolves[i];
         if (w.life > 0) continue;
+        if (hasTalent('dr_hunt_stampede') && druidUpg(4) === 'B') spiritStampede(w); // Spirit Stampede: it charges through on its way out
         burst(w.x, w.y, 0, Math.PI * 2, 10, { kind: 'leaf', color: '#9ccc65', size: 6, life: 0.8, speed: [30, 110], drag: 2 }); // the spirit scatters into leaves
         player.wolves.splice(i, 1);
     }
@@ -562,6 +611,10 @@ function drawWolf(w, i, fade) {
 
 // Under the enemies: Scent on your prey, the snare's brambles, the leap slam
 function drawDruidGround() {
+    if (isDruid()) for (const t of drw.thickets) { // the Hunting Ground: a ring of thorn and a dark green floor
+        ctx.save(); ctx.globalAlpha = Math.min(1, t.t / 0.5) * 0.5; ctx.fillStyle = 'rgba(51, 105, 30, 0.35)'; ctx.beginPath(); ctx.arc(t.x, t.y, t.r, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#7cb342'; ctx.lineWidth = 3; ctx.setLineDash([4, 9]); ctx.stroke(); ctx.restore();
+    }
     if (!isDruid()) return;
     ctx.save();
     ctx.lineWidth = 1.5; ctx.setLineDash([4, 6]);

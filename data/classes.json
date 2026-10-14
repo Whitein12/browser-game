@@ -320,12 +320,12 @@
         "baseDmg": 5,
         "selectedUpg": null,
         "upgA": {
-          "name": "Surgical Steel",
-          "desc": "Daggers pierce multiple enemies"
+          "name": "Blade Orbit",
+          "desc": "The knives circle you for 3 s, cutting every enemy they pass from the side they move toward: they still pop weak points."
         },
         "upgB": {
-          "name": "Returning Blades",
-          "desc": "Daggers instantly return, hitting twice"
+          "name": "Venom Edge",
+          "desc": "Knives stack Venom (up to 5, 6 s). A Phantom Dash through a venomed enemy bursts every stack as true damage."
         }
       },
       "2": {
@@ -339,8 +339,8 @@
           "desc": "Enemies in smoke take heavy continuous poison damage"
         },
         "upgB": {
-          "name": "Thick Fog",
-          "desc": "Larger radius; cleanses all negative debuffs on cast"
+          "name": "Mirage",
+          "desc": "Two shadows run out of the cloud and draw idle enemies (not bosses) for 3 s. Enemy shots that hit them break them."
         }
       },
       "3": {
@@ -350,12 +350,12 @@
         "baseDmg": 5,
         "selectedUpg": null,
         "upgA": {
-          "name": "Assassination",
-          "desc": "Doubles range; deals 200% more damage to marked targets"
+          "name": "Reaper's Chain",
+          "desc": "A kill within 1 s of the dash's cut resets its cooldown."
         },
         "upgB": {
-          "name": "Acrobatics",
-          "desc": "Grants a second stored charge"
+          "name": "Shadow Return",
+          "desc": "Recast within 2 s to dash back to where you started, cutting the path again."
         }
       },
       "4": {
@@ -414,12 +414,12 @@
         "baseDmg": 10,
         "selectedUpg": null,
         "upgA": {
-          "name": "Laser Optics",
-          "desc": "Turret fires piercing laser beams"
+          "name": "Flame Turret",
+          "desc": "The turret sprays a 180 px cone of fire at enemies in reach, setting them burning."
         },
         "upgB": {
-          "name": "Volatile Casing",
-          "desc": "Explodes massively when its duration expires"
+          "name": "Sniper Turret",
+          "desc": "The turret reaches 900 px, picks the toughest enemy, and fires a piercing beam for x4 every 2 s."
         }
       },
       "2": {
@@ -444,8 +444,8 @@
         "baseDmg": 0,
         "selectedUpg": null,
         "upgA": {
-          "name": "Kinetic Shield",
-          "desc": "Gain a heavy shield upon grappling"
+          "name": "Crash Landing",
+          "desc": "Arriving knocks back and stuns enemies within 150 px for 0.6 s."
         },
         "upgB": {
           "name": "Decoy Projection",
@@ -459,12 +459,12 @@
         "baseDmg": 0,
         "selectedUpg": null,
         "upgA": {
-          "name": "Nuclear Payload",
-          "desc": "When Overclock ends, all active turrets violently detonate"
+          "name": "Exo-Frame",
+          "desc": "For 8 s you wear a mech frame: the scattergun becomes a forward minigun stream, and you take 30% less damage."
         },
         "upgB": {
-          "name": "Automated Assembly",
-          "desc": "Casting instantly spawns two free Sentry Turrets at your location"
+          "name": "Orbital Strike",
+          "desc": "A satellite beam burns down toward the cursor for 3 s, following it as you move the mouse."
         }
       }
     }
@@ -511,12 +511,12 @@
         "baseDmg": 40,
         "selectedUpg": null,
         "upgA": {
-          "name": "Flawless Execution",
-          "desc": "Successful parry grants Maximum Flow and resets its cooldown. (Handheld)"
+          "name": "Counter Stance",
+          "desc": "Hold Q to guard for up to 1.5 s (slowed): every hit is parried and answered with an instant dash-slash at the attacker (x1.5). (Handheld)"
         },
         "upgB": {
-          "name": "Deflecting Storm",
-          "desc": "The sweep area is increased and destroying projectiles restores Flow. (Airborne)"
+          "name": "Chain Surge",
+          "desc": "The blade darts through up to 5 enemies in turn for x0.8 each, then returns to your steering. (Airborne)"
         }
       },
       "2": {
@@ -526,12 +526,12 @@
         "baseDmg": 0,
         "selectedUpg": null,
         "upgA": {
-          "name": "Riposte Recall",
-          "desc": "Every recall cuts back through what lies between the blade and you, scaled by the Flow it spends; with this the cut always lands as if your Flow were full, and you keep 30% Flow. (Handheld)"
+          "name": "Catch Parry",
+          "desc": "Catching the recalled blade opens a 1 s parry window. (Handheld)"
         },
         "upgB": {
-          "name": "Early Deploy",
-          "desc": "Deploy from 70% Flow: the bar fills and the blade launches Empowered. (Airborne)"
+          "name": "Twin Blades",
+          "desc": "Deploying splits off a second, smaller blade (x0.6) that hunts enemies on its own while you steer the first. (Airborne)"
         }
       },
       "3": {
@@ -541,12 +541,12 @@
         "baseDmg": 40,
         "selectedUpg": null,
         "upgA": {
-          "name": "Path of Blades",
-          "desc": "A phantom blade follows your dash, piercing through enemies. (Handheld)"
+          "name": "Ghost Step",
+          "desc": "For 1.5 s after the step enemies lose you, and your first hit deals +50%. (Handheld)"
         },
         "upgB": {
-          "name": "Surge Reset",
-          "desc": "Spatial Swap resets Blade Surge (Q) cooldown. (Airborne)"
+          "name": "Echo Swap",
+          "desc": "Within 2 s of a Spatial Swap you can swap back for free. (Airborne)"
         }
       },
       "4": {
@@ -560,8 +560,8 @@
           "desc": "Whirlwind pulls enemies in aggressively. (Handheld)"
         },
         "upgB": {
-          "name": "Tempest Shards",
-          "desc": "Shatter Storm shards strike every 0.3s (was 0.5s) and cut every enemy within 60px of their strike. (Airborne)"
+          "name": "Shard Shield",
+          "desc": "The shards orbit you for 6 s, cutting what comes close and shattering enemy shots. (Airborne)"
         }
       }
     }
@@ -699,8 +699,8 @@
         "baseDmg": 40,
         "selectedUpg": null,
         "upgA": {
-          "name": "Feeding Ground (Alpha)",
-          "desc": "The wolf's bites on snared or slowed enemies give double Bond, so Mauls come faster."
+          "name": "Hunting Ground (Alpha)",
+          "desc": "The snare leaves a thicket for 4s. Inside it the wolf bites 50% faster and its bites cleave."
         },
         "upgB": {
           "name": "Grasping Vines (Pack)",
@@ -822,8 +822,8 @@
         "baseDmg": 35,
         "selectedUpg": null,
         "upgA": {
-          "name": "Unstoppable Juggernaut",
-          "desc": "Shield-charge distance +50%, and you are immune to all damage during the dash. (Equipped)"
+          "name": "Bulldozer",
+          "desc": "The charge carries everything it hits to its end and slams them together, stunned 1 s (2 s into a wall). (Equipped)"
         },
         "upgB": {
           "name": "Gravitational Crashing",

@@ -91,6 +91,432 @@ const TALENT_WEBS = {
         },
         bridges: { 12: 'might', 24: 'focus', 43: 'vit', 31: 'fleet' },
     },
+    nightblade: {
+        1: { // Fan of Knives
+            modL: { id: 'nb_fan_more', name: 'Seven Blades', icon: 'count', desc: 'Fan of Knives throws 7 knives (Blade Orbit circles 7).' },
+            modR: { id: 'nb_fan_bleed', name: 'Serrated Steel', icon: 'thorns', desc: 'Thrown knives make what they hit bleed for 3 s.' },
+            pass: ['might', 'fleet'],
+            A: [ // Blade Orbit: the knives circle you, cutting what they pass from the side they move toward
+                { id: 'nb_orbit_wide', name: 'Wider Circle', icon: 'radius', desc: 'The knives circle at 110 px (was 70).' },
+                { id: 'nb_orbit_long', name: 'Whirling Steel', icon: 'duration', desc: 'The orbit lasts 5 s (was 3).' },
+                { id: 'nb_orbit_release', name: 'Release', icon: 'range', desc: 'Q again flings the orbiting knives outward as a fan. The cooldown starts then.' },
+                { id: 'nb_orbit_ring', name: 'Shadow Ring', icon: 'shield', desc: 'You take 25% less damage while the knives orbit, and every weak point you pop adds a knife (up to 8).' },
+            ],
+            B: [ // Venom Edge: stacks you burst with Phantom Dash
+                { id: 'nb_venom_deep', name: 'Deep Venom', icon: 'thorns', desc: 'Venom stacks tick poison while they last.' },
+                { id: 'nb_venom_spread', name: 'Contagion', icon: 'count', desc: 'A venom burst gives 2 stacks to enemies within 120 px.' },
+                { id: 'nb_venom_weak', name: 'Exposed Veins', icon: 'damage', desc: 'At 5 stacks the enemy shows a weak point facing you.' },
+                { id: 'nb_venom_rupture', name: 'Rupture', icon: 'burst', desc: 'Popping a weak point on a venomed enemy bursts its venom too, and a 5-stack burst stuns for 1 s.' },
+            ],
+        },
+        2: { // Smoke Bomb
+            modL: { id: 'nb_smoke_wide', name: 'Billowing', icon: 'radius', desc: 'The cloud is 40% wider.' },
+            modR: genericTwig(2, { name: 'Smoke Bomb', maxCd: 8 }, 'quick'),
+            pass: ['vit', 'fleet'],
+            A: [ // Toxic Fumes
+                { id: 'nb_toxic_slow', name: 'Choking Fumes', icon: 'slow', desc: 'Enemies in the fumes are slowed by 30%.' },
+                { id: 'nb_toxic_linger', name: 'Lingering Haze', icon: 'duration', desc: 'The poison keeps working for 3 s after an enemy leaves the cloud.' },
+                { id: 'nb_toxic_expose', name: 'Gasping', icon: 'damage', desc: '2 s in the fumes gives an enemy a weak point facing you (once per cloud).' },
+                { id: 'nb_toxic_plague', name: 'Plague Cloud', icon: 'burst', desc: 'An enemy that dies in the fumes leaves a small poison cloud for 3 s.' },
+            ],
+            B: [ // Mirage: shadow decoys draw the pack
+                { id: 'nb_mirage_three', name: 'Third Shadow', icon: 'count', desc: 'Three shadows run out of the cloud.' },
+                { id: 'nb_mirage_burst', name: 'Smoke and Mirrors', icon: 'radius', desc: 'A shadow bursts into a 60 px smoke cloud when it\'s struck or fades.' },
+                { id: 'nb_mirage_stab', name: 'Phantom Blades', icon: 'damage', desc: 'Shadows stab enemies next to them for half a basic hit every 0.6 s.' },
+                { id: 'nb_mirage_swap', name: 'Switcheroo', icon: 'range', desc: 'A Phantom Dash onto a shadow swaps you with it: you vanish for 1 s, and your next hit is a weak point.' },
+            ],
+        },
+        3: { // Phantom Dash
+            modL: { id: 'nb_dash_far', name: 'Long Shadow', icon: 'range', desc: 'Phantom Dash goes 100 px farther.' },
+            modR: { id: 'nb_dash_twice', name: 'Shadow Edge', icon: 'damage', desc: 'The path is cut a second time 0.15 s later, at 60%.' },
+            pass: ['fleet', 'might'],
+            A: [ // Reaper's Chain: a kill soon after the cut resets the dash
+                { id: 'nb_reaper_window', name: 'Grim Patience', icon: 'duration', desc: 'A kill within 2 s of the cut resets the dash (was 1 s).' },
+                { id: 'nb_reaper_rush', name: 'Bloodrush', icon: 'damage', desc: 'Each reset gives +15 Power for 3 s (stacks 3 times).' },
+                { id: 'nb_reaper_heal', name: 'Harvest', icon: 'heal', desc: 'Each reset heals 4% of your Max HP.' },
+                { id: 'nb_reaper_storm', name: 'Massacre', icon: 'burst', desc: 'The third chained dash cuts everything within 120 px of its path.' },
+            ],
+            B: [ // Shadow Return: recast to dash back
+                { id: 'nb_return_long', name: 'Lingering Shadow', icon: 'duration', desc: 'You can dash back for 3.5 s (was 2).' },
+                { id: 'nb_return_smoke', name: 'Vanishing Act', icon: 'radius', desc: 'Dashing back leaves an 80 px smoke cloud where you were.' },
+                { id: 'nb_return_cross', name: 'Crossing Blades', icon: 'damage', desc: 'An enemy cut both ways shows a weak point facing you.' },
+                { id: 'nb_return_echo', name: 'Shadow Echo', icon: 'count', desc: 'Dashing back throws 3 knives at the nearest enemies, each 2 basic hits.' },
+            ],
+        },
+        4: { // Mark for Death
+            modL: { id: 'nb_mfd_more', name: 'Patient Death', icon: 'count', desc: 'Two more clone strikes.' },
+            modR: genericTwig(4, { name: 'Mark for Death', maxCd: 15 }, 'quick'),
+            pass: ['focus', 'might'],
+            A: [ // Bloodlust
+                { id: 'nb_blood_ward', name: 'Crimson Ward', icon: 'shield', desc: 'Bloodlust healing past your Max HP becomes a shield.' },
+                { id: 'nb_blood_frenzy', name: 'Frenzy of Shadows', icon: 'damage', desc: 'Each clone strike gives +5 Power for 6 s (stacking).' },
+                { id: 'nb_blood_cleanse', name: 'Second Skin', icon: 'heal', desc: 'Casting cleanses slows, roots and weakness, and you evade everything for 1 s.' },
+                { id: 'nb_blood_drain', name: 'Exsanguinate', icon: 'burst', desc: 'The last clone strike hits x3.' },
+            ],
+            B: [ // Chain Reaction
+                { id: 'nb_chain_wide', name: 'Wider Blast', icon: 'radius', desc: 'Marked enemies explode in 220 px (was 150).' },
+                { id: 'nb_chain_mark', name: 'Marked Pack', icon: 'damage', desc: 'The explosion gives everything it hits a weak point facing you.' },
+                { id: 'nb_chain_refresh', name: 'Endless Chain', icon: 'cooldown', desc: 'When the mark jumps, its clone strikes refill.' },
+                { id: 'nb_chain_split', name: 'Doom Spiral', icon: 'count', desc: 'When the mark jumps, the clone strikes alternate between its new target and the next nearest enemy.' },
+            ],
+        },
+        bridges: { 12: 'might', 24: 'fleet', 43: 'vit', 31: 'focus' },
+    },
+    machinist: {
+        1: { // Sentry Turret
+            modL: { id: 'ma_turret_life', name: 'Reinforced Frame', icon: 'duration', desc: 'Turrets last 40% longer.' },
+            modR: { id: 'ma_turret_cap', name: 'Spare Parts', icon: 'count', desc: 'One more turret can stand at once.' },
+            pass: ['might', 'vit'],
+            A: [ // Flame Turret: a cone of fire that sets enemies burning
+                { id: 'ma_flame_wide', name: 'Wide Nozzle', icon: 'radius', desc: 'The flames reach 240 px (was 180) in a wider cone.' },
+                { id: 'ma_flame_napalm', name: 'Napalm', icon: 'fire', desc: 'The spray leaves burning ground for 2 s where it lands.' },
+                { id: 'ma_flame_heat', name: 'Superheated', icon: 'damage', desc: 'Burning enemies take 15% more from your scattergun.' },
+                { id: 'ma_flame_core', name: 'Inferno Core', icon: 'burst', desc: 'When a Flame Turret runs out, it erupts in a 200 px firestorm.' },
+            ],
+            B: [ // Sniper Turret: the toughest enemy, a beam every 2 s
+                { id: 'ma_snipe_mark', name: 'Laser Sight', icon: 'damage', desc: 'The sniper\'s target takes 15% more from you for 2.5 s.' },
+                { id: 'ma_snipe_rail', name: 'Rail', icon: 'pierce', desc: 'The beam deals full damage to everything on its line.' },
+                { id: 'ma_snipe_load', name: 'Autoloader', icon: 'cooldown', desc: 'The sniper fires every 1.4 s (was 2).' },
+                { id: 'ma_snipe_head', name: 'Headshot', icon: 'stun', desc: 'Every 3rd shot hits x3 and stuns non-bosses for 1 s.' },
+            ],
+        },
+        2: { // Tesla Coil
+            modL: { id: 'ma_coil_wide', name: 'Wide Field', icon: 'radius', desc: 'The coil\'s field is 30% wider.' },
+            modR: { id: 'ma_coil_long', name: 'Capacitor', icon: 'duration', desc: 'The coil lasts 3 s longer.' },
+            pass: ['focus', 'might'],
+            A: [ // High Voltage
+                { id: 'ma_hv_reroot', name: 'Recharge', icon: 'cooldown', desc: 'The field roots an enemy again every 3 s it stays inside.' },
+                { id: 'ma_hv_shock', name: 'Overload Arc', icon: 'damage', desc: 'Rooted enemies take x1.5 from the pulses.' },
+                { id: 'ma_hv_pull', name: 'Magnetic Field', icon: 'pull', desc: 'The field slowly pulls enemies toward the coil (not bosses).' },
+                { id: 'ma_hv_storm', name: 'Static Storm', icon: 'lightning', desc: 'Each pulse also leaps to 3 enemies outside the field.' },
+            ],
+            B: [ // Arc Network
+                { id: 'ma_arc_long', name: 'Long Lines', icon: 'range', desc: 'Lines reach turrets within 600 px (was 400).' },
+                { id: 'ma_arc_charge', name: 'Supercharge', icon: 'cooldown', desc: 'Linked turrets fire 25% faster.' },
+                { id: 'ma_arc_grid', name: 'Grid', icon: 'count', desc: 'Two coils can stand at once, and they link to each other.' },
+                { id: 'ma_arc_web', name: 'Lightning Web', icon: 'lightning', desc: 'The lines root what they hit for 0.5 s (once per 3 s per enemy).' },
+            ],
+        },
+        3: { // Magnetic Grapple
+            modL: { id: 'ma_grapple_far', name: 'Long Cable', icon: 'range', desc: 'No extra cooldown for grappling open ground.' },
+            modR: genericTwig(3, { name: 'Magnetic Grapple', maxCd: 5 }, 'quick'),
+            pass: ['vit', 'fleet'],
+            A: [ // Crash Landing
+                { id: 'ma_crash_wide', name: 'Heavy Boots', icon: 'radius', desc: 'The landing hits 220 px around you (was 150).' },
+                { id: 'ma_crash_scrap', name: 'Salvage Slam', icon: 'count', desc: '1 Scrap for every enemy the landing hits.' },
+                { id: 'ma_crash_plate', name: 'Impact Plating', icon: 'shield', desc: 'A 15 shield for every enemy the landing hits.' },
+                { id: 'ma_crash_mines', name: 'Shrapnel Mines', icon: 'burst', desc: '4 proximity mines scatter round the landing.' },
+            ],
+            B: [ // Decoy Projection
+                { id: 'ma_decoy_long', name: 'Persistent Signal', icon: 'duration', desc: 'The hologram lasts 4 s (was 2).' },
+                { id: 'ma_decoy_armed', name: 'Armed Decoy', icon: 'damage', desc: 'The hologram shoots like a plain turret.' },
+                { id: 'ma_decoy_boom', name: 'Booby Trap', icon: 'burst', desc: 'The hologram explodes when it\'s done, for twice a turret blast.' },
+                { id: 'ma_decoy_twin', name: 'Double Signal', icon: 'count', desc: 'A second hologram at the landing, and enemies drawn to them take 20% more from you.' },
+            ],
+        },
+        4: { // Overclock Protocol
+            modL: { id: 'ma_oc_long', name: 'Coolant', icon: 'duration', desc: 'Overclock lasts 2 s longer.' },
+            modR: { id: 'ma_oc_heal', name: 'Field Repair', icon: 'heal', desc: 'Overclocking heals 10% of your Max HP.' },
+            pass: ['focus', 'vit'],
+            A: [ // Exo-Frame
+                { id: 'ma_exo_rockets', name: 'Shoulder Rockets', icon: 'fire', desc: 'The frame fires a rocket every 1 s at the enemy nearest your cursor.' },
+                { id: 'ma_exo_stomp', name: 'Servo Stomp', icon: 'range', desc: 'The frame moves 20% faster and shoves small enemies aside.' },
+                { id: 'ma_exo_plate', name: 'Reactive Plating', icon: 'shield', desc: 'You take 45% less in the frame (was 30%).' },
+                { id: 'ma_exo_eject', name: 'Eject', icon: 'burst', desc: 'The frame self-destructs in a big blast when it ends.' },
+            ],
+            B: [ // Orbital Strike
+                { id: 'ma_orb_wide', name: 'Wide Lens', icon: 'radius', desc: 'The beam is 50% wider.' },
+                { id: 'ma_orb_long', name: 'Extended Burn', icon: 'duration', desc: 'The beam burns for 4.5 s (was 3).' },
+                { id: 'ma_orb_scorch', name: 'Scorch Line', icon: 'fire', desc: 'The beam leaves burning ground behind it.' },
+                { id: 'ma_orb_prism', name: 'Prism Array', icon: 'count', desc: 'For its last second the beam splits into three.' },
+            ],
+        },
+        bridges: { 12: 'might', 24: 'focus', 43: 'vit', 31: 'fleet' },
+    },
+    paladin: {
+        1: { // Judgment Hammer
+            modL: { id: 'pa_hammer_far', name: 'Long Throw', icon: 'range', desc: 'The hammer flies 150 px farther.' },
+            modR: { id: 'pa_hammer_pulse', name: 'Resonant Head', icon: 'radius', desc: 'The planted hammer\'s pulse hits 50% harder.' },
+            pass: ['vit', 'might'],
+            A: [ // Handheld Purity
+                { id: 'pa_purity_wide', name: 'Seismic Catch', icon: 'radius', desc: 'The catch\'s shockwave reaches 260 px (was 180).' },
+                { id: 'pa_purity_heal', name: 'Purifying Wave', icon: 'heal', desc: 'The shockwave heals 1% of your Max HP per enemy it hits.' },
+                { id: 'pa_purity_ready', name: 'Ever Ready', icon: 'cooldown', desc: 'The shockwave can come twice as often.' },
+                { id: 'pa_purity_quake', name: 'Twin Quake', icon: 'burst', desc: 'A second, wider wave follows 0.4 s later at x1.5.' },
+            ],
+            B: [ // Conduit Shock
+                { id: 'pa_conduit_branch', name: 'Branching', icon: 'count', desc: 'The planted hammer zaps 4 enemies (was 2).' },
+                { id: 'pa_conduit_rod', name: 'Lightning Rod', icon: 'range', desc: 'It zaps enemies within 320 px (was 200).' },
+                { id: 'pa_conduit_shock', name: 'Shock', icon: 'stun', desc: 'Every 4th zap stuns for 0.5 s (not bosses).' },
+                { id: 'pa_conduit_throne', name: 'Thunder Throne', icon: 'lightning', desc: 'Within 150 px of the planted hammer you take 20% less, and your shield bashes chain to 2 more enemies.' },
+            ],
+        },
+        2: { // Divine Tether
+            modL: { id: 'pa_tether_long', name: 'Long Chain', icon: 'duration', desc: 'The tether lasts 2 s longer.' },
+            modR: { id: 'pa_tether_mend', name: 'Mending Chain', icon: 'heal', desc: 'The chain heals 50% more.' },
+            pass: ['vit', 'focus'],
+            A: [ // Overflowing Grace
+                { id: 'pa_grace_cap', name: 'Abundant', icon: 'shield', desc: 'The overflow shield can reach 70% of your Max HP (was 50%).' },
+                { id: 'pa_grace_absolve', name: 'Absolution', icon: 'heal', desc: 'Casting the tether cleanses slows, roots and weakness.' },
+                { id: 'pa_grace_lift', name: 'Lifted', icon: 'range', desc: '+15% move speed while you\'re shielded.' },
+                { id: 'pa_grace_release', name: 'Radiant Release', icon: 'burst', desc: 'When the chain ends, your shield bursts into a holy wave for its full amount.' },
+            ],
+            B: [ // Chain of Retribution
+                { id: 'pa_retri_wrath', name: 'Wrathful Bolts', icon: 'damage', desc: 'The holy bolts hit twice as hard.' },
+                { id: 'pa_retri_heavy', name: 'Heavy Links', icon: 'radius', desc: 'The chain catches shots 40 px wide (was 18).' },
+                { id: 'pa_retri_absorb', name: 'Absorb', icon: 'heal', desc: 'Each shot the chain catches heals 1% of your Max HP.' },
+                { id: 'pa_retri_judge', name: 'Judgment Chain', icon: 'lightning', desc: 'Every 2 s the chain strikes everything along it for x1.5.' },
+            ],
+        },
+        3: { // Righteous Charge / Iron Pull
+            modL: { id: 'pa_charge_far', name: 'Long Charge', icon: 'range', desc: 'The charge goes 60 px farther.' },
+            modR: genericTwig(3, { name: 'Righteous Charge', maxCd: 6 }, 'quick'),
+            pass: ['vit', 'fleet'],
+            A: [ // Bulldozer
+                { id: 'pa_dozer_far', name: 'Momentum', icon: 'range', desc: 'The charge goes 50% farther.' },
+                { id: 'pa_dozer_guard', name: 'Shield Wall', icon: 'shield', desc: 'You\'re immune to damage while charging.' },
+                { id: 'pa_dozer_crush', name: 'Crush', icon: 'damage', desc: 'A slam into a wall hits x2.' },
+                { id: 'pa_dozer_quake', name: 'Earthshaker', icon: 'burst', desc: 'The charge ends in a ground smash (160 px, x1.5).' },
+            ],
+            B: [ // Gravitational Crashing
+                { id: 'pa_grav_wide', name: 'Heavy Landing', icon: 'radius', desc: 'The landing grounds enemies within 220 px (was 150).' },
+                { id: 'pa_grav_root', name: 'Heavy', icon: 'stun', desc: 'Grounded enemies are rooted for 1 s first.' },
+                { id: 'pa_grav_crater', name: 'Crater', icon: 'damage', desc: 'The landing hits x2.' },
+                { id: 'pa_grav_anchor', name: 'Gravity Anchor', icon: 'pull', desc: 'For 3 s after you land, the hammer keeps pulling enemies to itself.' },
+            ],
+        },
+        4: { // Consecrated Wrath
+            modL: { id: 'pa_wrath_wide', name: 'Broad Wrath', icon: 'radius', desc: 'The consecrated ground is 25% wider.' },
+            modR: { id: 'pa_wrath_long', name: 'Long Wrath', icon: 'duration', desc: 'It lasts 2 s longer.' },
+            pass: ['focus', 'might'],
+            A: [ // Divine Aura
+                { id: 'pa_aura_bless', name: 'Blessed Aura', icon: 'heal', desc: 'The aura heals you 1% of your Max HP per second.' },
+                { id: 'pa_aura_bulwark', name: 'Bulwark Aura', icon: 'shield', desc: 'You take 15% less while the aura burns.' },
+                { id: 'pa_aura_judge', name: 'Judgment Aura', icon: 'slow', desc: 'Enemies in the aura are slowed by 50% (was 25%).' },
+                { id: 'pa_aura_flare', name: 'Wrath Flare', icon: 'burst', desc: 'Every 3 s the aura flares for x2 and stuns for 0.5 s.' },
+            ],
+            B: [ // Hammer of the Gods
+                { id: 'pa_gods_wide', name: 'Wide Hurricane', icon: 'radius', desc: 'The hurricane pulls from 380 px (was 280).' },
+                { id: 'pa_gods_long', name: 'Endless Storm', icon: 'duration', desc: 'The hurricane lasts 8 s (was 6).' },
+                { id: 'pa_gods_gale', name: 'Iron Gale', icon: 'damage', desc: 'Pulled enemies take x0.5 every second.' },
+                { id: 'pa_gods_fall', name: 'Fall of Heaven', icon: 'burst', desc: 'When it ends, the hammer slams down for x3 in 250 px and stuns.' },
+            ],
+        },
+        bridges: { 12: 'vit', 24: 'might', 43: 'vit', 31: 'focus' },
+    },
+    cleric: {
+        1: { // Divine Ray
+            modL: { id: 'cl_ray_long', name: 'Lingering Light', icon: 'duration', desc: 'The ray channels for 2 s (was 1.5).' },
+            modR: { id: 'cl_ray_wide', name: 'Broad Beam', icon: 'radius', desc: 'The ray is 30% wider.' },
+            pass: ['might', 'focus'],
+            A: [ // Radiant Flash
+                { id: 'cl_flash_long', name: 'Searing Light', icon: 'duration', desc: 'The ray blinds for 2 s (was 1).' },
+                { id: 'cl_flash_zeal', name: 'Zealous Gaze', icon: 'count', desc: 'Each fresh blind gives 15 Zeal (was 10).' },
+                { id: 'cl_flash_judge', name: 'Judgment', icon: 'damage', desc: 'Blinded enemies take 20% more from you.' },
+                { id: 'cl_flash_dawn', name: 'Dawnbreak', icon: 'burst', desc: 'A 100-Zeal ray ends in a 150 px nova that stuns for 1 s.' },
+            ],
+            B: [ // Void Spike
+                { id: 'cl_void_hunger', name: 'Hunger', icon: 'damage', desc: 'The low-HP bonus starts below 70% HP (was 50%).' },
+                { id: 'cl_void_leech', name: 'Leech', icon: 'heal', desc: 'The ray heals you for 15% of its damage.' },
+                { id: 'cl_void_grasp', name: 'Grasping Dark', icon: 'slow', desc: 'Enemies in the ray are slowed by 40%.' },
+                { id: 'cl_void_collapse', name: 'Void Collapse', icon: 'burst', desc: 'Kills by the ray burst in shadow (120 px) and give 10 Zeal (or HP under the Reaper).' },
+            ],
+        },
+        2: { // Hallowed Ground
+            modL: { id: 'cl_ground_wide', name: 'Broad Ground', icon: 'radius', desc: 'The ground is 25% wider.' },
+            modR: { id: 'cl_ground_long', name: 'Lasting Ground', icon: 'duration', desc: 'It lasts 2 s longer.' },
+            pass: ['vit', 'vit'],
+            A: [ // Sanctuary
+                { id: 'cl_sanct_aegis', name: 'Aegis', icon: 'shield', desc: 'Each tick inside gives a shield of 3% of your Max HP (capped).' },
+                { id: 'cl_sanct_ward', name: 'Hallowed Ward', icon: 'shield', desc: 'Enemy shots that enter the Sanctuary are destroyed.' },
+                { id: 'cl_sanct_haste', name: 'Blessed Steps', icon: 'range', desc: '+20% move and attack speed inside.' },
+                { id: 'cl_sanct_pillar', name: 'Holy Pillar', icon: 'burst', desc: 'It ends in a pillar of light that heals 15% and blinds the enemies inside.' },
+            ],
+            B: [ // Desecration
+                { id: 'cl_desec_siphon', name: 'Siphon', icon: 'heal', desc: 'You heal 30% of its damage.' },
+                { id: 'cl_desec_creep', name: 'Creeping Dark', icon: 'radius', desc: 'It grows 50% over its time.' },
+                { id: 'cl_desec_wither', name: 'Wither', icon: 'damage', desc: 'Enemies inside take 15% more from you.' },
+                { id: 'cl_desec_rot', name: 'Rot', icon: 'burst', desc: 'Enemies that die inside leave a 60 px patch of desecration for 2 s.' },
+            ],
+        },
+        3: { // Phase Shift
+            modL: { id: 'cl_phase_far', name: 'Far Step', icon: 'range', desc: 'Phase Shift goes 80 px farther.' },
+            modR: { id: 'cl_phase_faith', name: 'Faith Step', icon: 'count', desc: '+10 Zeal when you cast it under 50 Zeal.' },
+            pass: ['fleet', 'focus'],
+            A: [ // Divine Transposition
+                { id: 'cl_trans_reach', name: 'Long Reach', icon: 'range', desc: 'It looks for an enemy within 600 px (was 400).' },
+                { id: 'cl_trans_heal', name: 'Exchange', icon: 'heal', desc: 'Swapping heals 8% of your Max HP.' },
+                { id: 'cl_trans_back', name: 'Second Swap', icon: 'cooldown', desc: 'Cast again within 2 s to swap back with the same enemy.' },
+                { id: 'cl_trans_judge', name: 'Righteous Exchange', icon: 'damage', desc: 'The swapped enemy is blinded for 3 s and takes x2 from your next ray.' },
+            ],
+            B: [ // Raven Flight
+                { id: 'cl_raven_cheap', name: 'Feathered', icon: 'cooldown', desc: 'It costs 10 Zeal (was 20), or 5% HP (was 10%).' },
+                { id: 'cl_raven_wide', name: 'Murder of Crows', icon: 'radius', desc: 'The flight is 50% wider.' },
+                { id: 'cl_raven_dread', name: 'Dread', icon: 'slow', desc: 'Non-bosses on the path flee for 1.5 s.' },
+                { id: 'cl_raven_swarm', name: 'Raven Swarm', icon: 'burst', desc: 'Ravens circle the landing for 3 s, pecking and blinding.' },
+            ],
+        },
+        4: { // Ascension
+            modL: { id: 'cl_asc_long', name: 'Prolonged', icon: 'duration', desc: 'Ascension lasts 2 s longer.' },
+            modR: { id: 'cl_asc_power', name: 'Exaltation', icon: 'damage', desc: '+10 Power while Ascension lasts.' },
+            pass: ['focus', 'might'],
+            A: [ // Avatar of Renewal
+                { id: 'cl_avatar_volley', name: 'Volley', icon: 'count', desc: '9 bolts at the cast (was 6).' },
+                { id: 'cl_avatar_heal', name: 'Renewal', icon: 'heal', desc: 'The bolts heal 1% of your Max HP per hit.' },
+                { id: 'cl_avatar_halo', name: 'Halo', icon: 'shield', desc: 'A shield of 20% of your Max HP at the cast.' },
+                { id: 'cl_avatar_seraph', name: 'Seraph', icon: 'burst', desc: 'It ends in a nova that heals 20% and stuns for 1.5 s.' },
+            ],
+            B: [ // Aspect of the Reaper
+                { id: 'cl_reaper_sated', name: 'Hunger Sated', icon: 'heal', desc: 'The Reaper drains 2.5% per second (was 4%).' },
+                { id: 'cl_reaper_harvest', name: 'Harvest', icon: 'duration', desc: 'Kills heal 35% of what\'s missing (was 25%) and add 0.5 s.' },
+                { id: 'cl_reaper_scythe', name: 'Scythe', icon: 'damage', desc: 'Every 3rd censer pulse reaps a 160 px arc for x2.' },
+                { id: 'cl_reaper_rite', name: 'Last Rite', icon: 'burst', desc: 'When it ends, everything within 300 px takes 20% of the HP it drained.' },
+            ],
+        },
+        bridges: { 12: 'vit', 24: 'focus', 43: 'might', 31: 'fleet' },
+    },
+    druid: {
+        1: { // Bramble Snare
+            modL: { id: 'dr_snare_wide', name: 'Wide Snare', icon: 'radius', desc: 'The burst is 30% wider.' },
+            modR: { id: 'dr_snare_root', name: 'Deep Roots', icon: 'stun', desc: 'The snare roots for 1.5 s (was 1).' },
+            pass: ['might', 'vit'],
+            A: [ // Hunting Ground
+                { id: 'dr_ground_long', name: 'Old Growth', icon: 'duration', desc: 'The thicket lasts 6 s (was 4).' },
+                { id: 'dr_ground_bond', name: 'Blood Trail', icon: 'count', desc: 'The companion\'s bites inside give 50% more Bond.' },
+                { id: 'dr_ground_den', name: 'Verdant Den', icon: 'heal', desc: 'Standing inside heals 2% of your Max HP per second.' },
+                { id: 'dr_ground_kill', name: 'Killing Field', icon: 'burst', desc: 'The companion\'s first bite inside on a rooted enemy is a free Maul (once per snare).' },
+            ],
+            B: [ // Grasping Vines
+                { id: 'dr_vines_reach', name: 'Long Vines', icon: 'range', desc: 'The vines drag from 220 px.' },
+                { id: 'dr_vines_thorn', name: 'Thorns', icon: 'thorns', desc: 'Dragged enemies bleed for 3 s.' },
+                { id: 'dr_vines_strangle', name: 'Strangle', icon: 'stun', desc: 'The root lasts 2 s.' },
+                { id: 'dr_vines_bloom', name: 'Bloom', icon: 'burst', desc: 'When the root ends, the vines burst (x1) and slow by 50% for 2 s.' },
+            ],
+        },
+        2: { // Feral Surge
+            modL: { id: 'dr_surge_long', name: 'Long Surge', icon: 'duration', desc: 'The surge lasts 2 s longer.' },
+            modR: { id: 'dr_surge_bark', name: 'Thick Bark', icon: 'shield', desc: 'The bark shell is 50% thicker.' },
+            pass: ['vit', 'focus'],
+            A: [ // Bloodrage
+                { id: 'dr_rage_more', name: 'Feeding Frenzy', icon: 'heal', desc: 'Each surging bite heals 2.5% (was 1.5%).' },
+                { id: 'dr_rage_fury', name: 'Primal Fury', icon: 'damage', desc: '+15 Power while surging.' },
+                { id: 'dr_rage_bark', name: 'Barkblood', icon: 'shield', desc: 'Healing past your Max HP regrows the bark shell.' },
+                { id: 'dr_rage_rampage', name: 'Rampage', icon: 'burst', desc: 'While surging, a Maul comes every 50 Bond (was 100).' },
+            ],
+            B: [ // Kindred Howl
+                { id: 'dr_kin_twin', name: 'Twin Spirits', icon: 'count', desc: 'Two spirit animals answer the howl.' },
+                { id: 'dr_kin_long', name: 'Kindred Bond', icon: 'duration', desc: 'They stay 12 s (was 8).' },
+                { id: 'dr_kin_fangs', name: 'Spirit Fangs', icon: 'damage', desc: 'Their bites are 30% stronger.' },
+                { id: 'dr_kin_leader', name: 'Pack Leader', icon: 'cooldown', desc: 'While spirit animals live, your companion bites 25% faster.' },
+            ],
+        },
+        3: { // Spirit Leap
+            modL: { id: 'dr_leap_far', name: 'Far Leap', icon: 'range', desc: 'Spirit Leap goes 80 px farther.' },
+            modR: genericTwig(3, { name: 'Spirit Leap', maxCd: 7 }, 'quick'),
+            pass: ['fleet', 'might'],
+            A: [ // Alpha Leap
+                { id: 'dr_alpha_bond', name: 'Bonded', icon: 'count', desc: 'Landing fills 40 Bond (was 25).' },
+                { id: 'dr_alpha_shock', name: 'Pounce Shock', icon: 'stun', desc: 'The landing stuns for 0.8 s.' },
+                { id: 'dr_alpha_tandem', name: 'Tandem Leap', icon: 'range', desc: 'Your companion bounds to your landing and bites.' },
+                { id: 'dr_alpha_apex', name: 'Apex', icon: 'burst', desc: 'A Maul within 3 s of the leap hits x1.5.' },
+            ],
+            B: [ // Scatter the Herd
+                { id: 'dr_scatter_far', name: 'Stampede', icon: 'range', desc: 'The landing throws enemies 140 px (was 80).' },
+                { id: 'dr_scatter_whirl', name: 'Frenzied Whirl', icon: 'count', desc: 'The whirl snaps at 12 enemies at x0.75 (was 8 at x0.5).' },
+                { id: 'dr_scatter_trample', name: 'Trampled', icon: 'slow', desc: 'Thrown enemies are slowed by 40% for 2 s.' },
+                { id: 'dr_scatter_spirits', name: 'Spirit Scatter', icon: 'burst', desc: 'Your spirit animals whirl too.' },
+            ],
+        },
+        4: { // Call of the Wild
+            modL: { id: 'dr_call_howl', name: 'Thunderous Howl', icon: 'radius', desc: 'The howl reaches 40% farther.' },
+            modR: genericTwig(4, { name: 'Call of the Wild', maxCd: 15 }, 'quick'),
+            pass: ['focus', 'might'],
+            A: [ // Dire Aspect
+                { id: 'dr_dire_long', name: 'Elder Blood', icon: 'duration', desc: 'The great form lasts 11 s (was 8).' },
+                { id: 'dr_dire_feast', name: 'Blood Feast', icon: 'heal', desc: 'Its bites heal 1% of your Max HP.' },
+                { id: 'dr_dire_terror', name: 'Terror', icon: 'slow', desc: 'Non-bosses within 250 px flee for 1.5 s when it rises.' },
+                { id: 'dr_dire_apex', name: 'Apex Predator', icon: 'burst', desc: 'Every 3rd bite in the great form is a Maul (it keeps your Bond).' },
+            ],
+            B: [ // Wild Hunt
+                { id: 'dr_hunt_long', name: 'The Long Hunt', icon: 'duration', desc: 'The spirits stay 16 s (was 12).' },
+                { id: 'dr_hunt_bond', name: 'Pack Bond', icon: 'count', desc: 'The spirits\' bites on Scented prey build Bond.' },
+                { id: 'dr_hunt_encircle', name: 'Encircle', icon: 'slow', desc: 'The spirits each take different prey and slow it.' },
+                { id: 'dr_hunt_stampede', name: 'Spirit Stampede', icon: 'burst', desc: 'As they fade, the spirits charge through the nearest enemies.' },
+            ],
+        },
+        bridges: { 12: 'vit', 24: 'might', 43: 'fleet', 31: 'focus' },
+    },
+    kensei: {
+        1: { // Parry Thrust / Blade Surge
+            modL: { id: 'ke_q_flow', name: 'Keen Edge', icon: 'count', desc: 'The sweep gives 40 Flow on a hit (was 30).' },
+            modR: genericTwig(1, { name: 'Parry Thrust', maxCd: 4 }, 'quick'),
+            pass: ['might', 'might'],
+            A: [ // Counter Stance (in hand)
+                { id: 'ke_counter_long', name: 'Iron Will', icon: 'duration', desc: 'You can hold the guard for 2.5 s (was 1.5).' },
+                { id: 'ke_counter_flow', name: 'Flowing Guard', icon: 'count', desc: '+15 Flow for every parry in the guard.' },
+                { id: 'ke_counter_arrow', name: 'Arrow Cutter', icon: 'range', desc: 'Shots that reach the guard fly back at the shooter.' },
+                { id: 'ke_counter_draw', name: 'Final Draw', icon: 'burst', desc: 'Letting go after 2 or more parries looses an Iaido line toward the cursor (x2).' },
+            ],
+            B: [ // Chain Surge (airborne)
+                { id: 'ke_chain_more', name: 'Hunting Arc', icon: 'count', desc: 'The blade darts through 8 enemies (was 5).' },
+                { id: 'ke_chain_flow', name: 'Feeding Blade', icon: 'count', desc: '+4 Flow per dart.' },
+                { id: 'ke_chain_sever', name: 'Sever', icon: 'damage', desc: 'Enemies it darts through take 15% more from you for 4 s.' },
+                { id: 'ke_chain_coup', name: 'Coup de Grace', icon: 'burst', desc: 'The last dart hits x3 and stuns.' },
+            ],
+        },
+        2: { // Deploy / Recall
+            modL: { id: 'ke_e_drain', name: 'Steady Flight', icon: 'duration', desc: 'The airborne blade drains Flow 15% slower.' },
+            modR: { id: 'ke_e_cut', name: 'Sharper Return', icon: 'damage', desc: 'Return Cut hits 25% harder.' },
+            pass: ['focus', 'fleet'],
+            A: [ // Catch Parry (in hand)
+                { id: 'ke_catch_long', name: 'Steady Grip', icon: 'duration', desc: 'The catch\'s parry window lasts 1.5 s (was 1).' },
+                { id: 'ke_catch_keep', name: 'Refund', icon: 'count', desc: 'You keep 30% Flow when you recall.' },
+                { id: 'ke_catch_full', name: 'Riposte Recall', icon: 'damage', desc: 'The recall cut always lands as if your Flow were full.' },
+                { id: 'ke_catch_perfect', name: 'Perfect Catch', icon: 'burst', desc: 'A parry in the window fires Shadow Step (Counter Step) at once and readies it again.' },
+            ],
+            B: [ // Twin Blades (airborne)
+                { id: 'ke_twin_sharp', name: 'Sharpened Twin', icon: 'damage', desc: 'The twin hits at x0.8 of the blade (was x0.6).' },
+                { id: 'ke_twin_guard', name: 'Guarding Twin', icon: 'shield', desc: 'The twin circles you instead and cuts enemy shots out of the air.' },
+                { id: 'ke_twin_early', name: 'Early Deploy', icon: 'cooldown', desc: 'Deploy from 70% Flow: the bar fills and the blade launches Empowered.' },
+                { id: 'ke_twin_reunion', name: 'Reunion', icon: 'burst', desc: 'Recalling with both blades out crosses their paths for a x2 cut.' },
+            ],
+        },
+        3: { // Shadow Step / Spatial Swap
+            modL: { id: 'ke_step_far', name: 'Long Step', icon: 'range', desc: 'Shadow Step goes 80 px farther.' },
+            modR: genericTwig(3, { name: 'Shadow Step', maxCd: 5 }, 'quick'),
+            pass: ['fleet', 'vit'],
+            A: [ // Ghost Step (in hand)
+                { id: 'ke_ghost_long', name: 'Fading', icon: 'duration', desc: 'You stay a ghost for 2.5 s (was 1.5).' },
+                { id: 'ke_ghost_flow', name: 'Silent Flow', icon: 'count', desc: 'Your Flow doesn\'t fade while you\'re a ghost.' },
+                { id: 'ke_ghost_blades', name: 'Path of Blades', icon: 'pierce', desc: 'A phantom blade rides along with the step, piercing everything on the way.' },
+                { id: 'ke_ghost_strike', name: 'Death from Nowhere', icon: 'burst', desc: 'Your first hit as a ghost is x2 (was +50%) and readies Q.' },
+            ],
+            B: [ // Echo Swap (airborne)
+                { id: 'ke_echo_long', name: 'Long Echo', icon: 'duration', desc: 'You can swap back for 3.5 s (was 2).' },
+                { id: 'ke_echo_cut', name: 'Cutting Swap', icon: 'damage', desc: 'Every swap cuts the line between you and the blade.' },
+                { id: 'ke_echo_surge', name: 'Surge Reset', icon: 'cooldown', desc: 'Every swap readies Blade Surge (Q).' },
+                { id: 'ke_echo_triple', name: 'Triple Echo', icon: 'count', desc: 'A third swap.' },
+            ],
+        },
+        4: { // Blade Whirlwind / Shatter Storm
+            modL: { id: 'ke_r_flow', name: 'Gathering Wind', icon: 'count', desc: '+8 Flow for every enemy the whirlwind hits.' },
+            modR: genericTwig(4, { name: 'Blade Whirlwind', maxCd: 12 }, 'quick'),
+            pass: ['focus', 'might'],
+            A: [ // Vortex (in hand)
+                { id: 'ke_vortex_wide', name: 'Eye of the Storm', icon: 'radius', desc: 'The vortex reaches 330 px (was 250).' },
+                { id: 'ke_vortex_twice', name: 'Second Gust', icon: 'count', desc: 'It strikes again 0.5 s later (x0.6).' },
+                { id: 'ke_vortex_slow', name: 'Undertow', icon: 'slow', desc: 'Pulled enemies are slowed by 40% for 2 s.' },
+                { id: 'ke_vortex_twister', name: 'Hurricane Draw', icon: 'pull', desc: 'A tornado stays for 2 s and keeps pulling.' },
+            ],
+            B: [ // Shard Shield (airborne)
+                { id: 'ke_shards_more', name: 'More Shards', icon: 'count', desc: '9 shards (was 6).' },
+                { id: 'ke_shards_flow', name: 'Mirror Shards', icon: 'count', desc: '+5 Flow for every shot the shards shatter.' },
+                { id: 'ke_shards_wide', name: 'Wide Orbit', icon: 'radius', desc: 'The shards circle at 110 px (was 80).' },
+                { id: 'ke_shards_release', name: 'Release', icon: 'burst', desc: 'R again flings every shard outward as a nova. The cooldown starts then.' },
+            ],
+        },
+        bridges: { 12: 'might', 24: 'focus', 43: 'fleet', 31: 'vit' },
+    },
     ranger: {
         1: { // Storm Arrow
             modL: { id: 'storm_steady', name: 'Steady Hands', icon: 'cooldown', desc: 'Storm Arrow draws fully 30% faster.' },
@@ -214,12 +640,17 @@ function talentDmgMult(e) {
     if (e.lodgedShield && hasTalent('hunt_mark') && e.lodgedShield.lodged) m *= 1.25; // Marked Prey (skills.js Hunting Shield)
     if (e.huntMarkUntil > fxTime && hasTalent('mark_deep')) m *= 1.2; // Open Wound (skills.js Hunter's Mark)
     if (e.sunderUntil > fxTime) m *= e.sunderMult;                     // Sundering Breath (skills.js sunderEnemy)
+    if (activeClass.name === 'Machinist') m *= maDmgMult(e);             // machinist.js: Laser Sight, Double Signal
+    if (activeClass.name === 'Cleric') m *= clDmgMult(e);                // cleric.js: Judgment, Wither
+    if (activeClass.name === 'Kensei') m *= keDmgMult(e);                // kensei.js: Sever, Ghost Step's first hit
     return m;
 }
 
 // combat.js takeDamage, before armour: what the hero's talents do to a blow (0 = nothing gets through)
 function talentsDamageTaken(amount, isContinuous, sourceObj) {
     amount = swDamageTaken(amount, isContinuous, sourceObj); // spellweaver_evo.js: Ice Armor, Close Call, Rune Ward, Retaliation
+    if (activeClass.name === 'Nightblade') amount = nbDamageTaken(amount); // nightblade.js: Shadow Ring
+    if (activeClass.name === 'Machinist') amount = maExoTaken(amount); // machinist.js: Exo-Frame
     if (buffs.dragonfire > 0 && hasTalent('wyrm_scales')) amount *= 0.85; // Scaled Hide
     if (buffs.tvGuard > 0) amount *= 0.7; // Untouchable (skills.js Twin Vault)
     if (buffs.windwalk > 0 && hasTalent('ww_dodge') && !isContinuous && !(sourceObj && sourceObj.isProjectile) && !player.slipUsed) { // Slipstream
@@ -243,6 +674,8 @@ function talentsLethal() {
 
 // combat.js checkEnemyDeath: an enemy just died
 function talentsOnKill(e) {
+    if (activeClass.name === 'Nightblade') { nbOnKill(e); return; } // nightblade.js: Reaper's Chain, Plague Cloud
+    if (activeClass.name === 'Cleric') { clOnKill(e); return; } // cleric.js: Rot
     if (activeClass.name === 'Ranger') { rangerOnKill(e); return; } // skills.js: Pack Hunter, Twin Vault's refund
     if (activeClass.name !== 'Dragonknight') return;
     if (e.burnTimer > 0 && hasTalent('inferno_spread')) { // Wildfire: the fire jumps on

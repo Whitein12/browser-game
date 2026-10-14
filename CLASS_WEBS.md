@@ -1,6 +1,6 @@
 # Class webs: the design for the remaining six classes
 
-The design agreed with the user on 2026-10-13/14 for the Nightblade, Machinist, Kensei, Cleric, Druid and Paladin webs, to implement class by class (order below). Read CAMPAIGN.md first for the campaign rework's status; this file is its step 1 continued. The Spellweaver is left out on purpose (see the end).
+The design agreed with the user on 2026-10-13/14 for the Nightblade, Machinist, Kensei, Cleric, Druid and Paladin webs. **All six were built on 2026-10-14** (nightblade.js, machinist.js, cleric.js, kensei.js; paladin.js and druid.js extended) and tested headless in the Training Room; they await the playtest. Implementation notes: Thunder Throne's "smashes" are the shield bashes by the planted hammer; Bloodrush gives +15 Power (not +15% damage); Grid allows two coils, and a new coil otherwise replaces the old one; Ghost Step's first hit can be the step's own Path of Blades. Read CAMPAIGN.md first for the campaign rework's status; this file is its step 1 continued. The Spellweaver is left out on purpose (see the end).
 
 ## Context
 

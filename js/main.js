@@ -9,7 +9,7 @@ window.chooseClass = (cid) => { selectedClassId = cid; if (cid === 'druid') show
 function startGame(className) {
     activeClass = JSON.parse(JSON.stringify(classDataConfig[className])); 
     if (activeClass.name === 'Spellweaver') applyLoadout(player.spells || lastLoadout(), true); // spellweaver.js: the spells on the keys
-    resetSpellweaverState();
+    resetSpellweaverState(); resetNightblade(); resetMachinist(); resetCleric(); resetKensei(); // spellweaver.js, nightblade.js, machinist.js, cleric.js, kensei.js
     player.color = activeClass.color; player.x = canvas.width / 2; player.y = canvas.height / 2;
     player.level = 1; player.xp = 0; player.maxXp = xpToNext(1); player.gold = 0; player.orbDmg = 0.0; player.skillPoints = TREE_PTS_PER_LEVEL;
     wave = 0; equipment = { weapon: null, armor: null, amulet: null, boots: null, gloves: null }; inventory = [];
@@ -77,7 +77,7 @@ window.startNextWave = function() {
     if (fresh) { player.dash = null; player.z = 0; player.grappleTarget = null; player.charge = null; player.heavy = null; } // never carry a dash or a charge across a map change
 
     if (fresh) resetDruidState(); // druid.js: the companion comes back to heel (spirits stay through a regular wave)
-    if (fresh) resetSpellweaverState(); // spellweaver.js: runes and zones stay on their map
+    if (fresh) { resetSpellweaverState(); resetNightblade(); resetMachinist(); resetCleric(); resetKensei(); } // spellweaver.js: runes and zones stay on their map; nightblade.js
     if (wave > 1) awakenWeapon(); // items.js: the last wave was cleared, so the rare weapon grows
     el('intermission-screen').classList.add('hidden'); el('inventory-screen').classList.add('hidden'); el('shop-screen').classList.add('hidden');
     player.hp = Math.min(player.maxHp, player.hp + (player.maxHp * 0.3)); 
@@ -219,7 +219,7 @@ window.addEventListener('keydown', e => {
         let i = keyMap[k];
         if (player.charge && player.charge.slot === i) return; // key auto-repeat while a charge is held
         if ((cooldowns[`s${i}`] <= 0 || devNoCooldowns) && activeClass.skills[i].level > 0) {
-            if (activeClass.name === 'Kensei' && i === 2 && player.stance === 'handheld' && player.flow < player.maxFlow * (activeClass.skills[2].selectedUpg === 'B' ? 0.7 : 1)) { // Early Deploy: from 70%
+            if (activeClass.name === 'Kensei' && i === 2 && player.stance === 'handheld' && player.flow < player.maxFlow * (activeClass.skills[2].selectedUpg === 'B' && hasTalent('ke_twin_early') ? 0.7 : 1)) { // kensei.js Early Deploy: from 70%
                 effects.push({ type: 'text', text: 'Not Enough Flow!', x: player.x, y: player.y - 40, color: '#ff5252', life: 0.6, maxLife: 0.6 });
                 return;
             }
@@ -256,7 +256,7 @@ function castSkill(i, k, opt) { // opt: extra flags for the skill (combos.js, e.
             let angle = Math.random() * Math.PI * 2;
             projectiles.push({
                 x: player.x, y: player.y, vx: Math.cos(angle)*400, vy: Math.sin(angle)*400,
-                radius: 8, color: '#fff', life: 3.0, type: 'basic', shape: 'light_spear', damage: calcDmg(activeClass.skills[4].baseDmg, activeClass.skills[4].level), pierce: false, isEnemy: false,
+                radius: 8, color: '#fff', life: 3.0, type: 'basic', shape: 'light_spear', damage: calcDmg(activeClass.skills[4].baseDmg, activeClass.skills[4].level), pierce: false, isEnemy: false, spellHit: clAvatarBolt, // cleric.js Renewal
                 customUpdate: function(dt, p) {
                     let nearest = getNearestEnemyFromPoint(p.x, p.y, 400);
                     if (nearest) {
@@ -325,6 +325,10 @@ function update(dt) {
     updatePaladin(dt);
     updateDruid(dt); // druid.js: the wolves
     updateSpellweaver(dt); // spellweaver.js: runes, zones, Time Stop, the mirror
+    updateNightblade(dt); // nightblade.js: Blade Orbit, decoys, venom
+    updateMachinist(dt); // machinist.js: decoys, mines, Exo-Frame, Orbital Strike
+    updateCleric(dt); // cleric.js: Second Swap, Raven Swarm, the Ascensions' endings
+    updateKensei(dt); // kensei.js: the guard, Twin Blades, Shard Shield, Echo Swap, Hurricane Draw
     updateBanditFx(dt); // bandits.js: fire on the ground, lit powder kegs
     if (enemiesToSpawn > 0) { enemySpawnTimer -= dt; if (enemySpawnTimer <= 0) { spawnEnemy(); enemySpawnTimer = Math.max(0.5, 2.0 - (wave * 0.1)); } }
     if (cooldowns.basic > 0) cooldowns.basic -= dt;
@@ -381,7 +385,8 @@ function update(dt) {
         }
         if (buffs.aspectOfReaper > 0) {
             buffs.aspectOfReaper -= dt;
-            player.hp = Math.max(1, player.hp - player.maxHp * REAPER_DRAIN * dt); // the Reaper drinks your life while it lasts (it never kills; kills heal)
+            const drain = Math.max(0, Math.min(player.hp - 1, player.maxHp * (hasTalent('cl_reaper_sated') ? 0.025 : REAPER_DRAIN) * dt)); // the Reaper drinks your life while it lasts (it never kills; kills heal); Hunger Sated
+            player.hp -= drain; cl.drained += drain; // cleric.js Last Rite
             buffs.zealLocked = true;
             player.zeal = 0;
             if (buffs.aspectOfReaper <= 0) buffs.zealLocked = false;
@@ -403,7 +408,7 @@ function update(dt) {
 
         if (player.stance === 'handheld') {
             player.flowGainTimer += dt;
-            if (player.flowGainTimer >= FLOW_GRACE) {
+            if (player.flowGainTimer >= FLOW_GRACE && !keSilent()) { // kensei.js Silent Flow
                 player.flow = Math.max(0, player.flow - (FLOW_DECAY * dt)); // in hand, Flow fades once you stop landing hits
             }
             // Reposition blade to player (and drop a Guardian Orbit cut short by a recall)
@@ -436,7 +441,8 @@ function update(dt) {
             }
 
             // Guardian Orbit (combos.js, the Spatial Swap finisher) circles the blade round you first; then steering, then seeking
-            if (ab.orbit) updateOrbit(ab, dt);
+            if (ke.chain) updateChainSurge(ab, dt); // kensei.js Chain Surge
+            else if (ab.orbit) updateOrbit(ab, dt);
             // Override takes precedence (Left click follow & slash)
             else if (ab.overrideX !== null) {
                 let dx = ab.overrideX - ab.x; let dy = ab.overrideY - ab.y;
@@ -636,7 +642,7 @@ function update(dt) {
     if (buffs.slowed > 0) currentSpeed *= 0.5;
     if (activeClass.name === 'Ranger') currentSpeed *= 1 + player.momentum; // Fleetfoot: momentum is move speed too
     if (player.charge) currentSpeed *= player.charge.slow; // drawing a charged shot
-    currentSpeed *= swMoveMult(); // spellweaver_evo.js: Meteor Shower, Resolve
+    currentSpeed *= swMoveMult() * (activeClass.name === 'Machinist' ? maMoveMult() : 1) * paMoveMult() * clMoveMult(); // spellweaver_evo.js: Meteor Shower, Resolve; machinist.js Servo Stomp; paladin.js Lifted
     if (player.heavy && player.heavy.raw >= SLAM_TAP) currentSpeed *= SLAM_SLOW; // the greatsword raised overhead
     if (player.wading) currentSpeed *= 0.5; // map_cavern.js: knee-deep in a slime lake
     if (buffs.rooted > 0) currentSpeed = 0;
@@ -696,7 +702,7 @@ function update(dt) {
             if (Math.hypot(player.x - effects[i].x, player.y - effects[i].y) <= effects[i].radius) player.inSmoke = true;
             for(let k=enemies.length-1; k>=0; k--) {
                 if (Math.hypot(enemies[k].x - effects[i].x, enemies[k].y - effects[i].y) <= effects[i].radius + enemies[k].size/2) {
-                    if (effects[i].poison) applyDamage(enemies[k], effects[i].dmg * dt, 'dot');
+                    if (effects[i].poison) { applyDamage(enemies[k], effects[i].dmg * dt, 'dot'); nbFumes(effects[i], enemies[k], dt); } // nightblade.js: the Toxic Fumes talents
                 }
             }
         } else if (effects[i].type === 'fire_puddle' || effects[i].type === 'thorn_patch' || effects[i].type === 'consecrated_ground') {
@@ -774,10 +780,7 @@ function update(dt) {
             }
             if (p.type === 'firepot') firepotLand(p); // bandits.js: it bursts into fire
             if (p.type === 'spore') { effects.push({ type: 'spore_cloud', x: p.x, y: p.y, radius: 100, color: 'rgba(205, 220, 57, 0.4)', life: 3.0, maxLife: 3.0 }); }
-            if (p.type === 'turret' && p.volatile) {
-                effects.push({ type: 'fiery_explosion', x: p.x, y: p.y, radius: 150, life: 0.5, maxLife: 0.5 });
-                for(let e of enemies) { if (Math.hypot(e.x - p.x, e.y - p.y) < e.size/2 + 150) applyDamage(e, p.damage * 3, 'magic'); }
-            }
+            if (p.type === 'turret' && p.flame && hasTalent('ma_flame_core')) maInfernoCore(p); // machinist.js Inferno Core
             projectiles.splice(i, 1); continue; 
         }
 
@@ -853,7 +856,7 @@ function update(dt) {
                             else { hit = true; } 
                         } else { hit = true; }
                     } else if (p.type === 'scattergun') {
-                        applyDamage(e, p.damage, 'ranged');
+                        applyDamage(e, p.damage * maScatterMult(e), 'ranged'); // machinist.js Superheated
                         salvagePellet(); // items.js: Salvager's Gauntlets
                         let [ebx, eby, ebd] = getVector(player.x, player.y, e.x, e.y);
                         const knock = p.knock || 15; // combos.js Point Blank pellets hit harder
@@ -946,7 +949,7 @@ function update(dt) {
             effects.push({ type: 'text', text: 'ROOTED', x: e.x, y: e.y - 20, color: '#8bc34a', life: 0.6, maxLife: 0.6 });
         }
 
-        if (player.inSmoke || e.blindTimer > 0) { edx = 0; edy = 0; edist = Infinity; }
+        if (player.inSmoke || e.blindTimer > 0 || nbHidden() || keHidden()) { edx = 0; edy = 0; edist = Infinity; } // nightblade.js Switcheroo
         if (e.meleeTimer > 0) e.meleeTimer -= dt;
 
         // bodies push apart, but not while the hero dashes or leaps past (that used to carry a boss along under a Vault)
@@ -1729,6 +1732,10 @@ function draw() {
     drawEnemyOverlay(); // enemysprites.js: lightning coming down from above
     drawFx(); // fx.js particles
     drawSpellweaverWorld(); // spellweaver.js: the mirror, the ward, Time Stop's grey
+    drawNightblade(); // nightblade.js: the orbiting knives, venom
+    drawMachinist(); // machinist.js: the orbital beam, the exo-frame, mines
+    drawCleric(); // cleric.js: the raven swarm
+    drawKensei(); // kensei.js: the twin blade, the shards
     drawUltOverlay(); // skillfx_ult.js: things in the air above everything
     drawDmgNumbers(); // fx.js
     ctx.restore(); // end camera shake

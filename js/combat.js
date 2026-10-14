@@ -20,8 +20,11 @@ function powerParts() {
     if (equipment.weapon) P.push([equipment.weapon.name, equipment.weapon.val]);
     if (n === 'Dragonknight' && player.frenzyStacks > 0) P.push([`Frenzy &times;${player.frenzyStacks}`, player.frenzyStacks * 0.02, true]);
     if (n === 'Ranger' && player.momentum > 0) P.push(['Momentum', player.momentum, true]);
+    if (n === 'Nightblade') { const [rush, fr] = nbPower(); if (rush) P.push(['Bloodrush', rush, true]); if (fr) P.push(['Frenzy of Shadows', fr, true]); } // nightblade.js
     if (n === 'Cleric' && buffs.aspectOfReaper > 0) P.push(['Aspect of the Reaper', 0.50, true]);
     if (n === 'Cleric' && buffs.ascension > 0) P.push(['Ascension', 0.25, true]);
+    if (n === 'Cleric' && clPower()) P.push(['Exaltation', clPower(), true]); // cleric.js
+    if (n === 'Druid' && drPower()) P.push(['Primal Fury', drPower(), true]); // druid.js
     if (player.orbDmg > 0) P.push([`Power orbs${player.orbDmg >= ORB_DMG_CAP ? ' (max)' : ''}`, player.orbDmg]);
     if (player.treePower > 0) P.push(['Talents', player.treePower]); // skilltree.js: Might
     return P;
@@ -54,8 +57,8 @@ function shatterShields(e) {
 
 // Every shield goes through here: stacked shields stop at half the max HP (one big shield still lands whole)
 const SHIELD_CAP = 0.5;
-function addShield(amount, time) {
-    const cap = Math.max(player.maxHp * SHIELD_CAP, amount);
+function addShield(amount, time, capFrac = SHIELD_CAP) { // capFrac: paladin.js Abundant raises it
+    const cap = Math.max(player.maxHp * capFrac, amount);
     if (player.shield < cap) player.shield = Math.min(cap, player.shield + amount);
     player.shieldTimer = Math.max(player.shieldTimer, time);
 }
@@ -195,25 +198,26 @@ function kingLastStand(enemy, dmg) {
 // Nightblade weak point: a hit from the marked side consumes the mark for true damage (no x0.6), and that hit
 // ignores blocks (Warden orbs, frontal shields, dodges). Returns the true damage, or 0 if this wasn't a weak-point hit.
 function weakPointDamage(enemy, source, projAngle) {
-    if (enemy.markAngle === undefined || !(source === 'melee_basic' || source === 'phantom_dash' || source === 'assassin_skill' || source === 'death_mark')) return 0;
+    const ambush = nbAmbushHit(source); // nightblade.js Switcheroo: this hit is a weak point from any side
+    if (!ambush && (enemy.markAngle === undefined || !(source === 'melee_basic' || source === 'phantom_dash' || source === 'assassin_skill' || source === 'death_mark'))) return 0;
     const hitAngle = projAngle !== null ? projAngle + Math.PI : Math.atan2(player.y - enemy.y, player.x - enemy.x);
-    if (Math.abs(Math.atan2(Math.sin(enemy.markAngle - hitAngle), Math.cos(enemy.markAngle - hitAngle))) > Math.PI / 3) return 0;
+    if (!ambush && Math.abs(Math.atan2(Math.sin(enemy.markAngle - hitAngle), Math.cos(enemy.markAngle - hitAngle))) > Math.PI / 3) return 0;
     const isNightblade = activeClass.name === 'Nightblade';
     enemy.markAngle = undefined;
     let trueDmg = calcDmg(activeClass.basicDmg * 3) * (hasItem('Sigil of the Hunt') ? 1.25 : 1); // grows with gear and orbs; the Sigil sharpens it
-    if (isNightblade && activeClass.skills[3].selectedUpg === 'A' && source === 'phantom_dash') trueDmg *= 3;
     if (isNightblade && enemy.type.startsWith('boss')) trueDmg *= BOSS_WEAK_MULT; // the assassin's specialty is the big target
     buffs.msBoost = 1.0;
     addShake(4);
     burst(enemy.x, enemy.y, hitAngle + Math.PI, 2.2, 14, { kind: 'spark', color: '#ea80fc', size: 3, life: 0.35, speed: [200, 520], drag: 5 });
     effects.push({ type: 'text', text: 'WEAKPOINT!', x: enemy.x, y: enemy.y - 40, color: '#e1bee7', life: 0.8, maxLife: 0.8 });
+    if (isNightblade) nbOnWeakPop(enemy); // nightblade.js: Shadow Ring, Rupture
 
     if (isNightblade && activeClass.skills[3].level > 0 && source === 'phantom_dash') {
         cooldowns.s3 = Math.max(0, cooldowns.s3 - (activeClass.skills[3].maxCd * getCDR() * 0.5));
     }
 
     if (buffs.deathMarkActive > 0) {
-        if (isNightblade && activeClass.skills[4].selectedUpg === 'A' && source !== 'death_mark') player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.1); // Bloodlust: your own pops (the clones heal 2% each, skills.js)
+        if (isNightblade && activeClass.skills[4].selectedUpg === 'A' && source !== 'death_mark') nbHeal(0.1); // Bloodlust: your own pops (the clones heal 2% each, skills.js)
         effects.push({ type: 'holy_nova', x: enemy.x, y: enemy.y, radius: 100, color: '#ce93d8', life: 0.35, maxLife: 0.35 }); // skillfx_space.js
         for (let k = enemies.length - 1; k >= 0; k--) {
             const et = enemies[k];
@@ -234,13 +238,9 @@ function parrySuccess(sourceObj) {
     effects.push({ type: 'text', text: 'Parried!', x: player.x, y: player.y - 30, color: '#00e5ff', life: 0.6, maxLife: 0.6 });
     onParry(sourceObj);
     counterParry(); // combos.js Counter Step: Shadow Step is ready at once
-    let flowGain = player.maxFlow * 0.2; // Base parry flow gain
-    if (activeClass && activeClass.skills[1] && activeClass.skills[1].selectedUpg === 'A') { // Flawless Execution: full Flow and Q ready again
-        flowGain = player.maxFlow;
-        cooldowns.s1 = 0;
-    }
-    player.flow = Math.min(player.maxFlow, (player.flow || 0) + flowGain);
+    player.flow = Math.min(player.maxFlow, (player.flow || 0) + player.maxFlow * 0.2); // a parry's Flow
     player.flowGainTimer = 0;
+    if (activeClass && activeClass.name === 'Kensei') kenseiOnParry(sourceObj); // kensei.js: Counter Stance, Perfect Catch
 }
 
 function takeDamage(amount, isContinuous = false, sourceObj = null) {
@@ -359,14 +359,7 @@ function checkEnemyDeath(e) {
         if (e.dummy) { trainingDummyDied(e); return; } // training.js: no loot, no XP, no wave; it's back on its post soon
         if (e.loot > 0) cutpurseLoot(e); // ai.js: a cutpurse killed with your gold drops it x1.5
 
-        if (e.markAngle !== undefined && activeClass.name === 'Nightblade' && activeClass.skills[4].selectedUpg === 'B') {
-            effects.push({ type: 'circle', x: e.x, y: e.y, radius: 150, color: 'rgba(156, 39, 176, 0.3)', life: 0.3, maxLife: 0.3 });
-            for(let k=enemies.length-1; k>=0; k--) {
-                if (Math.hypot(e.x - enemies[k].x, e.y - enemies[k].y) <= 150 + enemies[k].size/2) applyDamage(enemies[k], calcDmg(50, activeClass.skills[4].level), 'magic');
-            }
-            let nearest = getNearestEnemyFromPoint(e.x, e.y, 300, [e]);
-            if (nearest) nearest.markAngle = Math.random() * Math.PI * 2;
-        }
+        if (e.markAngle !== undefined && activeClass.name === 'Nightblade' && activeClass.skills[4].selectedUpg === 'B') nbChainBlast(e); // nightblade.js Chain Reaction
 
         if ((e.type === 'boss_slime_queen' || e.type === 'boss_valerius') && !isEndlessMode) {
             if (currentMap.type === 'hive') { queenDefeated(e); return; } // map_hive.js: her crown must be claimed first
@@ -379,7 +372,8 @@ function checkEnemyDeath(e) {
         
         if (activeClass && activeClass.name === 'Cleric' && buffs.aspectOfReaper > 0) {
             let missingHp = player.maxHp - player.hp;
-            player.hp += missingHp * 0.25;
+            player.hp += missingHp * (hasTalent('cl_reaper_harvest') ? 0.35 : 0.25); // cleric.js Harvest
+            if (hasTalent('cl_reaper_harvest')) buffs.aspectOfReaper += 0.5;
             effects.push({ type: 'text', text: '+HP', x: player.x, y: player.y - 30, color: '#69f0ae', life: 0.8, maxLife: 0.8 });
         }
 

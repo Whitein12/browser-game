@@ -222,13 +222,13 @@ const RANK_STATS = {
     Machinist: {
         1: (r, sk) => [['Per shot', RH(sk.baseDmg, r)], ['Turrets', 1 + Math.ceil(Math.max(1, r) / 2)]],
         2: (r, sk) => [['Per pulse', RH(sk.baseDmg, r)]],
-        3: (r, sk) => [['Open-ground penalty', `+${grappleMissPenalty(r).toFixed(1)}s`], ...(sk.selectedUpg === 'A' ? [['Shield', Math.round(RU(100, r))], ['Shield time', RS(RU(4, r))]] : [])],
+        3: (r, sk) => [['Open-ground penalty', `+${grappleMissPenalty(r).toFixed(1)}s`], ...(sk.selectedUpg === 'A' ? [['Landing slam', RH(30, r)]] : [])], // machinist.js Crash Landing
         4: (r, sk) => [['Duration', RS(RU(6, r))]],
     },
     Kensei: {
         1: (r, sk) => [['Parry Thrust', RH(sk.baseDmg, r, 1.5)], ['Blade Surge', RH(sk.baseDmg, r, 1.8)]],
         2: (r, sk) => [['Airborne flight', RS(100 / (15 * airborneDrain(r)))]],
-        3: (r, sk) => [['Step distance', RP(shadowStepReach(r))], ['Guardian Orbit', RS(RU(ORBIT_TIME, r))], ...(sk.selectedUpg === 'A' ? [['Path of Blades', RH(sk.baseDmg, r, 2)]] : [])],
+        3: (r, sk) => [['Step distance', RP(shadowStepReach(r))], ['Guardian Orbit', RS(RU(ORBIT_TIME, r))], ...(sk.selectedUpg === 'A' && hasTalent('ke_ghost_blades') ? [['Path of Blades', RH(sk.baseDmg, r, 2)]] : [])],
         4: (r, sk) => [['Whirlwind', RH(sk.baseDmg, r, 1.5)]],
     },
     Cleric: {

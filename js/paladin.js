@@ -54,8 +54,49 @@ function gildedPlateReduction() {
 function paladinDamageTakenMult() {
     let mult = 1.0;
     mult *= 1 - gildedPlateReduction();
+    if (player.paAura && hasTalent('pa_aura_bulwark')) mult *= 0.85; // Bulwark Aura
+    if (thunderThrone()) mult *= 0.8; // Thunder Throne
     return mult;
 }
+
+// ---------- The web's talents (talents.js TALENT_WEBS.paladin) ----------
+
+// Thunder Throne: within 150 px of the planted hammer (Conduit Shock)
+function thunderThrone() { return hasTalent('pa_conduit_throne') && activeClass.skills[1].selectedUpg === 'B' && hammerDeployed() && Math.hypot(player.hammer.x - player.x, player.hammer.y - player.y) <= 150; }
+function throneChain(e, dmg) { // a bash's lightning leaps from what it struck to 2 more
+    const hit = [e]; let from = e;
+    for (let k = 0; k < 2; k++) {
+        const o = getNearestEnemyFromPoint(from.x, from.y, 250, hit); if (!o) break;
+        effects.push({ type: 'lightning', x1: from.x, y1: from.y, x2: o.x, y2: o.y, color: '#fff59d', life: 0.15, maxLife: 0.15 });
+        applyDamage(o, dmg, 'magic'); hit.push(o); from = o;
+    }
+}
+// Bulldozer: the carried pile is slammed at the charge's end (2 s and, with Crush, x2 into a wall); Earthshaker smashes the ground
+function bulldozerSlam(carried, dirX, dirY, dmg, edge) {
+    const wall = edge || !!(currentMap.grid && clipToWalls(player.x, player.y, player.x + dirX * 70, player.y + dirY * 70, player.radius, false));
+    for (const e of carried) {
+        if (e.dead) continue;
+        applyDamage(e, dmg * 0.5 * (wall && hasTalent('pa_dozer_crush') ? 2 : 1), 'melee');
+        if (!e.dead) e.stunTimer = Math.max(e.stunTimer || 0, wall ? 2 : 1);
+    }
+    if (carried.length) { effects.push({ type: 'holy_impact', x: player.x + dirX * 50, y: player.y + dirY * 50, radius: 90, life: 0.4, maxLife: 0.4 }); addShake(wall ? 4 : 2.5); if (wall) effects.push({ type: 'text', text: 'CRUSHED', x: player.x, y: player.y - 50, color: '#ffd54f', life: 0.8, maxLife: 0.8 }); }
+    if (hasTalent('pa_dozer_quake')) {
+        effects.push({ type: 'holy_impact', x: player.x, y: player.y, radius: 160, life: 0.5, maxLife: 0.5 });
+        for (const e of enemies) if (!e.dead && Math.hypot(e.x - player.x, e.y - player.y) <= 160 + e.size / 2) applyDamage(e, dmg * 1.5, 'melee');
+    }
+}
+// Divine Aura's talents, each frame (updatePaladin): Blessed Aura heals, Wrath Flare flares every 3 s
+function updateAura(dt) {
+    const A = player.paAura; if (!A) return;
+    if (A.ef.life <= 0 || !effects.includes(A.ef)) { player.paAura = null; return; }
+    if (hasTalent('pa_aura_bless')) player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.01 * dt);
+    if (hasTalent('pa_aura_flare') && (A.flare -= dt) <= 0) {
+        A.flare = 3;
+        effects.push({ type: 'holy_impact', x: player.x, y: player.y, radius: A.ef.radius, life: 0.45, maxLife: 0.45 });
+        for (const e of enemies) if (!e.dead && Math.hypot(e.x - player.x, e.y - player.y) <= A.ef.radius + e.size / 2) { applyDamage(e, A.dmg * 2, 'magic'); if (!e.dead && !e.type.startsWith('boss')) e.stunTimer = Math.max(e.stunTimer || 0, 0.5); }
+    }
+}
+const paMoveMult = () => isPaladin() && hasTalent('pa_grace_lift') && player.shield > 0 ? 1.15 : 1; // main.js movement: Lifted
 
 // ---------- Small helpers ----------
 
@@ -92,12 +133,13 @@ BasicAttackRegistry['mace'] = (dmg) => {
     if (hammerAway()) {
         // Light shield bash while the hammer is away
         dmg *= 0.85;
-        const radius = 95, halfArc = Math.PI / 4;
+        const radius = 95, halfArc = Math.PI / 4, throne = thunderThrone(); // Thunder Throne: by the planted hammer the bash chains on
         effects.push({ type: 'slash', x: player.x, y: player.y, radius: radius, angle: angle, color: 'rgba(255, 249, 196, 0.9)', life: 0.15, maxLife: 0.15 });
         for (const e of enemies) {
             if (!inCone(e, player.x, player.y, angle, radius, halfArc)) continue;
             applyDamage(e, dmg, 'melee_basic');
             shove(e, angle, 20);
+            if (throne) throneChain(e, dmg);
         }
         ringHammer(angle, radius, halfArc); // Ring the Hammer: the bash struck your own planted hammer
         return;
@@ -155,7 +197,7 @@ SkillRegistry['Paladin'] = {
         h.dmg = dmg;
         if (h.state === 'equipped') {
             const [dx, dy, dist] = getVector(player.x, player.y, mouseX, mouseY);
-            const range = Math.min(dist, HAMMER_THROW_RANGE);
+            const range = Math.min(dist, HAMMER_THROW_RANGE + (hasTalent('pa_hammer_far') ? 150 : 0)); // talents.js Long Throw
             [h.tx, h.ty] = clampPointToMap(player.x + (dx / dist) * range, player.y + (dy / dist) * range, 20);
             h.x = player.x; h.y = player.y; h.startX = player.x; h.startY = player.y;
             h.state = 'outbound'; h.hitList = [];
@@ -172,15 +214,19 @@ SkillRegistry['Paladin'] = {
     2: (sk, dmg) => { // Divine Tether: chain yourself to the planted hammer, or shackle an enemy to you
         const h = player.hammer;
         if (h.state === 'deployed') {
-            player.tether = { mode: 'hammer', life: TETHER_HAMMER_TIME, maxLife: TETHER_HAMMER_TIME, tick: 0, ax: h.x, ay: h.y };
+            const T = TETHER_HAMMER_TIME + (hasTalent('pa_tether_long') ? 2 : 0); // Long Chain
+            player.tether = { mode: 'hammer', life: T, maxLife: T, tick: 0, ax: h.x, ay: h.y };
             effects.push({ type: 'holy_impact', x: h.x, y: h.y, radius: 70, life: 0.4, maxLife: 0.4 });
         } else {
             const e = shackleTarget(); // canCast made sure there is one
-            player.tether = { mode: 'shackle', target: e, life: TETHER_SHACKLE_TIME, maxLife: TETHER_SHACKLE_TIME, tick: 0, ax: e.x, ay: e.y };
+            const T = TETHER_SHACKLE_TIME + (hasTalent('pa_tether_long') ? 2 : 0);
+            player.tether = { mode: 'shackle', target: e, life: T, maxLife: T, tick: 0, ax: e.x, ay: e.y };
             effects.push({ type: 'holy_impact', x: e.x, y: e.y, radius: 60, life: 0.4, maxLife: 0.4 });
             effects.push({ type: 'text', text: 'BOUND', x: e.x, y: e.y - 40, color: '#ffd54f', life: 0.8, maxLife: 0.8 });
         }
         player.tether.castAt = fxTime; // the chain shoots out from the Paladin (drawn in drawPaladinWorld)
+        player.tether.judge = 2;
+        if (sk.selectedUpg === 'A' && hasTalent('pa_grace_absolve')) { buffs.slowed = 0; buffs.rooted = 0; buffs.weakened = 0; } // Absolution
     },
 
     3: (sk, dmg) => { // Righteous Charge (equipped) / Iron Pull (deployed)
@@ -191,13 +237,14 @@ SkillRegistry['Paladin'] = {
                 x: h.x, y: h.y, speed: 1800, color: '#ffd54f', kind: 'chain',
                 onArrive: () => {
                     if (zeal) zealousTrail(zeal, zx, zy);
-                    const grounding = sk.selectedUpg === 'B';
+                    const grounding = sk.selectedUpg === 'B', R = grounding && hasTalent('pa_grav_wide') ? 220 : 150;
                     effects.push({ type: 'holy_impact', x: h.x, y: h.y, radius: 110, life: 0.45, maxLife: 0.45 });
-                    if (grounding) effects.push({ type: 'gravity_crush', x: h.x, y: h.y, radius: 150, life: 0.5, maxLife: 0.5 });
+                    if (grounding) effects.push({ type: 'gravity_crush', x: h.x, y: h.y, radius: R, life: 0.5, maxLife: 0.5 });
+                    if (grounding && hasTalent('pa_grav_anchor')) h.anchorPull = 3; // Gravity Anchor
                     for (const e of enemies) {
-                        if (e.dead || Math.hypot(e.x - h.x, e.y - h.y) > 150 + e.size / 2) continue;
-                        applyDamage(e, dmg * 1.2, 'melee');
-                        if (grounding) { e.slowTimer = 3.0; e.slowAmount = 0.5; }
+                        if (e.dead || Math.hypot(e.x - h.x, e.y - h.y) > R + e.size / 2) continue;
+                        applyDamage(e, dmg * 1.2 * (grounding && hasTalent('pa_grav_crater') ? 2 : 1), 'melee'); // Crater
+                        if (grounding) { e.slowTimer = 3.0; e.slowAmount = 0.5; if (hasTalent('pa_grav_root') && !e.dead) e.rootedTimer = Math.max(e.rootedTimer || 0, 1); } // Heavy
                         if (hasItem('Crusader Sabatons') && !e.type.startsWith('boss') && !e.dead) e.stunTimer = Math.max(e.stunTimer || 0, 0.5); // items.js
                     }
                     if (grounding) effects.push({ type: 'text', text: 'GROUNDED', x: h.x, y: h.y - 50, color: '#ffca28', life: 0.8, maxLife: 0.8 });
@@ -206,20 +253,22 @@ SkillRegistry['Paladin'] = {
             return;
         }
 
-        const juggernaut = sk.selectedUpg === 'A';
+        // Bulldozer (A): what the charge hits is carried to its end and slammed together; Shield Wall makes you immune meanwhile
+        const dozer = sk.selectedUpg === 'A', guard = dozer && hasTalent('pa_dozer_guard');
         const sealed = player.sealCharge; player.sealCharge = false; // Seal of Judgment: the charge a catch readied hits +50%
-        const range = 260 * (juggernaut ? 1.5 : 1.0);
+        const range = (260 + (hasTalent('pa_charge_far') ? 60 : 0)) * (dozer && hasTalent('pa_dozer_far') ? 1.5 : 1); // Long Charge, Momentum
         const [dx, dy, dist] = getVector(player.x, player.y, mouseX, mouseY);
         const dirX = dx / dist, dirY = dy / dist;
         const [tx, ty] = clampPointToMap(player.x + dirX * range, player.y + dirY * range, player.radius);
-        const hitList = [];
+        const edge = Math.hypot(tx - (player.x + dirX * range), ty - (player.y + dirY * range)) > 5; // the map's edge cuts it short: a wall to slam into
+        const hitList = [], carried = [];
         const trail = { type: 'dash_trail', x1: player.x, y1: player.y, x2: player.x, y2: player.y, color: '#ffe082', width: 26, life: 0.45, maxLife: 0.45 };
         effects.push(trail);
-        if (juggernaut) player.iFrames = Math.max(player.iFrames, 0.1); // immune from the instant of casting; the dash keeps it refreshed
+        if (guard) player.iFrames = Math.max(player.iFrames, 0.1); // immune from the instant of casting; the dash keeps it refreshed
         player.grappleTarget = {
-            x: tx, y: ty, speed: 1300, iFrames: juggernaut, noLine: true,
-            kind: 'charge', angle: Math.atan2(dirY, dirX), juggernaut, trail, // drawn by skillfx_space.js
-            onArrive: () => { dustPuff(player.x, player.y, Math.atan2(dirY, dirX), 1.2, 5); if (zeal) zealousTrail(zeal, zx, zy); },
+            x: tx, y: ty, speed: 1300, iFrames: guard, noLine: true,
+            kind: 'charge', angle: Math.atan2(dirY, dirX), juggernaut: guard, trail, // drawn by skillfx_space.js
+            onArrive: () => { dustPuff(player.x, player.y, Math.atan2(dirY, dirX), 1.2, 5); if (zeal) zealousTrail(zeal, zx, zy); if (dozer) bulldozerSlam(carried, dirX, dirY, dmg, edge); },
             onStep: () => {
                 for (const e of enemies) {
                     if (e.dead || hitList.includes(e)) continue;
@@ -228,12 +277,18 @@ SkillRegistry['Paladin'] = {
                     applyDamage(e, dmg * (sealed ? 1.5 : 1), 'melee');
                     burst(e.x, e.y, Math.atan2(dirY, dirX), 1.4, 8, { kind: 'spark', color: '#ffe082', size: 2.5, life: 0.25, speed: [200, 420], drag: 6 });
                     addShake(2);
+                    if (dozer && !e.dead && !e.prop && !e.type.startsWith('boss')) { carried.push(e); continue; } // swept up in front of you
                     // Knock enemies forward and off to whichever side of the charge they were on
                     const side = (dirX * (e.y - player.y) - dirY * (e.x - player.x)) >= 0 ? 1 : -1;
                     shove(e, Math.atan2(dirY, dirX), 50);
                     shove(e, Math.atan2(dirX * side, -dirY * side), 70);
                     if (!e.type.startsWith('boss')) e.stunTimer = Math.max(e.stunTimer || 0, 0.3 + (hasItem('Crusader Sabatons') ? 0.5 : 0)); // items.js
                 }
+                carried.forEach((e, k) => { // the pile rides the shield
+                    if (e.dead) return;
+                    const lat = (k - (carried.length - 1) / 2) * 26, fwd = player.radius + e.size / 2 + 6;
+                    e.x = player.x + dirX * fwd - dirY * lat; e.y = player.y + dirY * fwd + dirX * lat; clampToBounds(e, e.size / 2);
+                });
             }
         };
     },
@@ -244,13 +299,16 @@ SkillRegistry['Paladin'] = {
         const followPlayer = sk.selectedUpg === 'A';
         const atHammer = deployed && !followPlayer;
         const cx = atHammer ? h.x : player.x, cy = atHammer ? h.y : player.y;
-        effects.push({
-            type: 'consecrated_ground', wrath: true, x: cx, y: cy, radius: WRATH_RADIUS, color: 'rgba(255, 202, 40, 0.45)', life: 6.0, maxLife: 6.0, dmg: dmg, slow: 0.25,
+        const R = WRATH_RADIUS * (hasTalent('pa_wrath_wide') ? 1.25 : 1), life = 6 + (hasTalent('pa_wrath_long') ? 2 : 0); // Broad Wrath, Long Wrath
+        const ground = {
+            type: 'consecrated_ground', wrath: true, x: cx, y: cy, radius: R, color: 'rgba(255, 202, 40, 0.45)', life, maxLife: life, dmg: dmg, slow: followPlayer && hasTalent('pa_aura_judge') ? 0.5 : 0.25, // Judgment Aura
             customUpdate: followPlayer ? (dt, ef) => { ef.x = player.x; ef.y = player.y; } : null
-        });
+        };
+        effects.push(ground);
+        if (followPlayer) player.paAura = { ef: ground, flare: 3, dmg };
         effects.push({ type: 'holy_impact', x: cx, y: cy, radius: 140, life: 0.5, maxLife: 0.5 });
         if (sk.selectedUpg === 'B' && deployed) {
-            h.hurricaneTimer = 6.0;
+            h.hurricaneTimer = hasTalent('pa_gods_long') ? 8 : 6; h.godsDmg = dmg; // Endless Storm
             effects.push({ type: 'text', text: 'IRON HURRICANE', x: h.x, y: h.y - 60, color: '#ffd54f', life: 1.0, maxLife: 1.0 });
         }
     }
@@ -262,6 +320,7 @@ function updatePaladin(dt) {
     if (!isPaladin() || !player.hammer) return;
     const h = player.hammer;
     if (h.purityCd > 0) h.purityCd -= dt;
+    updateAura(dt);
 
     if (h.state === 'outbound') {
         h.spin += dt * 18;
@@ -369,16 +428,23 @@ function catchHammer(h, perfect) {
         effects.push({ type: 'text', text: 'CAUGHT!', x: player.x, y: player.y - 40, color: '#ffd54f', life: 0.7, maxLife: 0.7 });
     }
     const sk = activeClass.skills[1];
-    if (sk.selectedUpg === 'A' && !(h.purityCd > 0)) { // Handheld Purity: seismic shockwave, at most once per normal Q cooldown
-        h.purityCd = sk.maxCd * getCDR();
-        effects.push({ type: 'holy_impact', x: player.x, y: player.y, radius: 110, life: 0.5, maxLife: 0.5 });
-        effects.push({ type: 'circle_burst', x: player.x, y: player.y, radius: 180, color: 'rgba(255, 236, 179, 0.6)', life: 0.4, maxLife: 0.4 });
-        for (const e of enemies) {
-            if (e.dead || Math.hypot(e.x - player.x, e.y - player.y) > 180 + e.size / 2) continue;
-            applyDamage(e, h.dmg, 'melee');
-            e.stunTimer = 1.5;
-        }
+    if (sk.selectedUpg === 'A' && !(h.purityCd > 0)) { // Handheld Purity: seismic shockwave, at most once per normal Q cooldown (Ever Ready: half)
+        h.purityCd = sk.maxCd * getCDR() * (hasTalent('pa_purity_ready') ? 0.5 : 1);
+        purityWave(h.dmg, 1);
+        if (hasTalent('pa_purity_quake')) after(0.4, () => purityWave(h.dmg * 1.5, 1.15)); // Twin Quake
     }
+}
+function purityWave(dmg, grow) { // Seismic Catch widens it, Purifying Wave heals per enemy
+    const R = (hasTalent('pa_purity_wide') ? 260 : 180) * grow; let n = 0;
+    effects.push({ type: 'holy_impact', x: player.x, y: player.y, radius: 110 * grow, life: 0.5, maxLife: 0.5 });
+    effects.push({ type: 'circle_burst', x: player.x, y: player.y, radius: R, color: 'rgba(255, 236, 179, 0.6)', life: 0.4, maxLife: 0.4 });
+    for (const e of enemies) {
+        if (e.dead || Math.hypot(e.x - player.x, e.y - player.y) > R + e.size / 2) continue;
+        applyDamage(e, dmg, 'melee'); n++;
+        e.stunTimer = 1.5;
+    }
+    if (n && hasTalent('pa_purity_heal')) player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.01 * n);
+    addShake(grow > 1 ? 3 : 2);
 }
 
 function updateDeployedHammer(h, dt) {
@@ -389,7 +455,7 @@ function updateDeployedHammer(h, dt) {
         effects.push({ type: 'circle_burst', x: h.x, y: h.y, radius: HAMMER_PULSE_RADIUS, color: 'rgba(255, 248, 225, 0.3)', life: 0.5, maxLife: 0.5 });
         for (const e of enemies) {
             if (e.dead || Math.hypot(e.x - h.x, e.y - h.y) > HAMMER_PULSE_RADIUS + e.size / 2) continue;
-            applyDamage(e, h.dmg * 0.25, 'magic');
+            applyDamage(e, h.dmg * 0.25 * (hasTalent('pa_hammer_pulse') ? 1.5 : 1), 'magic'); // Resonant Head
             if (!e.type.startsWith('boss') && (!e.state || e.state === 'idle')) { e.tauntTimer = 0.5; e.tauntX = h.x; e.tauntY = h.y; }
         }
     }
@@ -399,13 +465,16 @@ function updateDeployedHammer(h, dt) {
         h.conduitTimer -= dt;
         if (h.conduitTimer <= 0) {
             h.conduitTimer = 0.5;
+            const R = hasTalent('pa_conduit_rod') ? 320 : 200; // Lightning Rod
             const targets = enemies
-                .filter(e => !e.dead && Math.hypot(e.x - h.x, e.y - h.y) <= 200 + e.size / 2)
+                .filter(e => !e.dead && Math.hypot(e.x - h.x, e.y - h.y) <= R + e.size / 2)
                 .sort((a, b) => Math.hypot(a.x - h.x, a.y - h.y) - Math.hypot(b.x - h.x, b.y - h.y))
-                .slice(0, 2);
+                .slice(0, hasTalent('pa_conduit_branch') ? 4 : 2); // Branching
             for (const e of targets) {
                 effects.push({ type: 'lightning', x1: h.x, y1: h.y, x2: e.x, y2: e.y, color: '#fff59d', life: 0.15, maxLife: 0.15 });
                 applyDamage(e, h.dmg * 0.4, 'magic');
+                h.zaps = (h.zaps || 0) + 1;
+                if (hasTalent('pa_conduit_shock') && h.zaps % 4 === 0 && !e.dead && !e.type.startsWith('boss')) e.stunTimer = Math.max(e.stunTimer || 0, 0.5); // Shock
             }
         }
     }
@@ -414,11 +483,28 @@ function updateDeployedHammer(h, dt) {
     if (h.hurricaneTimer > 0) {
         h.hurricaneTimer -= dt;
         h.spin += dt * 25;
+        const R = hasTalent('pa_gods_wide') ? 380 : WRATH_RADIUS + 60;
         for (const e of enemies) {
             if (e.dead || e.type.startsWith('boss')) continue;
             const [dx, dy, dist] = getVector(e.x, e.y, h.x, h.y);
-            if (dist > WRATH_RADIUS + 60 || dist < 30 + e.size / 2) continue;
+            if (dist > R || dist < 30 + e.size / 2) continue;
             const pull = Math.min(dist - (30 + e.size / 2), 240 * dt);
+            e.x += (dx / dist) * pull; e.y += (dy / dist) * pull;
+            if (hasTalent('pa_gods_gale')) applyDamage(e, (h.godsDmg || h.dmg) * 0.5 * dt, 'dot'); // Iron Gale
+        }
+        if (h.hurricaneTimer <= 0 && hasTalent('pa_gods_fall')) { // Fall of Heaven: it ends in a slam
+            effects.push({ type: 'holy_impact', x: h.x, y: h.y, radius: 250, life: 0.6, maxLife: 0.6 });
+            for (const e of enemies) if (!e.dead && Math.hypot(e.x - h.x, e.y - h.y) <= 250 + e.size / 2) { applyDamage(e, (h.godsDmg || h.dmg) * 3, 'melee'); if (!e.dead) e.stunTimer = Math.max(e.stunTimer || 0, 1.5); }
+            addShake(5);
+        }
+    }
+    if (h.anchorPull > 0) { // Gravity Anchor: the planted hammer keeps drawing enemies in
+        h.anchorPull -= dt;
+        for (const e of enemies) {
+            if (e.dead || e.pod || e.prop || e.type.startsWith('boss')) continue;
+            const [dx, dy, dist] = getVector(e.x, e.y, h.x, h.y);
+            if (dist > 260 || dist < 30 + e.size / 2) continue;
+            const pull = Math.min(dist - (30 + e.size / 2), 130 * dt);
             e.x += (dx / dist) * pull; e.y += (dy / dist) * pull;
         }
     }
@@ -439,7 +525,8 @@ function shackleTarget() {
 // whatever touches it; a shackled non-boss can't get more than SHACKLE_LEASH away and is dragged back in.
 function updateTether(dt) {
     const t = player.tether;
-    if (!t) return;
+    if (!t) { if (player.paTetherOn) { player.paTetherOn = false; tetherEnded(); } return; }
+    player.paTetherOn = true;
     const h = player.hammer, sk = activeClass.skills[2];
     if (t.mode === 'hammer') {
         if (h.state !== 'deployed' && h.returnMode !== 'flail') { player.tether = null; return; } // recalled or picked up: the chain goes with it (a Flail Sweep swings it)
@@ -468,20 +555,33 @@ function updateTether(dt) {
         }
         t.healing = touched > 0; // skillfx_e.js: the healing light
         if (touched) { // the chain feeds holy light back to you; Overflowing Grace turns what overflows full HP into a shield
-            const heal = player.maxHp * Math.min(TETHER_HEAL_CAP, TETHER_HEAL * touched), room = player.maxHp - player.hp;
+            const heal = player.maxHp * Math.min(TETHER_HEAL_CAP, TETHER_HEAL * touched) * (hasTalent('pa_tether_mend') ? 1.5 : 1), room = player.maxHp - player.hp; // Mending Chain
             player.hp = Math.min(player.maxHp, player.hp + heal);
-            if (sk.selectedUpg === 'A' && heal > room) addShield(heal - room, 3.0); // combat.js: capped at half max HP
+            if (sk.selectedUpg === 'A' && heal > room) addShield(heal - room, 3.0, hasTalent('pa_grace_cap') ? 0.7 : SHIELD_CAP); // combat.js: capped at half max HP (Abundant: 70%)
         }
     }
 
     if (sk.selectedUpg === 'B') { // Chain of Retribution: enemy shots that cross the chain break on it and fly back as holy bolts
         for (const p of projectiles) {
-            if (!p.isEnemy || p.life <= 0 || distToSegment(p.x, p.y, player.x, player.y, t.ax, t.ay) > TETHER_WIDTH + (p.radius || 0)) continue;
+            if (!p.isEnemy || p.life <= 0 || distToSegment(p.x, p.y, player.x, player.y, t.ax, t.ay) > (hasTalent('pa_retri_heavy') ? 40 : TETHER_WIDTH) + (p.radius || 0)) continue; // Heavy Links
             p.life = 0; // expires this frame, so its normal on-expire behavior still runs
             effects.push({ type: 'dome_ripple', x: p.x, y: p.y, life: 0.3, maxLife: 0.3 });
             fireRetributionBolt(p.x, p.y, p.owner || p.sourceBoss);
+            if (hasTalent('pa_retri_absorb')) player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.01); // Absorb
+        }
+        if (hasTalent('pa_retri_judge') && (t.judge -= dt) <= 0) { // Judgment Chain: the chain strikes everything along it
+            t.judge = 2;
+            effects.push({ type: 'lightning', x1: player.x, y1: player.y, x2: t.ax, y2: t.ay, color: '#fff59d', lineWidth: 6, life: 0.25, maxLife: 0.25 });
+            for (const e of enemies) if (!e.dead && !e.pod && distToSegment(e.x, e.y, player.x, player.y, t.ax, t.ay) <= 30 + e.size / 2) applyDamage(e, calcDmg(sk.baseDmg, sk.level) * 1.5, 'magic');
         }
     }
+}
+function tetherEnded() { // Radiant Release: the shield the chain built bursts as a holy wave
+    if (activeClass.skills[2].selectedUpg !== 'A' || !hasTalent('pa_grace_release') || !(player.shield > 0)) return;
+    const amt = player.shield; player.shield = 0;
+    effects.push({ type: 'holy_impact', x: player.x, y: player.y, radius: 180, life: 0.5, maxLife: 0.5 });
+    for (const e of enemies) if (!e.dead && Math.hypot(e.x - player.x, e.y - player.y) <= 180 + e.size / 2) applyDamage(e, amt / HIT_SCALE, 'magic');
+    addShake(2.5);
 }
 
 // Flail Sweep (Q recall while chained to the planted hammer by Divine Tether): the hammer tears out and whips round you on the
@@ -614,7 +714,7 @@ function judgmentSmash(dmg) {
 function fireRetributionBolt(x, y, attacker) {
     projectiles.push({
         x: x, y: y, vx: 0, vy: 0, radius: 6, color: '#fff59d', life: 2.0, type: 'basic', shape: 'fireball', isRetribution: true,
-        damage: calcDmg(15, activeClass.skills[2].level), pierce: false, hitList: [], isEnemy: false, target: attacker,
+        damage: calcDmg(15, activeClass.skills[2].level) * (hasTalent('pa_retri_wrath') ? 2 : 1), pierce: false, // Wrathful Bolts hitList: [], isEnemy: false, target: attacker,
         customUpdate: function(dt, p) {
             if (!p.target || p.target.dead) p.target = getNearestEnemyFromPoint(p.x, p.y, 600);
             if (!p.target) return;

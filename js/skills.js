@@ -7,7 +7,8 @@ function attackSpeedBonus() {
     let bonus = equipment.gloves ? equipment.gloves.val : 0;
     if (activeClass.name === 'Kensei' && player.stance === 'airborne') bonus += (player.flow / player.maxFlow) * 0.5; // up to +50% in airborne
     if (activeClass.name === 'Dragonknight') bonus += player.frenzyStacks * 0.02; // Frenzy: +2% per stack
-    if (buffs.focus > 0 && hasTalent('focus_haste')) bonus += 0.3; // Ranger Hunter's Focus, Steady Rhythm (talents.js)
+    if (buffs.focus > 0 && hasTalent('focus_haste')) bonus += 0.3;
+    if (activeClass.name === 'Cleric' && buffs.inSanctuary && hasTalent('cl_sanct_haste')) bonus += 0.2; // cleric.js Blessed Steps // Ranger Hunter's Focus, Steady Rhythm (talents.js)
     return bonus;
 }
 
@@ -117,10 +118,10 @@ function steerShot(p, dt) {
 
 // Rank effects for skills whose ranks would otherwise do nothing (the level-up cards read these too, ui.js RANK_STATS)
 function vaultReach(sk) { return 300 + 40 * (Math.max(1, sk.level) - 1) + (hasTalent('vault_far') ? 80 : 0); } // Ranger Vault: 300 → 420 px (talents.js Long Strides +80)
-function shadowStepReach(level) { return 300 + 40 * (level - 1) + (hasItem('Windwalker Steps') ? 100 : 0); } // Kensei Shadow Step: 300 → 420 px
+function shadowStepReach(level) { return 300 + 40 * (level - 1) + (hasItem('Windwalker Steps') ? 100 : 0) + (hasTalent('ke_step_far') ? 80 : 0); } // Kensei Shadow Step: 300 → 420 px
 function grappleMissPenalty(level) { return Math.max(0, 2.5 - 0.5 * level); }                  // Machinist: +2 → +0.5 s for grappling open ground
 const FLOW_GRACE = 3, FLOW_DECAY = 8; // Kensei in hand (main.js): Flow holds 3 s after the last gain, then fades 8/s (was 1.5 s and 15/s: dodging a crowd drained the bar before the blade could go out)
-function airborneDrain(level) { return 1 - 0.1 * (Math.max(1, level) - 1); }                    // Kensei E: the airborne blade drains Flow 10% slower per rank
+function airborneDrain(level) { return (1 - 0.1 * (Math.max(1, level) - 1)) * (hasTalent('ke_e_drain') ? 0.85 : 1); } // Steady Flight                    // Kensei E: the airborne blade drains Flow 10% slower per rank
 
 // Dragonknight Shield Throw: the shield came back to hand (main.js), for a shield. Molten Aegis's Flashpoint sets its trail off.
 function catchShield(sk, p) {
@@ -423,10 +424,10 @@ function windwalkShot(p) {
     burst(p.x, p.y, Math.atan2(-p.vy, -p.vx), 0.8, 6, { kind: 'dot', color: '#e0f7fa', size: 2, life: 0.3, speed: [150, 300], drag: 4 });
 }
 
-// Machinist Sentry Turret. upg: 'A' = Laser Optics, 'B' = Volatile Casing
-// Turret cap: 2 at Q rank 1-2, 3 at rank 3-4 (Automated Assembly's free turrets count too). A new turret packs up the oldest plain one
+// Machinist Sentry Turret. upg: 'A' = Flame Turret, 'B' = Sniper Turret (machinist.js maTurretTick runs both)
+// Turret cap: 2 at Q rank 1-2, 3 at rank 3-4 (+1 with Spare Parts). A new turret packs up the oldest plain one
 // (without its Volatile blast); Heavy and Siege turrets are never packed up early, so with only those standing Q waits.
-function turretCap() { return 1 + Math.ceil(Math.max(1, activeClass.skills[1].level) / 2); }
+function turretCap() { return 1 + Math.ceil(Math.max(1, activeClass.skills[1].level) / 2) + (hasTalent('ma_turret_cap') ? 1 : 0); } // talents.js Spare Parts
 function turretRoom() { const t = projectiles.filter(p => p.type === 'turret'); return t.length < turretCap() || t.some(p => !p.tier); }
 // Salvage Economy: Scrap is stored (max 20). Holding Q pours it into the turret: hold 0.4 s for a Heavy Turret (5 Scrap),
 // the full 0.9 s for a Siege Turret (10). A tap builds a plain one. Assembly's free turrets are always plain.
@@ -457,22 +458,19 @@ function spawnTurret(x, y, upg, dmg, tier = null) {
         projectiles.splice(projectiles.indexOf(old), 1);
     }
     if (tier) { player.scrap -= tier.cost; effects.push({ type: 'text', text: tier.name, x, y: y - 40, color: '#ffb74d', life: 1.0, maxLife: 1.0 }); }
-    const life = tier ? tier.life : 10.0;
+    const life = (tier ? tier.life : 10.0) * (hasTalent('ma_turret_life') ? 1.4 : 1); // talents.js Reinforced Frame
     projectiles.push({
-        x: x, y: y, vx: 0, vy: 0, radius: 12 * (tier ? tier.scale : 1), color: '#ff9800', life, maxLife: life, scale: tier ? tier.scale : 1, type: 'turret', damage: dmg * (tier ? tier.mult : 1), isEnemy: false, volatile: upg === 'B', isLaser: upg === 'A', attackTimer: 0, angle: 0, bornAt: fxTime, tier: tier ? tier.name : null,
+        x: x, y: y, vx: 0, vy: 0, radius: 12 * (tier ? tier.scale : 1), color: '#ff9800', life, maxLife: life, scale: tier ? tier.scale : 1, type: 'turret', damage: dmg * (tier ? tier.mult : 1), isEnemy: false, flame: upg === 'A', sniper: upg === 'B', isLaser: upg === 'B', attackTimer: 0, angle: 0, bornAt: fxTime, tier: tier ? tier.name : null,
         customUpdate: function(dt, p) {
-            this.attackTimer -= dt * (buffs.overclockTimer > 0 ? 1.75 : 1.0) * (this.overload > 0 ? OVERLOAD_RATE : 1); // Overclock: 1.75x as fast; Overload (combos.js) 3x
+            this.attackTimer -= dt * (buffs.overclockTimer > 0 ? 1.75 : 1.0) * (this.overload > 0 ? OVERLOAD_RATE : 1) * (this.linkedUntil > fxTime ? 1.25 : 1); // Overclock: 1.75x as fast; Overload (combos.js) 3x; Supercharge (machinist.js)
             if (this.overload > 0) this.overload -= dt;
             teslaCrackle(this, dt); // combos.js Tesla Turret
+            if (this.flame || this.sniper) { maTurretTick(this, dt); return; } // machinist.js: Flame / Sniper Turret
             let target = getNearestEnemyFromPoint(this.x, this.y, 500);
             if (target) {
                 this.angle = Math.atan2(target.y - this.y, target.x - this.x);
                 if (this.attackTimer <= 0) {
-                    if (this.isLaser) {
-                        effects.push({ type: 'laser_beam', x1: this.x + Math.cos(this.angle) * 18, y1: this.y + Math.sin(this.angle) * 18, x2: target.x, y2: target.y, life: 0.2, maxLife: 0.2 });
-                        applyDamage(target, this.damage * 1.5 * teslaShot(this, target, 0), 'magic'); // combos.js: electrified, it arcs on
-                        this.attackTimer = 1.0;
-                    } else {
+                    {
                         projectiles.push({ x: this.x + Math.cos(this.angle)*15, y: this.y + Math.sin(this.angle)*15, vx: Math.cos(this.angle)*800, vy: Math.sin(this.angle)*800, radius: 4, color: '#ffb74d', life: 1.5, type: 'basic', shape: 'bullet', damage: this.damage * teslaShot(this, target, Math.hypot(target.x - this.x, target.y - this.y) / 800), pierce: false, isEnemy: false }); // combos.js Tesla Turret
                         this.attackTimer = 0.8; // 1.25 shots/s; Laser Optics (x1.5 per 1 s) out-damages it on purpose
                     }
@@ -515,14 +513,15 @@ var SkillRegistry = {
             if (tier === 0 && buffs.aspectOfReaper > 0) tier = 1; // the Reaper pays HP for its spells, so no empty-Zeal penalty
             let finalDmg = dmg * RAY_ZEAL_MULT[tier];
 
-            let localDuration = 1.5;
+            let localDuration = hasTalent('cl_ray_long') ? 2 : 1.5; // cleric.js talents: Lingering Light, Broad Beam
+            if (hasTalent('cl_ray_wide')) width *= 1.3;
             let localTickRate = 0.1;
             let maxTicks = Math.floor(localDuration / localTickRate);
 
             if (isShadow) {
                 // Void Spike
                 let spikeDmg = finalDmg * 2.5;
-                if (player.hp < player.maxHp * 0.5) spikeDmg *= 1.4;
+                if (player.hp < player.maxHp * (hasTalent('cl_void_hunger') ? 0.7 : 0.5)) spikeDmg *= 1.4; // Hunger
 
                 effects.push({ 
                     type: 'divine_ray_channel', x: player.x, y: player.y, angle: aimAngle, 
@@ -542,12 +541,13 @@ var SkillRegistry = {
                             while(diff < -Math.PI) diff += Math.PI*2; while(diff > Math.PI) diff -= Math.PI*2;
                             let limit = Math.atan2(width, dist);
                             if (Math.abs(diff) < limit || Math.abs(diff) < 0.15) {
-                                applyDamage(e, spikeDmg * 0.16 * eclipseMult(e, ray), 'magic'); // 15 ticks: x6.0 total, times the Zeal tier (combos.js: x1.5 on an eclipsed enemy)
+                                { const amt = spikeDmg * 0.16 * eclipseMult(e, ray) * clJudge(e, ray), was = e.dead; applyDamage(e, amt, 'magic'); clVoidHit(e, amt, was); } // cleric.js: Righteous Exchange, Leech, Grasping Dark, Void Collapse // 15 ticks: x6.0 total, times the Zeal tier (combos.js: x1.5 on an eclipsed enemy)
                                 if (ticks % 2 === 0) effects.push({ type: 'sparkle_poof', x: e.x, y: e.y, color: '#9c27b0' });
                             }
                         }
                     }
                 });
+                after(localDuration, () => clRayEnd(ray));
                 buffs.lastSpellClass = 'shadow';
             } else {
                 // Base & Holy
@@ -570,17 +570,18 @@ var SkillRegistry = {
                             while(diff < -Math.PI) diff += Math.PI*2; while(diff > Math.PI) diff -= Math.PI*2;
                             let limit = Math.atan2(width, dist) * 1.5; // Slightly forgiving hitbox at close range
                             if (Math.abs(diff) < Math.max(limit, 0.15)) {
-                                applyDamage(e, finalDmg * 0.35 * eclipseMult(e, ray), 'magic'); // 15 ticks: x5.25 total, times the Zeal tier (combos.js: x1.5 on an eclipsed enemy)
+                                applyDamage(e, finalDmg * 0.35 * eclipseMult(e, ray) * clJudge(e, ray), 'magic'); // 15 ticks: x5.25 total, times the Zeal tier (combos.js: x1.5 on an eclipsed enemy)
                                 if (isHoly) {
                                     // Radiant Flash: each fresh blind (not a refresh) gives Zeal back, so a ray through a pack refuels the next one
-                                    if (!(e.blindTimer > 0) && !e.dead && !buffs.zealLocked) player.zeal = Math.min(player.maxZeal, player.zeal + 10);
-                                    e.blindTimer = 1.0;
+                                    if (!(e.blindTimer > 0) && !e.dead && !buffs.zealLocked) player.zeal = Math.min(player.maxZeal, player.zeal + (hasTalent('cl_flash_zeal') ? 15 : 10)); // Zealous Gaze
+                                    e.blindTimer = Math.max(e.blindTimer || 0, hasTalent('cl_flash_long') ? 2 : 1.0); // Searing Light
                                 }
                                 if (ticks % 2 === 0) effects.push({ type: 'sparkle_poof', x: e.x, y: e.y, color: rayColor });
                             }
                         }
                     }
                 });
+                after(localDuration, () => { clRayEnd(ray); if (isHoly && tier === 3 && hasTalent('cl_flash_dawn')) clDawnbreak(); }); // cleric.js Dawnbreak
                 if (isHoly) buffs.lastSpellClass = 'holy';
             }
         },
@@ -604,11 +605,11 @@ var SkillRegistry = {
             
             if (!buffs.zealLocked) player.zeal = Math.max(0, player.zeal - zealSpent);
             
-            let radius = healMult > 0.5 ? 160 : 80;
+            let radius = (healMult > 0.5 ? 160 : 80) * (hasTalent('cl_ground_wide') ? 1.25 : 1); // cleric.js talents
             let isHoly = sk.selectedUpg === 'A';
             let isShadow = sk.selectedUpg === 'B';
             let tX = mouseX; let tY = mouseY;
-            let life = 4.0;
+            let life = 4.0 + (hasTalent('cl_ground_long') ? 2 : 0);
 
             if (isHoly) {
                 buffs.lastSpellClass = 'holy';
@@ -617,9 +618,11 @@ var SkillRegistry = {
                     type: 'hallowed_ground', shape: 'aura', damage: 0, zoneDmg: dmg, isHoly: true, pierce: true, hitList: [], isEnemy: false,
                     tickTimer: 0,
                     customUpdate: function(dt, p) {
+                        clSanctFrame(p); if (p.life <= dt * 1.5) clGroundEnd(p); // cleric.js: Hallowed Ward, Holy Pillar
                         p.tickTimer += dt;
                         if (p.tickTimer >= 0.5) {
                             p.tickTimer = 0;
+                            clSanctTick(p); // Aegis
                             // Heal Player
                             if (Math.hypot(player.x - p.x, player.y - p.y) <= p.radius) {
                                 let healAmount = calcUtility(5 + (player.maxHp * 0.05), sk.level) * healMult;
@@ -646,7 +649,7 @@ var SkillRegistry = {
                 buffs.lastSpellClass = 'shadow';
                 projectiles.push({
                     x: tX, y: tY, vx: 0, vy: 0, radius: radius, color: 'rgba(156, 39, 176, 0.3)', life: life,
-                    type: 'hallowed_ground', shape: 'aura', damage: 0, zoneDmg: dmg, isShadow: true, pierce: true, hitList: [], isEnemy: false,
+                    type: 'hallowed_ground', shape: 'aura', damage: 0, zoneDmg: dmg, isShadow: true, baseR: radius, maxLife: life, pierce: true, hitList: [], isEnemy: false,
                     tickTimer: 0,
                     customUpdate: function(dt, p) {
                         p.tickTimer += dt;
@@ -654,6 +657,7 @@ var SkillRegistry = {
                             p.tickTimer = 0;
                             let dtDamage = dmg * 1.4; // Tick damage (x1.2 after the band pass, x1.4 after the boss-fight check)
                             if (doDamageAndSlow) dtDamage *= 1.5;
+                            clDesecTick(p, dtDamage); // cleric.js: Creeping Dark, Siphon, Wither
                             for (let e of enemies) {
                                 if (Math.hypot(e.x - p.x, e.y - p.y) <= p.radius + e.size/2) {
                                     shatterShields(e); // combat.js
@@ -694,6 +698,8 @@ var SkillRegistry = {
             }
         },
         3: (sk, dmg) => { // Phase Shift
+            if (hasTalent('cl_phase_faith') && player.zeal < 50 && !buffs.zealLocked) player.zeal += 10; // cleric.js talents: Faith Step
+            if (sk.selectedUpg === 'A' && cl.swap) return clSwapBack(); // Second Swap
             let isHoly = sk.selectedUpg === 'A';
             let isShadow = sk.selectedUpg === 'B';
             
@@ -712,11 +718,11 @@ var SkillRegistry = {
             }
 
             let resolveZeal = () => {
-                let cost = isUpgradedCast ? (applyAoeStun ? 100 : 50) : (isShadow ? 20 : 0);
+                let cost = isUpgradedCast ? (applyAoeStun ? 100 : 50) : (isShadow ? (hasTalent('cl_raven_cheap') ? 10 : 20) : 0); // Feathered
                 if (!buffs.zealLocked) {
                     if (isShadow) {
                         if (player.zeal >= cost) player.zeal -= cost;
-                        else player.hp -= player.maxHp * 0.1;
+                        else player.hp -= player.maxHp * (hasTalent('cl_raven_cheap') ? 0.05 : 0.1);
                     } else {
                         if (isUpgradedCast) player.zeal = Math.max(0, player.zeal - cost);
                         else player.zeal = Math.min(player.maxZeal, player.zeal + 20); // Generate if base
@@ -728,13 +734,16 @@ var SkillRegistry = {
                 let nearest = null; let minDist = Infinity;
                 for (let e of enemies) {
                     let dist = Math.hypot(player.x - e.x, player.y - e.y);
-                    if (dist < 400 + dashBonusDist && dist < minDist) { minDist = dist; nearest = e; }
+                    if (dist < (hasTalent('cl_trans_reach') ? 600 : 400) + dashBonusDist && dist < minDist && !e.dead && !e.pod && !e.prop) { minDist = dist; nearest = e; }
                 }
                 if (nearest) {
                     resolveZeal();
                     let px = player.x; let py = player.y;
                     player.x = nearest.x; player.y = nearest.y;
                     nearest.x = px; nearest.y = py;
+                    if (hasTalent('cl_trans_heal')) player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.08); // Exchange
+                    if (hasTalent('cl_trans_judge')) { nearest.blindTimer = Math.max(nearest.blindTimer || 0, 3); nearest.clJudged = true; nearest.clJudgeRay = null; } // Righteous Exchange
+                    if (hasTalent('cl_trans_back')) { cl.swap = { e: nearest, t: 2 }; cooldowns.s3 = cooldownMax.s3 = devNoCooldowns ? 0 : 0.3; } // Second Swap
                     
                     spawnDashGhost('#ffd54f', true, 0.4, Math.atan2(player.y - py, player.x - px), px, py, 0);
                     effects.push({ type: 'transposition', x0: px, y0: py, x1: player.x, y1: player.y, life: 0.45, maxLife: 0.45 });
@@ -755,7 +764,7 @@ var SkillRegistry = {
             } else if (isShadow) { // Raven Flight
                 resolveZeal();
                 let [dx, dy, dist] = getVector(player.x, player.y, mouseX, mouseY);
-                let dashDist = Math.min(dist, 400 + dashBonusDist);
+                let dashDist = Math.min(dist, 400 + dashBonusDist + (hasTalent('cl_phase_far') ? 80 : 0));
                 let tX = player.x + (dx/dist)*dashDist;
                 let tY = player.y + (dy/dist)*dashDist;
                 
@@ -764,7 +773,8 @@ var SkillRegistry = {
                 if (applyAoeStun) effects.push({ type: 'holy_nova', x: tX, y: tY, radius: 150, color: '#ce93d8', life: 0.5, maxLife: 0.5 });
                 
                 for (let e of enemies) {
-                    if (distToSegment(e.x, e.y, player.x, player.y, tX, tY) < e.size + (applyAoeStun ? 150 : 60)) {
+                    if (distToSegment(e.x, e.y, player.x, player.y, tX, tY) < e.size + (applyAoeStun ? 150 : 60) * (hasTalent('cl_raven_wide') ? 1.5 : 1)) { // Murder of Crows
+                        clRavenDread(e, player.x, player.y); // Dread
                         e.blindTimer = 2.5; 
                         applyDamage(e, dmg * 2.0, 'magic');
                         player.hp = Math.min(player.maxHp, player.hp + (player.maxHp * 0.05));
@@ -774,11 +784,12 @@ var SkillRegistry = {
                     }
                 }
                 player.x = tX; player.y = tY;
+                if (hasTalent('cl_raven_swarm')) cl.ravens = { x: tX, y: tY, t: 3, tick: 0, dmg }; // Raven Swarm
                 buffs.lastSpellClass = 'shadow';
             } else { // Base Phase Shift
                 resolveZeal();
                 let [dx, dy, dist] = getVector(player.x, player.y, mouseX, mouseY);
-                let dashDist = Math.max(50, Math.min(dist, 300 + dashBonusDist));
+                let dashDist = Math.max(50, Math.min(dist, 300 + dashBonusDist + (hasTalent('cl_phase_far') ? 80 : 0)));
                 let tX = player.x + (dx/dist)*dashDist;
                 let tY = player.y + (dy/dist)*dashDist;
                 
@@ -804,17 +815,18 @@ var SkillRegistry = {
             let isShadow = sk.selectedUpg === 'B';
             
             if (isHoly) { // Avatar of Renewal
-                buffs.avatarOfRenewal = calcUtility(8.0, sk.level); // ranks: longer
+                buffs.avatarOfRenewal = calcUtility(8.0, sk.level) + (hasTalent('cl_asc_long') ? 2 : 0); // ranks: longer
                 buffs.lastSpellClass = 'holy';
                 effects.push({ type: 'ascend_burst', variant: 'holy', radius: 250, life: 0.7, maxLife: 0.7 });
                 
                 // Homings light bolts
-                let bolts = 6;
+                let bolts = hasTalent('cl_avatar_volley') ? 9 : 6; // cleric.js talents
+                if (hasTalent('cl_avatar_halo')) addShield(player.maxHp * 0.2, 8); // Halo
                 for(let i=0; i<bolts; i++) {
                     let angle = (Math.PI*2 / bolts) * i;
                     projectiles.push({
                         x: player.x, y: player.y, vx: Math.cos(angle)*400, vy: Math.sin(angle)*400,
-                        radius: 8, color: '#fff', life: 3.0, type: 'basic', shape: 'light_spear', damage: dmg * 1.5, pierce: false, isEnemy: false,
+                        radius: 8, color: '#fff', life: 3.0, type: 'basic', shape: 'light_spear', damage: dmg * 1.5, pierce: false, isEnemy: false, spellHit: clAvatarBolt,
                         customUpdate: function(dt, p) {
                             let nearest = getNearestEnemyFromPoint(p.x, p.y, 300);
                             if (nearest) {
@@ -829,11 +841,11 @@ var SkillRegistry = {
                     });
                 }
             } else if (isShadow) { // Aspect of the Reaper
-                buffs.aspectOfReaper = calcUtility(8.0, sk.level); // ranks: longer
+                buffs.aspectOfReaper = calcUtility(8.0, sk.level) + (hasTalent('cl_asc_long') ? 2 : 0); // ranks: longer
                 buffs.lastSpellClass = 'shadow';
                 effects.push({ type: 'ascend_burst', variant: 'shadow', radius: 250, life: 0.7, maxLife: 0.7 });
             } else { // Base Ascension
-                buffs.ascension = calcUtility(6.0, sk.level); // ranks: longer (6 → 9.6 s)
+                buffs.ascension = calcUtility(6.0, sk.level) + (hasTalent('cl_asc_long') ? 2 : 0); // ranks: longer (6 → 9.6 s)
                 effects.push({ type: 'ascend_burst', variant: 'base', radius: 150, life: 0.7, maxLife: 0.7 });
             }
             if (!buffs.zealLocked) player.zeal = player.maxZeal;
@@ -902,7 +914,7 @@ var SkillRegistry = {
                 }
                 
                 if (hitAnything) {
-                    player.flow = Math.min(player.maxFlow, player.flow + 30); 
+                    player.flow = Math.min(player.maxFlow, player.flow + (hasTalent('ke_q_flow') ? 40 : 30)); // Keen Edge
                     player.flowGainTimer = 0;
                 }
             } else {
@@ -981,7 +993,7 @@ var SkillRegistry = {
                 const startX = player.x, startY = player.y;
                 counterStep(); // combos.js Counter Step: off a parry, its Iaido cuts harder
 
-                if (sk.selectedUpg === 'A') {
+                if (sk.selectedUpg === 'A' && hasTalent('ke_ghost_blades')) { // talents.js: a Ghost Step talent now
                     // Path of Blades - a phantom blade rides along with the dash, piercing everything on the way
                     projectiles.push({
                         x: startX, y: startY,
@@ -1019,7 +1031,7 @@ var SkillRegistry = {
                 effects.push({ type: 'spatial_swap', x0: tmpX, y0: tmpY, x1: player.x, y1: player.y, life: 0.45, maxLife: 0.45 });
                 spawnDashGhost('#00e5ff', true, 0.35, Math.atan2(player.y - tmpY, player.x - tmpX), tmpX, tmpY, 0);
                 
-                if (sk.selectedUpg === 'B') cooldowns.s1 = 0; // Reset Q (Blade Surge)
+                if (sk.selectedUpg === 'B' && hasTalent('ke_echo_surge')) cooldowns.s1 = 0; // Reset Q (Blade Surge): an Echo Swap talent now
             }
         },
         4: (sk, dmg, k, opt = {}) => { // Blade Whirlwind / Shatter Storm
@@ -1367,91 +1379,7 @@ var SkillRegistry = {
             effects.push({ type: 'text', text: 'No target', x: player.x, y: player.y - 40, color: '#ff5252', life: 0.6, maxLife: 0.6 });
             return false;
         },
-        1: (sk, dmg) => {
-            const baseAngle = Math.atan2(mouseY - player.y, mouseX - player.x);
-            let count = 5; let pierce = sk.selectedUpg === 'A'; let returnDmg = sk.selectedUpg === 'B';
-            effects.push({ type: 'knife_fan', x: player.x, y: player.y, angle: baseAngle, life: 0.2, maxLife: 0.2 });
-            for(let i=0; i<count; i++) {
-                let angle = baseAngle - 0.4 + (i * 0.2);
-                projectiles.push({ x: player.x, y: player.y, vx: Math.cos(angle)*800, vy: Math.sin(angle)*800, radius: 5, color: '#e1bee7', life: 1.0, type: pierce?'pierce':'fan_of_knives', shape: 'knife', damage: dmg, pierce: pierce, hitList: [], isEnemy: false, source: 'fan_of_knives', returning: false, returnDmg: returnDmg });
-            }
-        },
-        2: (sk, dmg) => {
-            let radius = sk.selectedUpg === 'B' ? 250 : 150; let poison = sk.selectedUpg === 'A';
-            let particles = [];
-            for (let i = 0; i < 20; i++) {
-                particles.push({
-                    xOffset: (Math.random() - 0.5) * radius * 0.8,
-                    yOffset: (Math.random() - 0.5) * radius * 0.8,
-                    r: radius * (0.3 + Math.random() * 0.5),
-                    rotSpeed: (Math.random() - 0.5) * 1.5,
-                    startAng: Math.random() * Math.PI * 2
-                });
-            }
-            let smokeColor = poison ? 'rgba(76, 175, 80, 0.7)' : 'rgba(80, 80, 80, 0.7)';
-            let duration = calcUtility(5.0, sk.level);
-            effects.push({ type: 'smoke_bomb', x: player.x, y: player.y, radius: radius, color: smokeColor, life: duration, maxLife: duration, poison: poison, dmg: dmg, particles: particles });
-            if (sk.selectedUpg === 'B') { buffs.slowed = 0; buffs.rooted = 0; }
-        },
-        3: (sk, dmg) => { // Phantom Dash: a blur of shadow that cuts everything it passes through
-            const [dx, dy, dist] = getVector(player.x, player.y, mouseX, mouseY);
-            let moveDist = sk.selectedUpg === 'A' ? Math.min(dist, 600) : Math.min(dist, 300);
-            let pDashAngle = Math.atan2(dy, dx);
-            const hitList = [];
-            const trail = { type: 'dash_trail', x1: player.x, y1: player.y, x2: player.x, y2: player.y, color: '#9c27b0', width: 18, life: 0.35, maxLife: 0.35 };
-            effects.push(trail);
-            burst(player.x, player.y, 0, Math.PI * 2, 5, { kind: 'smoke', color: '#311b92', size: 6, grow: 26, life: 0.5, speed: [30, 90], drag: 3 });
-            player.iFrames = 0.4;
-            const smoke = smokeStepStart(); // combos.js Smoke Step: dashing out of your own Smoke Bomb
-            startDash({
-                x: player.x + (dx/dist)*moveDist, y: player.y + (dy/dist)*moveDist,
-                dur: 0.08 + moveDist / 6000, ease: 'out', kind: 'phantom_dash', trail,
-                onArrive: () => smokeStep(smoke),
-                ghost: { color: '#b388ff', glow: true, every: 0.012, life: 0.22 },
-                onStep: (x0, y0, x1, y1) => { // hits whatever the dash passes through this frame
-                    for(let i=enemies.length-1; i>=0; i--) {
-                        const e = enemies[i];
-                        if (e.dead || hitList.includes(e) || distToSegment(e.x, e.y, x0, y0, x1, y1) >= e.size/2 + 20) continue;
-                        hitList.push(e);
-                        applyDamage(e, dmg, 'phantom_dash', pDashAngle);
-                        effects.push({ type: 'shadow_cut', x: e.x, y: e.y, angle: pDashAngle, radius: e.size * 0.6 + 16, life: 0.3, maxLife: 0.3 });
-                        shadowStrike(e, pDashAngle); // combos.js: through the Marked target, an extra clone strike
-                    }
-                }
-            });
-            if (sk.selectedUpg === 'B') {
-                if (!player.phantomChargeUsed) { player.phantomChargeUsed = true; cooldowns.s3 = 0.5; }
-                else { player.phantomChargeUsed = false; }
-            }
-        },
-        // Mark for Death: one target (canCast picks it). Shadow clones strike it MFD_STRIKES times, each from a fresh weak side,
-        // so every strike pops a weak point ('death_mark' source, combat.js). An assassin's ult: a boss-killer, not a swarm-clearer.
-        // Chain Reaction: if the target dies, the mark and the strikes left jump to the nearest enemy.
-        4: (sk, dmg) => {
-            let target = markForDeathTarget();
-            buffs.deathMarkActive = calcUtility(5.0, sk.level);
-            buffs.markTarget = target; buffs.markDmg = dmg; buffs.shadowStrikes = 0; // combos.js Shadow Strike
-            effects.push({ type: 'death_mark_wave', x: target.x, y: target.y, radius: target.size / 2 + 90, life: 0.6, maxLife: 0.6 });
-            effects.push({ type: 'text', text: 'MARKED FOR DEATH', x: target.x, y: target.y - target.size / 2 - 30, color: '#ce93d8', life: 1.0, maxLife: 1.0 });
-            for (let k = 0; k < MFD_STRIKES; k++) after(0.2 + k * MFD_GAP, () => {
-                if (target.dead) {
-                    if (sk.selectedUpg !== 'B') return;
-                    const next = getNearestEnemyFromPoint(target.x, target.y, 300, [target]);
-                    if (!next) return;
-                    target = next; buffs.markTarget = target;
-                    effects.push({ type: 'text', text: 'MARKED', x: target.x, y: target.y - 40, color: '#ce93d8', life: 0.6, maxLife: 0.6 });
-                }
-                const markAng = Math.random() * Math.PI * 2; // a fresh weak side for every clone
-                target.markAngle = markAng;
-                const startX = target.x + Math.cos(markAng) * 200, startY = target.y + Math.sin(markAng) * 200;
-                const dashAngle = Math.atan2(target.y - startY, target.x - startX);
-                // a shadow clone blinks in on the weak side and stabs straight through
-                effects.push({ type: 'clone_strike', x0: startX, y0: startY, x1: target.x + Math.cos(dashAngle) * 40, y1: target.y + Math.sin(dashAngle) * 40, angle: dashAngle, life: 0.4, maxLife: 0.4 });
-                effects.push({ type: 'shadow_cut', x: target.x, y: target.y, angle: dashAngle, radius: target.size * 0.6 + 18, life: 0.3, maxLife: 0.3 });
-                if (sk.selectedUpg === 'A') player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.02); // Bloodlust
-                applyDamage(target, dmg * MFD_MULT, 'death_mark', dashAngle);
-            });
-        },
+        // Q, E, Space and R live in nightblade.js with their evolutions
         'rmb': () => { // Expose (Shadowstrike Daggers): every enemy in a cone in front of you shows a weak point on the side facing you
             const ang = Math.atan2(mouseY - player.y, mouseX - player.x), R = 300, half = Math.PI / 3;
             effects.push({ type: 'expose_wave', x: player.x, y: player.y, angle: ang, radius: R, half, life: 0.45, maxLife: 0.45 }); // skillfx_rmb.js
@@ -1481,94 +1409,7 @@ var SkillRegistry = {
             if (!tier && buffs.overclockTimer > 0 && hasItem('Overclock Regulator')) tier = { ...TURRET_TIERS[1], cost: 0 }; // items.js: a free Heavy Turret while overclocked
             if (!spawnTurret(mouseX, mouseY, sk.selectedUpg, dmg, tier)) cooldowns.s1 = 0; // no room after all: the cooldown isn't spent
         },
-        2: (sk, dmg) => {
-            const [dx, dy, dist] = getVector(player.x, player.y, mouseX, mouseY);
-            let tx = player.x + (dx/dist)*Math.min(dist, 400); let ty = player.y + (dy/dist)*Math.min(dist, 400);
-            let isRoot = sk.selectedUpg === 'A'; let isNetwork = sk.selectedUpg === 'B';
-            projectiles.push({
-                x: tx, y: ty, vx: 0, vy: 0, radius: 15, color: '#00e5ff', life: 8.0, type: 'tesla_coil_trap', damage: dmg, isEnemy: false, tickTimer: 0, rootedList: [], fieldRadius: isRoot ? 200 : 150,
-                customUpdate: function(dt, p) {
-                    rideCoil(this); // combos.js Conductive Net: latched onto a netted enemy, it goes where it goes
-                    this.tickTimer -= dt;
-                    if (this.tickTimer <= 0) {
-                        effects.push({ type: 'tesla_pulse', x: this.x, y: this.y, radius: isRoot ? 200 : 150, life: 0.3, maxLife: 0.3 });
-                        let zaps = 0;
-                        for (let i = enemies.length - 1; i >= 0; i--) {
-                            let e = enemies[i];
-                            if (Math.hypot(e.x - this.x, e.y - this.y) < (isRoot ? 200 : 150) + e.size/2) {
-                                if (zaps++ < 5) effects.push({ type: 'lightning', x1: this.x, y1: this.y, x2: e.x, y2: e.y, color: '#00e5ff', life: 0.15, maxLife: 0.15 });
-                                applyDamage(e, this.damage, 'magic');
-                                e.shockTimer = 0.6;
-                                // High Voltage: root each enemy once per coil, when it first enters the field
-                                if (isRoot && !this.rootedList.includes(e)) { e.rootedTimer = 1.0; this.rootedList.push(e); }
-                            }
-                        }
-                        if (isNetwork) {
-                            for (let t of projectiles) {
-                                if (t.type === 'turret' && Math.hypot(t.x - this.x, t.y - this.y) < 400) {
-                                    effects.push({ type: 'lightning', x1: this.x, y1: this.y, x2: t.x, y2: t.y, color: '#00e5ff', life: 0.2, maxLife: 0.2 });
-                                    for(let i = enemies.length - 1; i >= 0; i--) { 
-                                        let e = enemies[i];
-                                        if (distToSegment(e.x, e.y, this.x, this.y, t.x, t.y) < e.size/2 + 20) applyDamage(e, this.damage * 0.5, 'magic'); // half a pulse per line 
-                                    }
-                                }
-                            }
-                        }
-                        this.tickTimer = 0.5;
-                    }
-                }
-            });
-            coilPlaced(projectiles[projectiles.length - 1]); // combos.js: onto a netted enemy (Conductive Net) or a turret (Tesla Turret)
-        },
-        3: (sk, dmg) => {
-            let targetX = mouseX; let targetY = mouseY;
-            let foundTarget = false, anchor = null; // anchor: the turret or coil it latches onto (combos.js Overload)
-            for (let p of projectiles) {
-                if ((p.type === 'turret' || p.type === 'tesla_coil_trap') && Math.hypot(p.x - mouseX, p.y - mouseY) < 50) {
-                    targetX = p.x; targetY = p.y; foundTarget = true; anchor = p; break;
-                }
-            }
-            if (!foundTarget) cooldowns.s3 += grappleMissPenalty(sk.level); // ranks: a smaller penalty for open ground
-            
-            if (sk.selectedUpg === 'A') addShield(calcUtility(100, sk.level), calcUtility(4.0, sk.level));
-            if (sk.selectedUpg === 'B') {
-                // Hologram absorbs one enemy projectile, and nearby non-bosses go after it for its 2 s (the taunt in main.js)
-                let decoyX = player.x; let decoyY = player.y;
-                player.phantomDecoy = { x: decoyX, y: decoyY, life: 2.0 };
-                for(let e of enemies) {
-                    if (e.dead || e.type.startsWith('boss') || Math.hypot(e.x - decoyX, e.y - decoyY) >= 300) continue;
-                    if (!e.state || e.state === 'idle') { e.tauntTimer = 2.0; e.tauntX = decoyX; e.tauntY = decoyY; } // never cut an attack wind-up short
-                }
-            }
-            
-            let [dx, dy, ddist] = getVector(player.x, player.y, targetX, targetY);
-            if (ddist > 10) {
-                player.grappleTarget = { x: targetX, y: targetY, kind: 'magnet', anchor, onArrive: () => magClank(targetX, targetY) };
-                burst(player.x, player.y, Math.atan2(dy, dx), 0.6, 6, { kind: 'spark', color: '#80d8ff', size: 2, life: 0.2, speed: [200, 400], drag: 5 });
-            }
-        },
-        4: (sk, dmg) => {
-            const duration = calcUtility(6.0, sk.level) + (hasItem('Overclock Regulator') ? 2 : 0); // items.js
-            buffs.overclockTimer = duration; buffs.overclockMax = duration;
-            lightningRod(); // combos.js: cast inside your own coil's field, you absorb it
-            effects.push({ type: 'overclock_burst', life: 0.6, maxLife: 0.6 });
-            for(let p of projectiles) { if (p.type === 'turret' || p.type === 'tesla_coil_trap') p.life = p.type === 'turret' ? (p.maxLife || 10.0) : 8.0; } // a Siege Turret refreshes to its own 15 s
-            if (sk.selectedUpg === 'B') {
-                const turretSkill = activeClass.skills[1];
-                const turretDmg = calcDmg(turretSkill.baseDmg, Math.max(1, turretSkill.level));
-                // the two turrets drop in from the sky, one after the other
-                spawnTurret(player.x - 30, player.y, turretSkill.selectedUpg, turretDmg); projectiles[projectiles.length - 1].dropIn = 0.35;
-                spawnTurret(player.x + 30, player.y, turretSkill.selectedUpg, turretDmg); projectiles[projectiles.length - 1].dropIn = 0.5;
-            }
-            if (sk.selectedUpg === 'A') {
-                // Nuclear Payload: when Overclock ends, every turret detonates (volatile turrets explode for 3x their damage on expiry)
-                after(duration, () => {
-                    for (let p of projectiles) {
-                        if (p.type === 'turret') { p.life = 0; p.volatile = true; }
-                    }
-                });
-            }
-        },
+        // E, Space and R live in machinist.js with their evolutions
         'rmb': () => {
             const angle = Math.atan2(mouseY - player.y, mouseX - player.x);
             projectiles.push({ 
@@ -1634,6 +1475,7 @@ var BasicAttackRegistry = {
             damage: dmg, pierce: true, hitList: [], isEnemy: false,
             isInSanctuary: buffs.inSanctuary // doubles zeal gained if fired from inside a Sanctuary
         });
+        clScythe(dmg); // cleric.js Scythe
     },
     // Dragonknight: heavy is the charge of a held swing (skills.js updateHeavySwing), null for a light one;
     // whirl is the Thunder Leap finisher (combos.js): the same swing spun all the way round, harder
@@ -1744,6 +1586,7 @@ var BasicAttackRegistry = {
     },
     'scattergun': (dmg) => {
         const angle = Math.atan2(mouseY - player.y, mouseX - player.x);
+        if (ma.exo) return maMinigun(dmg, angle); // machinist.js Exo-Frame: a forward stream
         let isPierce = buffs.overclockTimer > 0;
         const count = 9;
         const spread = 0.5;

@@ -6,7 +6,7 @@ Handoff doc for the campaign rework, like STAGE4.md. **Read the status first**, 
 
 | Step | What | State |
 |---|---|---|
-| 1 | The skill web replaces the level-up cards | Engine and screen done. **Dragonknight** done (playtested). **Ranger** done, awaiting playtest. **Nightblade, Machinist, Kensei, Cleric, Druid, Paladin** designed (CLASS_WEBS.md), to implement. **Spellweaver**: reworked into a spellbook class (20 spells, any key, one Greater) with 40 evolutions and 64 talents, built and awaiting playtest: **SPELLWEAVER.md** |
+| 1 | The skill web replaces the level-up cards | Engine and screen done. **Dragonknight** done (playtested). **Ranger** done, awaiting playtest. **Nightblade, Machinist, Kensei, Cleric, Druid, Paladin** built 2026-10-14 (CLASS_WEBS.md), tested headless, awaiting playtest. **Spellweaver**: reworked into a spellbook class (20 spells, any key, one Greater) with 40 evolutions and 64 talents, built and awaiting playtest: **SPELLWEAVER.md** |
 | 2 | Save slots, the hub (the start map as Cinderholt), dungeon retries | Not started |
 | 3 | Gear bought and upgraded at a smith (no gear drops) | Not started |
 | 4 | Potions: the flask (F) and elixirs (1 / 2) | Not started |
@@ -59,7 +59,7 @@ Audit: all four of the old evolution pairs failed the rule (numbers only). The u
 ### Next up (as of 2026-10-14)
 
 1. The user playtests the Ranger.
-2. Implement the six designed webs from **CLASS_WEBS.md**, in its order: Nightblade, Machinist, Paladin, Cleric, Druid, Kensei. Each class: classes.json evolutions, talents.js content, skill code, hooks, RANK_STATS, visuals, docs, a headless test in the Training Room, then the user's playtest.
+2. ~~Implement the six designed webs from CLASS_WEBS.md~~: done 2026-10-14 (nightblade.js, machinist.js, cleric.js, kensei.js; paladin.js and druid.js extended). The user and friends playtest every class.
 3. The **Spellweaver** rework: identity and structure settled on 2026-10-14 (the wizard who knows the most spells: four playstyle schools, any spell on any key, one Greater spell, a loadout picked at creation and grown with scrolls). The design is in **SPELLWEAVER.md**. The spellbook and all its evolutions are built (js/spellweaver.js, js/spellweaver_evo.js) and await the user's playtest (with friends, after the user commits).
 4. Then campaign steps 2-5 (saves and the hub, gear and the smith, potions, balance), as planned below.
 
