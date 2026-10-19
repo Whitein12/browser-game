@@ -33,7 +33,7 @@ function addShake(amount) { shakeAmount = Math.min(8, Math.max(shakeAmount, amou
 
 const HIT_COLORS = {
     dragonknight: '#ff8a65', ranger: '#dcedc8', machinist: '#ffcc80', spellweaver: '#81d4fa', nightblade: '#ea80fc',
-    kensei: '#84ffff', cleric: '#fff59d', druid: '#ccff90', paladin: '#fff59d'
+    kensei: '#84ffff', cleric: '#fff59d', druid: '#ccff90', paladin: '#fff59d', monk: '#ffcc80', witch: '#b2ff59', swordsaint: '#fff3c4'
 };
 
 // Called from applyDamage: sparks at the impact point, a white flash on the enemy, and shake on heavy hits
@@ -49,7 +49,8 @@ function spawnHitFx(enemy, source, projAngle) {
     let color = HIT_COLORS[selectedClassId] || '#ffffff';
     if (selectedClassId === 'cleric' && buffs.lastSpellClass === 'shadow') color = '#ce93d8';
     if (source === 'wolf') color = '#ffccbc'; // druid.js: the wolf's bites
-    const melee = source === 'melee_basic' || source === 'melee' || source === 'slash' || source === 'wolf';
+    if (source === 'minion') color = '#c5e1a5'; // witch.js: a zombie's claws
+    const melee = source === 'melee_basic' || source === 'melee' || source === 'slash' || source === 'wolf' || source === 'minion';
 
     burst(ix, iy, ang, 1.6, melee ? 8 : 5, { kind: 'spark', color, size: 2.5, life: 0.22, speed: [180, 440], drag: 6 });
     burst(ix, iy, ang, 2.4, 3, { kind: 'dot', color: '#ffffff', size: 2.2, life: 0.18, speed: [40, 140] });
@@ -71,7 +72,7 @@ function addDmgNumber(e, v, source) {
     let p = dmgPending.get(e);
     if (!p) { p = { v: 0, dot: true, at: fxTime + DOT_WINDOW }; dmgPending.set(e, p); }
     p.v += v;
-    if (source !== 'dot') { p.dot = false; p.at = Math.min(p.at, fxTime + DMG_WINDOW); }
+    if (source !== 'dot' && source !== 'spray') { p.dot = false; p.at = Math.min(p.at, fxTime + DMG_WINDOW); } // witch.js: the poison stream's ticks merge like a DoT
 }
 function updateDmgNumbers(dt) {
     for (const [e, p] of dmgPending) {

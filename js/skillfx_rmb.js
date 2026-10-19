@@ -411,5 +411,5 @@ function updateRmbEmitters(dt) {
             p.seenHits = p.hitList.length;
         }
     }
-    for (const e of enemies) if (e.netTimer > 0) e.netTimer -= e.type.startsWith('boss') ? dt * BOSS_CC_RATE : dt; // keeps pace with the root (main.js)
+    for (const e of enemies) if (e.netTimer > 0) e.netTimer -= isBossE(e) ? dt * BOSS_CC_RATE : dt; // keeps pace with the root (main.js)
 }

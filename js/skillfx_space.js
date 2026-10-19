@@ -46,7 +46,7 @@ function updateDash(dt) {
     const px = player.x, py = player.y;
     player.x = lerp(d.x0, d.x1, e); player.y = lerp(d.y0, d.y1, e);
     clampToBounds(player, player.radius);
-    player.z = (d.z0 || 0) * (1 - q) + d.arc * Math.sin(q * Math.PI); // z0: a dive starts high (skills.js Meteor Dive)
+    player.z = (d.z0 || 0) * (1 - q) + (d.z1 || 0) * q + d.arc * Math.sin(q * Math.PI); // z0: a dive starts high (skills.js Meteor Dive); z1: it ends high (monk.js Rising Dragon)
     if (d.iFrames) player.iFrames = Math.max(player.iFrames, 0.05);
     if (d.trail) { d.trail.x2 = player.x; d.trail.y2 = player.y; }
     if (d.onStep) d.onStep(px, py, player.x, player.y);
@@ -56,7 +56,7 @@ function updateDash(dt) {
     }
     if (!d.apexDone && q >= 0.5) { d.apexDone = true; if (d.onApex) d.onApex(); }
     if (q >= 1) {
-        player.dash = null; player.z = 0;
+        player.dash = null; player.z = d.z1 || 0;
         if (d.onArrive) d.onArrive();
         if (d.arc > 0) clearLanding(d);
         if (d.combo) openCombo({ x0: d.x0, y0: d.y0, x1: player.x, y1: player.y }); // combos.js: a Space dash landed

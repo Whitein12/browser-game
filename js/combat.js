@@ -7,6 +7,7 @@ const RANK_SCALE = 0.2;                  // each skill rank past 1 adds 20% of t
 const ORB_DMG = 0.04, ORB_DMG_CAP = 0.8; // power orbs: +4 Power each, +80 at most (Power adds up, so they're worth twice the old multiplier)
 const MAX_CDR = 0.6;                     // cooldowns never drop below 40%
 const ARMOR_K = 20;                      // armor blocks armor / (armor + 20) of every hit
+const BOSS_PURSE = 8;                   // coins a boss drops (20 + 2 x wave each): its gear used to be the prize
 const BOSS_CC_RATE = 3;                  // bosses shake off stun, root, freeze and blind 3x as fast
 const BOSS_WEAK_MULT = 1.5;              // Nightblade weak points on a boss deal x1.5 (an assassin's specialty is the big target)
 const WARDEN_ORB_GAP = 0.25, WARDEN_ORB_REGROW = 6; // Slime Warden: one orb pops per 0.25 s; a lost orb regrows every 6 s
@@ -17,7 +18,7 @@ function armorReduction(armor) { return armor > 0 ? armor / (armor + ARMOR_K) : 
 // The parts, so the Tab sheet can list where it comes from: [label, amount as a fraction, temporary?]
 function powerParts() {
     const n = activeClass.name, P = [['Class base', activeClass.dmgMult]];
-    if (equipment.weapon) P.push([equipment.weapon.name, equipment.weapon.val]);
+    if (equipment.weapon) P.push([itemName(equipment.weapon), equipment.weapon.val]);
     if (n === 'Dragonknight' && player.frenzyStacks > 0) P.push([`Frenzy &times;${player.frenzyStacks}`, player.frenzyStacks * 0.02, true]);
     if (n === 'Ranger' && player.momentum > 0) P.push(['Momentum', player.momentum, true]);
     if (n === 'Nightblade') { const [rush, fr] = nbPower(); if (rush) P.push(['Bloodrush', rush, true]); if (fr) P.push(['Frenzy of Shadows', fr, true]); } // nightblade.js
@@ -25,8 +26,11 @@ function powerParts() {
     if (n === 'Cleric' && buffs.ascension > 0) P.push(['Ascension', 0.25, true]);
     if (n === 'Cleric' && clPower()) P.push(['Exaltation', clPower(), true]); // cleric.js
     if (n === 'Druid' && drPower()) P.push(['Primal Fury', drPower(), true]); // druid.js
+    if (ssPower()) P.push([`Style: ${SS_RANK_LETTER[ssRank()]} rank`, ssPower(), true]); // swordsaint.js
+    if (ssUnsealPower()) P.push(['Unsealed Blade', ssUnsealPower(), true]);
     if (player.orbDmg > 0) P.push([`Power orbs${player.orbDmg >= ORB_DMG_CAP ? ' (max)' : ''}`, player.orbDmg]);
     if (player.treePower > 0) P.push(['Talents', player.treePower]); // skilltree.js: Might
+    if (buffs.elixirMight > 0) P.push(['Elixir of Might', ELIXIR_MIGHT, true]); // potions.js
     return P;
 }
 function powerMult() { return powerParts().reduce((s, p) => s + p[1], 0); }
@@ -40,6 +44,11 @@ function calcDmg(baseAmount, skillLevel = 1) {
 // What a hit really deals (applyDamage scales every player hit by HIT_SCALE): for tooltips, cards and the Tab sheet
 const HIT_SCALE = 0.6;
 function hitDmg(baseAmount, skillLevel = 1) { return calcDmg(baseAmount, skillLevel) * HIT_SCALE; }
+// The basic attack grows with the hero's level as skills grow with ranks (+5% a level: x1.45 at Lv. 10, x1.95 at Lv. 20).
+// Only the basic and its Space finisher (skills.js castBasic, monk.js mkBasicDmg), not the kits built on basicDmg (companion, venom, blades)
+const BASIC_LEVEL_SCALE = 0.05;
+function basicLevelMult() { return 1 + BASIC_LEVEL_SCALE * (Math.max(player.level, isTraining() && training.kit ? 20 : 1) - 1); } // training.js: the late-game kit counts as Lv. 20
+function basicHitDmg(m = 1) { return hitDmg(activeClass.basicDmg) * basicLevelMult() * m; }
 
 function calcUtility(baseAmount, skillLevel = 1) {
     return baseAmount + (skillLevel > 1 ? (skillLevel - 1) * (baseAmount * RANK_SCALE) : 0);
@@ -89,17 +98,6 @@ function getCDR() {
 // (Nightblade x0.62, Spellweaver/Kensei x0.77, Ranger/Cleric/Druid x0.92, Machinist/Paladin/Dragonknight x1)
 const ARMOR_HP_REF = 130;
 function armorHpMult() { return Math.min(1, activeClass.baseMaxHp / ARMOR_HP_REF); }
-
-function generateItem(tierLevel) {
-    const types = itemDataConfig.slots;
-    const type = types[Math.floor(Math.random() * types.length)];
-    const tier = Math.max(1, Math.ceil(tierLevel / 2));
-    const slotData = itemDataConfig.slotData[type];
-    let val = (slotData.valBase || 0) + tier * slotData.valMult; // T8 roughly matches the class rare's stat
-    if (type === 'armor') val = Math.round(val * armorHpMult());
-    let displayVal = (type === 'weapon' || type === 'gloves' || type === 'amulet') ? Math.round(val * 100) : Math.round(val);
-    return { id: Math.random().toString(36).substr(2, 9), name: `T${tier} ${slotData.namePrefix}`, type, val, desc: slotData.descTemplate.replace('{VAL}', displayVal), price: tier * 25, rarity: 'common' };
-}
 
 function applyDamage(enemy, amount, source = 'player', projAngle = null) {
     if (enemy.dead || enemy.submerged) return; // the Amalgam's Undertow: nothing reaches it under the floor (no IMMUNE spam)
@@ -155,6 +153,8 @@ function applyDamage(enemy, amount, source = 'player', projAngle = null) {
     if (enemy.reflective) takeDamage(amount * 0.5);
 
     enemy.hp -= amount + weak;
+    if (activeClass.name === 'Monk') monkOnDamage(amount + weak, enemy); // monk.js: Iron Will's lifesteal, the Chi idle timer, Resonating Mark's store
+    if (activeClass.name === 'Witch') witchOnDamage(enemy, amount + weak); // witch.js: a boss sheds souls as it's hurt
     addDmgNumber(enemy, amount + weak, source); // fx.js
     spawnHitFx(enemy, source, projAngle);
     if (activeClass.name === 'Druid') druidOnHit(enemy, source); // druid.js: what you hit carries your Scent
@@ -205,7 +205,7 @@ function weakPointDamage(enemy, source, projAngle) {
     const isNightblade = activeClass.name === 'Nightblade';
     enemy.markAngle = undefined;
     let trueDmg = calcDmg(activeClass.basicDmg * 3) * (hasItem('Sigil of the Hunt') ? 1.25 : 1); // grows with gear and orbs; the Sigil sharpens it
-    if (isNightblade && enemy.type.startsWith('boss')) trueDmg *= BOSS_WEAK_MULT; // the assassin's specialty is the big target
+    if (isNightblade && isBossE(enemy)) trueDmg *= BOSS_WEAK_MULT; // the assassin's specialty is the big target
     buffs.msBoost = 1.0;
     addShake(4);
     burst(enemy.x, enemy.y, hitAngle + Math.PI, 2.2, 14, { kind: 'spark', color: '#ea80fc', size: 3, life: 0.35, speed: [200, 520], drag: 5 });
@@ -248,6 +248,7 @@ function takeDamage(amount, isContinuous = false, sourceObj = null) {
 
     if (player.parryTimer > 0 && !isContinuous) { parrySuccess(sourceObj); return; } // Mitigate all damage
 
+    if (ssDodge(isContinuous, sourceObj)) return; // swordsaint.js: a hit into her own Gale Step or Mana Burst is a perfect dodge
     if (player.iFrames > 0) return;
     if (buffs.evade100 > 0) {
         if (!isContinuous) effects.push({ type: 'text', text: 'Evaded!', x: player.x, y: player.y - 30, color: '#e1bee7', life: 0.6, maxLife: 0.6 });
@@ -261,7 +262,11 @@ function takeDamage(amount, isContinuous = false, sourceObj = null) {
     if (equipment.armor && equipment.armor.name === 'Hazard Suit' && (isContinuous || amount < 5)) return;
     amount = itemsDamageTaken(amount, isContinuous); // items.js: class armors (0 = dodged)
     amount = talentsDamageTaken(amount, isContinuous, sourceObj); // talents.js: Scaled Hide
+    if (buffs.elixirIron > 0) amount *= 1 - ELIXIR_IRON; // potions.js: Iron Skin Draught, before armour and shields
+    if (activeClass.name === 'Monk') amount = monkDamageTaken(amount); // monk.js: Iron Body halves it
+    if (activeClass.name === 'Witch') amount = witchDamageTaken(amount, isContinuous, sourceObj); // witch.js: only shots reach her on the broom; the Shroud of the Coven
     if (amount <= 0) return;
+    ssHurt(isContinuous); // swordsaint.js: two Style ranks off; a held beam goes off
     
     // Cleric Vestments of the Fractured Soul interaction
     if (activeClass && activeClass.name === 'Cleric' && equipment.armor && equipment.armor.name === 'Vestments of the Fractured Soul') {
@@ -313,6 +318,7 @@ function takeDamage(amount, isContinuous = false, sourceObj = null) {
         }
     }
 
+    if (ssAvalon(amount)) return; // swordsaint.js: the Mail of Avalon turns a killing blow into a perfect dodge
     player.hp -= amount; waveStats.dmgTaken += amount;
     if (!isContinuous && amount >= player.maxHp * 0.12 && currentMap.type === 'castle' && player.hp > 0) throneBark('hit'); // map_castle.js: he enjoys that from his throne
     if (!isContinuous) player.hurtFlash = 0.2; // sprite hit flash
@@ -331,16 +337,26 @@ function takeDamage(amount, isContinuous = false, sourceObj = null) {
 
 // The hero falls. If Valerius is there to see it, he has a word first (dialogue.js), then the death screen.
 function playerDied() {
+    if (isBase()) { baseDeath(); return; } // sidequests.js: Cinderholt (the ruins' ambush) is no death: a fade and awake at the gate
     player.hp = 0; player.fallen = true; // main.js draws the hero dimmed where they fell
     const taunt = valeriusTaunt(); // dialogue.js
     if (taunt) openDialogue({ ...taunt, onClose: showDeathScreen });
     else showDeathScreen();
 }
-function showDeathScreen() { gameState = STATE.DEAD; el('death-wave').innerText = wave; el('death-screen').classList.remove('hidden'); }
+function showDeathScreen() { gameState = STATE.DEAD; el('death-wave').innerText = wave; heroDeathButtons(); el('death-screen').classList.remove('hidden'); } // save.js: retry the dungeon
 
-// XP from one level to the next: 50 at Lv. 1, then x1.5 a level (the old curve, kept until the campaign's balance pass)
-const XP_FIRST = 50, XP_GROWTH = 1.5;
-function xpToNext(level) { let x = XP_FIRST; for (let l = 1; l < level; l++) x = Math.floor(x * XP_GROWTH); return x; }
+// XP from one level to the next (CAMPAIGN.md step 5): x1.77 a level to Lv. 10, where the Caves end; then +5% a level, so the
+// Bastion (its XP x DUNGEON_XP) ends near Lv. 20. Past the table it keeps growing 5% a level (Limitless)
+const XP_TABLE = [0, 70, 130, 230, 410, 730, 1290, 2280, 4030, 6400, 7490, 7860, 8250, 8660, 9090, 9540, 10020, 10520, 11050, 11600];
+function xpToNext(level) { const n = XP_TABLE.length; return level < n ? XP_TABLE[level] : Math.round(XP_TABLE[n - 1] * Math.pow(1.05, level - n + 1) / 10) * 10; }
+const DUNGEON_XP = { bandit_bastion: 7.3 }; // the second dungeon pays for levels 10-20 (main.js spawnEnemy / pushBoss)
+function dungeonXp() { return activeExpedition ? expTune().xp : DUNGEON_XP[activeDungeonId] || 1; } // expeditions.js: paid like the castle's waves
+// The Bastion was built for a fresh hero; a campaign hero arrives at Lv. 10, so its first stages are rebased (BALANCE.md
+// "The campaign pass"): the village x1.8 HP and x1.4 damage, the trail x1.3 HP; the bridge and the castle were already
+// fought at Lv. 14-20. Applied where enemies are made (main.js pushBoss / spawnEnemy, ai.js beastHounds)
+function bastionScale(w) { if (activeExpedition) return expTune().scale; // expeditions.js: its own hp / dmg x (the hive's slimes are rebased down)
+    return activeDungeonId !== 'bandit_bastion' || isEndlessMode ? BASTION_SCALE[0] : w <= 5 ? BASTION_SCALE[1] : w <= 10 ? BASTION_SCALE[2] : BASTION_SCALE[0]; }
+const BASTION_SCALE = [{ hp: 1, dmg: 1 }, { hp: 1.8, dmg: 1.4 }, { hp: 1.3, dmg: 1 }];
 
 // A level gives skill points; they wait on the skill web (skilltree.js), so the fight never stops for them
 function gainXP(amount) {
@@ -351,12 +367,16 @@ function gainXP(amount) {
 }
 
 function checkEnemyDeath(e) {
-    if (e.pod && e.hp <= 0 && !e.dead) { if (e.type === 'powder_keg') kegBlown(e); else podPopped(e); return; } // bandits.js / map_hive.js: a keg or a brood pod; neither counts toward the wave
+    if (e.pod && e.hp <= 0 && !e.dead) { if (e.type === 'powder_keg') kegBlown(e); else if (e.type === 'supply_cache') cacheBroken(e); else podPopped(e); return; } // bandits.js / caches.js / map_hive.js: a keg, a cache or a brood pod; none counts toward the wave
     if (e.hp <= 0 && !e.dead) {
         e.dead = true;
         enemyDeathFx(e); // enemysprites.js
         talentsOnKill(e); // talents.js: Wildfire, Shatterfrost
+        witchOnKill(e); // witch.js: Contagion and a soul (dummies too, for the Training Room)
         if (e.dummy) { trainingDummyDied(e); return; } // training.js: no loot, no XP, no wave; it's back on its post soon
+        if (e.questFoe) { questFoeDied(e); return; } // sidequests.js: the ruins' ambushers are no wave enemies: no XP, no drops, no counters
+        questOnKill(e); // sidequests.js: bounties count the kill
+        expOnKill(e); // expeditions.js: the tally; the chief's death (the Prism splits)
         if (e.loot > 0) cutpurseLoot(e); // ai.js: a cutpurse killed with your gold drops it x1.5
 
         if (e.markAngle !== undefined && activeClass.name === 'Nightblade' && activeClass.skills[4].selectedUpg === 'B') nbChainBlast(e); // nightblade.js Chain Reaction
@@ -379,19 +399,17 @@ function checkEnemyDeath(e) {
 
 
         const rates = itemDataConfig.dropChances;
-        if (e.type.startsWith('boss')) {
-            if (!e.champion || !enemies.some(o => o.champion && !o.dead)) drops.push({ x: e.x + 20, y: e.y, type: 'item', itemData: generateItem(wave + 2), radius: 10, life: 30.0 }); // the Royal Guard: one item, from the last to fall
-            const purse = e.champion && enemies.some(o => o.champion && !o.dead) ? 2 : 5; // the Royal Guard: a little gold each, the full purse from the last
-            for(let i=0; i<purse; i++) drops.push({ x: e.x - 20 + (i*10), y: e.y + (i*10), type: 'gold', val: 20 + wave*2, radius: 8, life: 30.0 });
+        if (isBossE(e)) {
+            const purse = e.chief ? 0 : e.champion && enemies.some(o => o.champion && !o.dead) ? 3 : BOSS_PURSE; // an expedition's chief pays its own purse (expeditions.js) // no gear drops (the smith): bosses pay in gold. The Royal Guard: a little each, the full purse from the last
+            for(let i=0; i<purse; i++) drops.push({ x: e.x - 20 + (i*10), y: e.y + (i*10), type: 'gold', val: goldBonus(20 + wave*2), radius: 8, life: 30.0 });
             if (e.type === 'boss_warlord' && currentMap.type === 'village' && !isEndlessMode) { // his war chest: stage 1 alone pays for the first rare weapon (BALANCE.md section 7)
-                for (let i = 0; i < 4; i++) { const a = i / 4 * Math.PI * 2 + 0.6, d = 45 + (i % 2) * 20; drops.push({ x: e.x + Math.cos(a) * d, y: e.y + Math.sin(a) * d, type: 'gold', val: 20, radius: 8, life: 30.0 }); }
+                for (let i = 0; i < 4; i++) { const a = i / 4 * Math.PI * 2 + 0.6, d = 45 + (i % 2) * 20; drops.push({ x: e.x + Math.cos(a) * d, y: e.y + Math.sin(a) * d, type: 'gold', val: goldBonus(20), radius: 8, life: 30.0 }); }
                 effects.push({ type: 'text', text: 'The war chest!', x: e.x, y: e.y - 50, color: '#ffd54f', life: 1.6, maxLife: 1.6 });
             }
         } else {
             const roll = Math.random();
-            if (roll < rates.item) drops.push({ x: e.x, y: e.y, type: 'item', itemData: generateItem(wave), radius: 10, life: 15.0 });
-            else if (roll < rates.item + rates.orb) drops.push({ x: e.x, y: e.y, type: Math.random() > 0.5 ? 'hp' : 'dmg', radius: 12, life: 10.0 });
-            else if (roll < rates.item + rates.orb + rates.gold) drops.push({ x: e.x, y: e.y, type: 'gold', val: 5 + wave, radius: 8, life: 10.0 });
+            if (roll < rates.orb) { const o = Math.random(); drops.push({ x: e.x, y: e.y, type: o < 0.25 ? 'flask' : o < 0.5 ? 'hp' : 'dmg', radius: 12, life: 10.0 }); } // the flask takes half of the hp orbs' share (potions.js)
+            else if (roll < rates.orb + rates.gold) drops.push({ x: e.x, y: e.y, type: 'gold', val: goldBonus(5 + statWave()), radius: 8, life: 10.0 });
         }
         
         if (activeClass.name === 'Machinist' && Math.random() < 0.25) {
@@ -413,8 +431,8 @@ function collectAllDrops() {
     for (const d of drops) {
         if (d.type === 'hp') { player.hp = Math.min(player.maxHp, player.hp + (player.maxHp * 0.25)); } 
         else if (d.type === 'dmg') { pickUpDmgOrb(); }
-        else if (d.type === 'gold') { player.gold += d.val; } 
-        else if (d.type === 'item') { inventory.push(d.itemData); }
+        else if (d.type === 'flask') { pickUpFlask(); }
+        else if (d.type === 'gold') { player.gold += d.val; }
         else if (d.type === 'scrap') { pickUpScrap(); }
     } drops.length = 0; updateHUD();
 }

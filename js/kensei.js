@@ -194,7 +194,7 @@ function keWhirl(sk, dmg, second = false) { // Blade Whirlwind; Vortex pulls (Ey
         applyDamage(e, dmg * 1.5 * (second ? 0.6 : 1), 'slash'); n++;
         if (!vortex) continue;
         const [edx, edy, edist] = getVector(e.x, e.y, player.x, player.y), pull = Math.max(0, Math.min(edist - (player.radius + e.size / 2), 150)); // stop at contact range
-        if (!e.type.startsWith('boss')) { e.x += (edx / edist) * pull; e.y += (edy / edist) * pull; }
+        if (!isBossE(e)) { e.x += (edx / edist) * pull; e.y += (edy / edist) * pull; }
         if (hasTalent('ke_vortex_slow') && !e.dead) { e.slowTimer = Math.max(e.slowTimer || 0, 2); e.slowAmount = Math.max(e.slowAmount || 0, 0.4); }
     }
     if (hasTalent('ke_r_flow') && n) { player.flow = Math.min(player.maxFlow, player.flow + 8 * n); player.flowGainTimer = 0; } // Gathering Wind
@@ -249,7 +249,7 @@ function updateKensei(dt) { // main.js update
     const T = ke.twister;
     if (T) { // Hurricane Draw: a tornado stays and keeps pulling
         for (const e of enemies) {
-            if (e.dead || e.pod || e.prop || e.type.startsWith('boss')) continue;
+            if (e.dead || e.pod || e.prop || isBossE(e)) continue;
             const [dx, dy, d] = getVector(e.x, e.y, T.x, T.y);
             if (d > keVortexR() || d < 20) continue;
             e.x += dx / d * Math.min(d - 20, 150 * dt); e.y += dy / d * Math.min(d - 20, 150 * dt);

@@ -11,7 +11,7 @@ const weaponAnim = {
 
 const GLOVES = {
     dragonknight: '#616161', ranger: '#6d4c41', machinist: '#424242', spellweaver: '#0d47a1', nightblade: '#212121',
-    kensei: '#e0e0e0', cleric: '#fff8e1', druid: '#5d4037', paladin: '#b0bec5'
+    kensei: '#e0e0e0', cleric: '#fff8e1', druid: '#5d4037', paladin: '#b0bec5', monk: '#eceff1', witch: '#e8dcd6', swordsaint: '#cfd8dc'
 };
 
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -507,6 +507,32 @@ const WEAPON_DRAW = {
     },
 
     mace(A) { drawPaladinWeapon(A); }, // paladin.js
+    blightstaff(A) { drawBlightstaff(A); }, // witch_fx.js: the Witch's skull staff
+    saint_sword(A) { drawSaintSword(A); }, // swordsaint_fx.js: the Swordsaint's longsword
+
+    // Monk: the wrapped fists are part of his sprite (sprites.js monkPose moves them); this adds the motion over them:
+    // a streak behind each punching fist, a crescent of force in front of it, and the fists' gold glow as Chi fills
+    fists(A) {
+        const P = monkPose(playerPose(A)), chi = typeof mk !== 'undefined' && mk ? mk.chi || 0 : 0;
+        const ck = clamp01((chi - 60) / 40), hund = P.kind === 'hundred', gold = hund || chi >= 100 || isRareWeapon();
+        ctx.save();
+        ctx.translate(player.x, player.y); ctx.rotate(A + P.spin); ctx.translate(P.lean, 0); ctx.rotate(P.twist);
+        ctx.globalCompositeOperation = 'lighter';
+        let lead = P.fists[1];
+        for (const f of P.fists) {
+            if (f.e > lead.e) lead = f;
+            if (f.e > 0.2) {
+                const L = 8 + 14 * f.e;
+                ctx.fillStyle = gold ? `rgba(255, 202, 40, ${0.55 * f.e})` : `rgba(255, 243, 224, ${0.45 * f.e})`;
+                ctx.beginPath(); ctx.moveTo(f.x - L, f.y); ctx.lineTo(f.x, f.y - 3.6); ctx.lineTo(f.x, f.y + 3.6); ctx.closePath(); ctx.fill();
+                ctx.strokeStyle = gold ? `rgba(255, 213, 79, ${0.85 * f.e})` : `rgba(255, 248, 225, ${0.7 * f.e})`; ctx.lineWidth = 1.8;
+                ctx.beginPath(); ctx.arc(f.x - 2, f.y, 8 + 3 * f.e, -0.9, 0.9); ctx.stroke();
+            }
+            if (ck > 0) glow(ctx, f.x, f.y, 8 + 7 * ck, '#ffca28', (0.35 + 0.25 * Math.sin(fxTime * 6)) * ck);
+        }
+        weaponAnim.tip = localToWorld(lead.x, lead.y);
+        ctx.restore();
+    },
 };
 
 // ==========================================
@@ -622,6 +648,11 @@ const WEAPON_FIRE_FX = {
         burst(x, y, A, 1.6, 7, { kind: 'dot', color: '#b2ff59', size: 1.8, life: 0.45, speed: [40, 170] });
         burst(x, y, A, 2.0, 2, { kind: 'leaf', color: '#8bc34a', size: 6, life: 0.7, speed: [50, 120], drag: 2.5 });
     },
+    blightstaff(A) { blightstaffFire(A); }, // witch_fx.js (the stream itself is witch_fx.js wfxStream)
+    fists(A) { // a puff of dust off the jab
+        const s = weaponAnim.swing % 2 ? 1 : -1, [x, y] = polar(A, 30, s * 4);
+        burst(x, y, A, 1.2, 3, { kind: 'dot', color: '#fff3e0', size: 1.5, life: 0.16, speed: [60, 160] });
+    },
     mace(A) {
         if (hammerAway()) return;
         const [x, y] = polar(A, 56); // where the mace head lands
@@ -658,6 +689,11 @@ function updateWeaponEmitters(dt) {
     if (selectedClassId === 'machinist' && w.tip && buffs.overclockTimer > 0) {
         emit(12, dt, () => spawnParticle({ kind: 'spark', color: '#ff9100', x: w.tip.x, y: w.tip.y, vx: jitter(160), vy: jitter(160), size: 1.5, life: 0.25, drag: 4, grow: 0, spin: 0, rot: 0 }));
     }
+    // Monk: gold motes off the fists while the Hundred-Hand Strike is ready
+    if (selectedClassId === 'monk' && w.tip && typeof mk !== 'undefined' && mk && mk.chi >= 100) {
+        emit(8, dt, () => spawnParticle({ kind: 'dot', color: Math.random() < 0.5 ? '#ffca28' : '#fff3c4', x: w.tip.x + jitter(6), y: w.tip.y + jitter(6), vx: jitter(30), vy: jitter(30) - 10, size: 1.4, life: 0.5, drag: 1, grow: 0, spin: 0, rot: 0 }));
+    }
+    if (selectedClassId === 'witch') blightstaffDrip(dt); // witch_fx.js: poison dripping off the skull
     // Cleric: incense smoke from the thurible
     if (w.censer) {
         emit(9, dt, () => spawnParticle({ kind: 'smoke', color: w.censer.color, x: w.censer.x + jitter(4), y: w.censer.y + jitter(4),

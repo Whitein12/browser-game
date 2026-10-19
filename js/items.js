@@ -13,24 +13,58 @@ function hasItem(name) {
     return false;
 }
 
-// ---------- Rare weapon: it awakens ----------
-// Bought at +50 Power, it grows +4 for every wave cleared while worn, up to +90. So the first shop is a real choice
-// (a T4 common is +45), and the rare still ends above the late commons (T7 +75, T8 +85).
-const AWAKEN_START = 0.5, AWAKEN_STEP = 0.04, AWAKEN_MAX = 0.9;
-function rareWeaponDesc(val) {
-    const pw = Math.round(val * 100);
-    const grow = val >= AWAKEN_MAX - 1e-9 ? ' (fully awakened)' : `, awakens +${Math.round(AWAKEN_STEP * 100)} per wave cleared (max +${Math.round(AWAKEN_MAX * 100)})`;
-    return `+${pw} Power${grow} | ${activeClass.rareWeapon.desc}`;
+// ---------- Gear: bought at the merchant, raised at the smith (CAMPAIGN.md step 3) ----------
+// An item is { id, name, type, rarity, up, base, val, desc, price, spent }: `up` is its +N, `base` its stat at +0 and
+// `val` the stat now (itemVal), kept on the item so every reader of item.val works as before. The step per +1 and the
+// commons' catalogue are in items.json ("gear"). The name never changes (hasItem checks it); itemName adds the +N.
+const GEAR_SLOT_LIST = ['weapon', 'armor', 'amulet', 'boots', 'gloves'];
+const gearCfg = (type, rarity) => itemDataConfig.gear[type][rarity === 'rare' ? 'rare' : 'common'];
+function itemStep(item) { return gearCfg(item.type, item.rarity).step * (item.type === 'armor' ? armorHpMult() : 1); } // combat.js: armor scales with the class's HP
+function itemVal(item) { return Math.round((item.base + item.up * itemStep(item)) * 1000) / 1000; }
+function itemName(item) { return item.name + (item.up > 0 ? ` +${item.up}` : ''); }
+function rareOf(type) { return activeClass[{ weapon: 'rareWeapon', armor: 'rareArmor', amulet: 'rareAmulet', boots: 'rareBoots', gloves: 'rareGloves' }[type]]; }
+function rareFx(item) { // a rare's effect text, read from the class (the Druid's swaps wolf for jaguar there); its first segment is the stat, which we show ourselves
+    const r = rareOf(item.type); if (!r || r.name !== item.name) return '';
+    if (item.type === 'weapon') return r.desc;
+    const parts = r.desc.split(' | '), c = parts[0].indexOf(',');
+    return (c >= 0 ? parts[0].slice(c + 2) + ' | ' : '') + parts.slice(1).join(' | ');
 }
-function rareWeaponItem() {
-    return { id: 'rare_wep', name: activeClass.rareWeapon.name, type: 'weapon', val: AWAKEN_START, awaken: wave, desc: rareWeaponDesc(AWAKEN_START), price: 250, rarity: 'rare' }; // awaken: the wave it was bought after
+function itemDesc(item) { const fx = item.rarity === 'rare' ? rareFx(item) : ''; return fmtStat(item.type, item.val) + (fx ? ' | ' + fx : ''); } // ui.js fmtStat
+function refreshItem(item) { item.val = itemVal(item); item.desc = itemDesc(item); return item; }
+const commonName = type => { const g = gearCfg(type, 'common'); return (g.names && activeClass && g.names[activeClass.weapon]) || g.name; }; // the weapon follows the class (a Witch's staff, not an Iron Sword)
+function makeCommon(type) {
+    const g = gearCfg(type, 'common'), base = type === 'armor' ? Math.round(g.base * armorHpMult()) : g.base;
+    return refreshItem({ id: Math.random().toString(36).substr(2, 9), name: commonName(type), type, rarity: 'common', up: 0, base, val: base, desc: '', price: g.price, spent: g.price });
 }
-// main.js startNextWave: the wave before (wave - 1) was cleared; it counts if the weapon was already bought by then
-function awakenWeapon() {
-    const w = equipment.weapon;
-    if (!w || w.awaken === undefined || wave - 1 <= w.awaken || w.val >= AWAKEN_MAX - 1e-9) return;
-    w.val = Math.min(AWAKEN_MAX, w.val + AWAKEN_STEP); w.desc = rareWeaponDesc(w.val);
-    effects.push({ type: 'text', text: `${w.name} awakens: +${Math.round(w.val * 100)} Power`, x: player.x, y: player.y - 50, color: '#ffca28', life: 1.6, maxLife: 1.6 });
+function makeRare(type, up = 0) { // the class's own rare (its stat can be overridden in classes.json "val")
+    const r = rareOf(type), g = gearCfg(type, 'rare');
+    const base = type === 'armor' ? Math.round(g.base * armorHpMult()) : (r.val || g.base);
+    return refreshItem({ id: 'rare_' + type.slice(0, 3), name: r.name, type, rarity: 'rare', up, base, val: base, desc: '', price: g.price, spent: g.price });
+}
+// The rare weapon's awakening is retired: its +50 -> +90 Power is the upgrade path (+0 to +10)
+
+// Upgrades: +5 until the Slime Caves are cleared, +10 after (Quick Play: +10 once in the Bandit Bastion)
+function upgradeCap() {
+    const u = itemDataConfig.upgrade;
+    if (heroData) return (heroData.cleared || []).includes('slime_caves') ? u.capCaves : u.capStart; // save.js
+    return activeDungeonId === 'bandit_bastion' ? u.capCaves : u.capStart;
+}
+function upgradeCost(item) { return Math.max(5, Math.round(item.price * itemDataConfig.upgrade.costRate * (item.up + 1) * smithRate() / 5) * 5); } // sidequests.js: the smith's favour (x0.85); upgradeItem adds the price paid to `spent`, so selling stays half of it
+function upgradeItem(item) { // the smith: one +1 for gold; false when capped or too poor
+    if (item.up >= upgradeCap() || player.gold < upgradeCost(item)) return false;
+    const c = upgradeCost(item); player.gold -= c; item.spent = (item.spent || item.price) + c; item.up++;
+    refreshItem(item); recalcStats(); return true;
+}
+function sellPrice(item) { return Math.floor((item.spent || item.price || 0) * 0.5); } // half of everything put into it
+
+// save.js applyHero: an item from before the smith (tiered names, no `up`) becomes +0 of its slot's common, or of the class rare it was
+function migrateItem(it) {
+    if (!it) return it;
+    if (it.up !== undefined && it.base !== undefined) { if (it.rarity !== 'rare' && it.type === 'weapon') it.name = commonName('weapon'); return refreshItem(it); } // saves from when every common weapon was an Iron Sword
+    const r = it.type && rareOf(it.type);
+    if (!GEAR_SLOT_LIST.includes(it.type)) return null;
+    if (it.rarity === 'rare' && r && r.name === it.name) return makeRare(it.type, it.type === 'weapon' && it.val > 0.5 ? Math.min(10, Math.round((it.val - 0.5) / 0.04)) : 0); // a half-awakened weapon keeps its Power
+    return makeCommon(it.type);
 }
 
 // ---------- On cast (after the skill ran; `before` is where the hero stood and the Zeal they had) ----------

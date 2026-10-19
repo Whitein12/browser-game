@@ -204,7 +204,7 @@ SkillRegistry['Druid'] = {
         if (sk.selectedUpg === 'A') { // Dire Aspect: one huge beast instead of a pack
             buffs.direWolf = hasTalent('dr_dire_long') ? 11 : DIRE_TIME; drw.direBites = 0; // Elder Blood
             if (hasTalent('dr_dire_terror')) for (const e of enemies) { // Terror: the pack scatters before it
-                if (e.dead || e.pod || e.prop || e.type.startsWith('boss') || Math.hypot(e.x - w.x, e.y - w.y) > 250 + e.size / 2) continue;
+                if (e.dead || e.pod || e.prop || isBossE(e) || Math.hypot(e.x - w.x, e.y - w.y) > 250 + e.size / 2) continue;
                 const a = Math.atan2(e.y - w.y, e.x - w.x); e.tauntTimer = 1.5; e.tauntX = e.x + Math.cos(a) * 400; e.tauntY = e.y + Math.sin(a) * 400;
             }
             effects.push({ type: 'text', text: companion().big.toUpperCase(), x: w.x, y: w.y - 40, color: '#ffab40', life: 1.0, maxLife: 1.0 });
@@ -225,7 +225,7 @@ SkillRegistry['Druid'] = {
             applyDamage(e, dmg * (thorns ? THORN_RAKE_MULT : 1) * (pincer ? PINCER_MULT : 1), 'physical');
             if (thorns) { combo = true; tearThorns(e, dmg); }
             if (pincer) { combo = true; closePincer(w, e); }
-            if (!e.dead && !e.type.startsWith('boss')) e.rootedTimer = Math.max(e.rootedTimer || 0, 0.75);
+            if (!e.dead && !isBossE(e)) e.rootedTimer = Math.max(e.rootedTimer || 0, 0.75);
         }
         if (combo) comboText();
     }
@@ -285,7 +285,7 @@ function snareBurst(x, y, dmg, sk) {
         if (e.dead || Math.hypot(e.x - x, e.y - y) > R + e.size / 2) continue;
         applyDamage(e, dmg, 'magic');
         if (e.dead || e.pod) continue;
-        if (sk && sk.selectedUpg === 'B' && !e.type.startsWith('boss')) { // Grasping Vines: dragged in to the centre first
+        if (sk && sk.selectedUpg === 'B' && !isBossE(e)) { // Grasping Vines: dragged in to the centre first
             const [dx, dy, d] = getVector(e.x, e.y, x, y), pull = Math.max(0, d - 20 - Math.random() * 20);
             if (pull > 0) {
                 burst(e.x, e.y, Math.atan2(dy, dx), 0.5, 4, { kind: 'leaf', color: '#7cb342', size: 5, life: 0.4, speed: [120, 260], drag: 3 });
@@ -309,7 +309,7 @@ function leapSlam(sk, dmg, ang) {
         if (e.dead || Math.hypot(e.x - player.x, e.y - player.y) > LEAP_SLAM + e.size / 2) continue;
         applyDamage(e, dmg, 'magic');
         if (sk.selectedUpg === 'A' && hasTalent('dr_alpha_shock') && !e.dead) e.stunTimer = Math.max(e.stunTimer || 0, 0.8); // Pounce Shock
-        if (sk.selectedUpg === 'B' && !e.dead && !e.type.startsWith('boss')) { // Scatter the Herd (Stampede: farther; Trampled: slowed)
+        if (sk.selectedUpg === 'B' && !e.dead && !isBossE(e)) { // Scatter the Herd (Stampede: farther; Trampled: slowed)
             const a = Math.atan2(e.y - player.y, e.x - player.x), d = hasTalent('dr_scatter_far') ? 140 : 80;
             e.x += Math.cos(a) * d; e.y += Math.sin(a) * d; clampToBounds(e, e.size / 2);
             if (hasTalent('dr_scatter_trample')) { e.slowTimer = Math.max(e.slowTimer || 0, 2); e.slowAmount = Math.max(e.slowAmount || 0, 0.4); }

@@ -3,17 +3,21 @@
 // ==========================================
 
 // Menu flow: dungeon map (menu.js) -> class carousel -> run
-window.selectDungeon = (did) => { activeDungeonId = did; activeDungeon = enemyDataConfig[did]; showClassSelection(); };
+window.selectDungeon = (did) => { if (boardOpen) { heroToDungeon(did); return; } expSelect(did); if (heroData && heroData.classId) startGame(heroData.classId); else showClassSelection(); }; // save.js: a saved hero goes straight in
 window.chooseClass = (cid) => { selectedClassId = cid; if (cid === 'druid') showCompanionChoice(); else if (cid === 'spellweaver') showSpellbook(() => startGame(cid)); else startGame(cid); }; // druid.js: wolf or black jaguar first; spellweaver.js: the four spells first
 
 function startGame(className) {
     activeClass = JSON.parse(JSON.stringify(classDataConfig[className])); 
     if (activeClass.name === 'Spellweaver') applyLoadout(player.spells || lastLoadout(), true); // spellweaver.js: the spells on the keys
-    resetSpellweaverState(); resetNightblade(); resetMachinist(); resetCleric(); resetKensei(); // spellweaver.js, nightblade.js, machinist.js, cleric.js, kensei.js
+    resetSpellweaverState(); resetNightblade(); resetMachinist(); resetCleric(); resetKensei(); resetMonk(); resetWitch(); resetSwordsaint(); // spellweaver.js, nightblade.js, machinist.js, cleric.js, kensei.js, monk.js, witch.js, swordsaint.js
     player.color = activeClass.color; player.x = canvas.width / 2; player.y = canvas.height / 2;
     player.level = 1; player.xp = 0; player.maxXp = xpToNext(1); player.gold = 0; player.orbDmg = 0.0; player.skillPoints = TREE_PTS_PER_LEVEL;
     wave = 0; equipment = { weapon: null, armor: null, amulet: null, boots: null, gloves: null }; inventory = [];
     treeReset(); // skilltree.js: nothing learned yet
+    resetPotions(); // potions.js: defaults and no elixir running; applyHero then restores a saved hero's flask and belt
+    resetMats(); // caches.js: no materials found yet; applyHero restores a saved hero's
+    const heroReady = applyHero(); // save.js: a saved hero's level, web, gold and gear
+    if (player.level === 1 && !isTraining() && !equipment.weapon && !equipment.armor) { equipment.weapon = makeCommon('weapon'); equipment.armor = makeCommon('armor'); } // the starter kit: with no gear drops, a new hero met the Slime King bare
     isEndlessMode = false;
     
     player.blade = null;
@@ -38,7 +42,9 @@ function startGame(className) {
     el('hud').classList.remove('hidden');
     el('hud-top').classList.remove('hidden');
     if (isTraining()) startTraining(); // training.js: no waves, every skill at rank 1, the panel
-    else openTree(true); // skilltree.js: learn the first skill, then wave 1 starts
+    else if (isBase()) startBase(); // map_base.js: Cinderholt freed, no waves
+    else if (heroReady) { const rw = heroResumeWave(); heroEntered(); if (rw > 1) wave = rw - 1; if (activeMemory) showMemoryCard(startNextWave); else startNextWave(); } // save.js: the retry point, then straight in (or at the stage a Save & Quit left off)
+    else openTree(true); // skilltree.js: learn the first skill, then wave 1 starts (a new hero's retry point is saved there)
     loop();
 }
 
@@ -55,6 +61,8 @@ window.startNextWave = function() {
     // Regular waves start mid-fight (stage.js onWaveCleared), so only a new run, a new map or a screen resets the hero's kit
     const fresh = gameState !== STATE.PLAYING || wave === 0 || mapTypeForWave(wave + 1) !== currentMap.type;
     wave++; waveBreak = 0;
+    placeCaches(currentMap.type); // caches.js: a dev jump or a cleared field may have lost them (it skips the ones standing)
+    placeQuestCaches(currentMap.type); // sidequests.js: the same for an active quest's cache
     if (fresh) resetPaladinState(); // the Paladin's hammer returns to hand
     isBossWave = (wave % 5 === 0); 
     bossSpawned = false;
@@ -70,17 +78,18 @@ window.startNextWave = function() {
         if (wave >= 16) { isBossWave = true; enemiesToSpawn = 0; } // the throne room: its scenes bring the Royal Guard (16) and Valerius (17)
         if (wave === 17 && cst.king && !cst.king.dead && enemies.includes(cst.king)) { bossSpawned = true; activeEnemies++; } // map_castle.js kingArrives: he's already up
     }
+    if (activeExpedition) expWaveSetup(); // expeditions.js: three waves of its foes, then the chief (the story's wave rules above never fire: its dungeon id is its own)
     setStageMap(mapTypeForWave(wave)); // stage.js
-    if (currentMap.type === 'trail') trailEnter(wave); // map_trail.js: a jump to wave 8 / 10 starts in the right section with the logjams open
-    if (currentMap.type === 'castle') castleEnter(wave); // map_castle.js: the same for a jump to wave 14 / 16
+    if (currentMap.type === 'trail' && !activeExpedition) trailEnter(wave); // map_trail.js: a jump to wave 8 / 10 starts in the right section with the logjams open
+    if (currentMap.type === 'castle' && !activeExpedition) castleEnter(wave); // map_castle.js: the same for a jump to wave 14 / 16
     player.exitFade = 0; player.fadeOut = 0;
     if (fresh) { player.dash = null; player.z = 0; player.grappleTarget = null; player.charge = null; player.heavy = null; } // never carry a dash or a charge across a map change
 
     if (fresh) resetDruidState(); // druid.js: the companion comes back to heel (spirits stay through a regular wave)
-    if (fresh) { resetSpellweaverState(); resetNightblade(); resetMachinist(); resetCleric(); resetKensei(); } // spellweaver.js: runes and zones stay on their map; nightblade.js
-    if (wave > 1) awakenWeapon(); // items.js: the last wave was cleared, so the rare weapon grows
+    if (fresh) { resetSpellweaverState(); resetNightblade(); resetMachinist(); resetCleric(); resetKensei(); resetMonk(); resetWitch(); resetSwordsaint(); } // spellweaver.js: runes and zones stay on their map; nightblade.js
     el('intermission-screen').classList.add('hidden'); el('inventory-screen').classList.add('hidden'); el('shop-screen').classList.add('hidden');
-    player.hp = Math.min(player.maxHp, player.hp + (player.maxHp * 0.3)); 
+    player.hp = Math.min(player.maxHp, player.hp + (player.maxHp * 0.3));
+    refillFlask(); // potions.js
     waveStats = { kills: 0, gold0: player.gold, time: 0, dmgTaken: 0, peak: 0 };
     gameState = STATE.PLAYING; lastTime = performance.now(); updateHUD(); showWaveBanner();
 }
@@ -118,7 +127,7 @@ function recalcStats() {
     if (player.hp > player.maxHp) player.hp = player.maxHp;
 
     let gearMs = equipment.boots ? equipment.boots.val : 0;
-    player.speed = 250 + gearMs + (player.treeSpeed || 0); // skilltree.js: Fleetness
+    player.speed = (250 + gearMs + (player.treeSpeed || 0)) * moveBonus(); // skilltree.js: Fleetness; sidequests.js: the Hound-Tooth Charm
     
     player.maxFlow = 100;
     
@@ -127,13 +136,20 @@ function recalcStats() {
 
 // A boss from its enemies.json entry at wave w's strength (spawnEnemy; map_trail.js places the Beastmaster ahead of his wave)
 function pushBoss(b, w, x, y) {
-    const hp = b.baseHp + w * b.hpScale;
-    const e = { x, y, size: b.size, color: b.color, speed: b.baseSpeed + w * 2.0, hp, maxHp: hp, type: b.type, dmg: b.baseDmg + w * b.dmgScale, xp: b.baseXp, attackTimer: b.attackTimer, meleeTimer: 0, frozenTimer: 0, state: 'idle', stateTimer: b.stateTimer || 2.0, facingAngle: 0, puddleTimer: 0, bleedTimer: 0, bleedDmg: 0 };
+    w = statWave(w); const sc = bastionScale(w), hp = Math.round((b.baseHp + w * b.hpScale) * sc.hp); // combat.js: the Bastion rebased for a Lv. 10 hero
+    const e = { x, y, size: b.size, color: b.color, speed: b.baseSpeed + w * 2.0, hp, maxHp: hp, type: b.type, dmg: (b.baseDmg + w * b.dmgScale) * sc.dmg, xp: b.baseXp * dungeonXp(), attackTimer: b.attackTimer, meleeTimer: 0, frozenTimer: 0, state: 'idle', stateTimer: b.stateTimer || 2.0, facingAngle: 0, puddleTimer: 0, bleedTimer: 0, bleedDmg: 0 };
     enemies.push(e); return e;
+}
+
+// A wave enemy from its enemies.json entry at wave w's strength (spawnEnemy; expeditions.js makes its chiefs and summons the same way)
+function newMinion(m, x, y, spawnFrom, speed, w = statWave()) {
+    const e = {  x: x, y: y, size: m.size, color: m.color, speed: speed, hp: Math.round((m.baseHp + w * m.hpScale) * bastionScale(w).hp), maxHp: Math.round((m.baseHp + w * m.hpScale) * bastionScale(w).hp), type: m.type, dmg: (m.baseDmg + w * m.dmgScale) * bastionScale(w).dmg, xp: (m.baseXp + w * m.xpScale) * dungeonXp(), attackTimer: m.attackTimer || 0, meleeTimer: 0, ammo: m.ammo || 0, frozenTimer: 0, facingAngle: 0, shieldHp: m.shieldHp, shieldMax: m.shieldMax, puddleTimer: m.puddleTimer || 0, bleedTimer: 0, bleedDmg: 0, orbs: m.orbs || 0, maxOrbs: m.orbs || 0, spawnFrom  };
+    enemies.push(e); onEnemySpawned(e); return e; // stage.js
 }
 
 function spawnEnemy() {
     enemiesToSpawn--; activeEnemies++;
+    if (activeExpedition && isBossWave) { bossSpawned = true; expSpawnChief(); updateHUD(); return; } // expeditions.js: the chief steps in
     
     let ex, ey, spawnFrom;
     if (mapDef()) { const sp = pickSpawnPoint(); ex = sp.x; ey = sp.y; spawnFrom = sp.from; } // stage.js: tree line or cave mouth
@@ -152,8 +168,9 @@ function spawnEnemy() {
     let minionList = activeDungeon[`stage${stage}_minions`];
     // Slime Caves mixes every stage in Endless; any stage without minions (Bandit Bastion stage 3) falls back to the full pool
     if (!minionList || minionList.length === 0 || (isEndlessMode && activeDungeonId === 'slime_caves')) minionList = allMinions;
-    if (currentMap.type === 'trail') minionList = trailMinions(minionList); // map_trail.js: the section's mix, riders and hounds capped
-    if (currentMap.type === 'castle') minionList = castleMinions(minionList); // map_castle.js: the bailey's mix, the keep's
+    if (activeExpedition) minionList = expMinions(); // expeditions.js: what lives there now
+    else if (currentMap.type === 'trail') minionList = trailMinions(minionList); // map_trail.js: the section's mix, riders and hounds capped
+    else if (currentMap.type === 'castle') minionList = castleMinions(minionList); // map_castle.js: the bailey's mix, the keep's
 
     if (isBossWave && !bossSpawned && enemiesToSpawn === 0) {
         bossSpawned = true; 
@@ -170,13 +187,10 @@ function spawnEnemy() {
     const roll = Math.random() * totalWeight; let cumulative = 0; let m = minionList[0];
     for (const minion of minionList) { cumulative += minion.weight; if (roll <= cumulative) { m = minion; break; } }
     
-    const speed = m.baseSpeed + Math.random() * m.speedVar + (wave * 2.5); 
-    const pushMinion = (x, y) => { // a hound's pack mates are pushed the same way
-        enemies.push({ x: x, y: y, size: m.size, color: m.color, speed: speed, hp: m.baseHp + (wave * m.hpScale), maxHp: m.baseHp + (wave * m.hpScale), type: m.type, dmg: m.baseDmg + (wave * m.dmgScale), xp: m.baseXp + (wave * m.xpScale), attackTimer: m.attackTimer || 0, meleeTimer: 0, ammo: m.ammo || 0, frozenTimer: 0, facingAngle: 0, shieldHp: m.shieldHp, shieldMax: m.shieldMax, puddleTimer: m.puddleTimer || 0, bleedTimer: 0, bleedDmg: 0, orbs: m.orbs || 0, maxOrbs: m.orbs || 0, spawnFrom });
-        onEnemySpawned(enemies[enemies.length - 1]); // stage.js
-    };
+    const speed = m.baseSpeed + Math.random() * m.speedVar + (statWave() * 2.5); 
+    const pushMinion = (x, y) => newMinion(m, x, y, spawnFrom, speed); // a hound's pack mates are pushed the same way
     pushMinion(ex, ey);
-    const packMax = currentMap.type === 'trail' ? Math.min(1, trailRoom('hound')) : currentMap.type === 'castle' ? Math.min(1, castleRoom('hound')) : 2; // map_trail.js / map_castle.js: packs of 2 at most there, never past the cap
+    const packMax = activeExpedition ? 0 : currentMap.type === 'trail' ? Math.min(1, trailRoom('hound')) : currentMap.type === 'castle' ? Math.min(1, castleRoom('hound')) : 2; // map_trail.js / map_castle.js: packs of 2 at most there, never past the cap; expeditions: no packs (the foes list sets the hounds' share)
     if (m.type === 'hound') for (let k = 0; k < packMax && enemiesToSpawn > (isBossWave ? 1 : 0); k++) { // a pack: up to two more, each one a wave enemy
         enemiesToSpawn--; activeEnemies++; pushMinion(ex, ey + (k ? 30 : -30));
     }
@@ -212,6 +226,11 @@ window.addEventListener('keydown', e => {
         return;
     }
     if (gameState !== STATE.PLAYING || player.hp <= 0 || (stageEvent && stageEvent.blocking)) return; // no casting during a cutscene
+    if (!e.repeat) { // potions.js: the flask on F, the belt on 1 / 2 (the Training Room's 1 / 2 place dummies)
+        if (k === 'f') { drinkFlask(); return; }
+        if ((k === '1' || k === '2') && !isTraining()) { useElixir(+k - 1); return; }
+        if (k === 'e' && baseInteract()) return; // interiors.js: in Cinderholt, E opens the door or talks to the friend in reach instead of casting
+    }
     if (k === 'w') keys.w = true; if (k === 'a') keys.a = true; if (k === 's') keys.s = true; if (k === 'd') keys.d = true;
     
     const keyMap = { 'q': 1, 'e': 2, 'space': 3, 'r': 4 };
@@ -276,7 +295,7 @@ function castSkill(i, k, opt) { // opt: extra flags for the skill (combos.js, e.
     const before = { x: player.x, y: player.y, zeal: buffs.zealLocked && buffs.aspectOfReaper <= 0 ? 100 : (player.zeal || 0),
         anchor: i === 3 && activeClass.name === 'Machinist' ? projectiles.find(p => (p.type === 'turret' || p.type === 'tesla_coil_trap') && Math.hypot(p.x - mouseX, p.y - mouseY) < 50) : null };
     window.SkillRegistry[activeClass.name][i](sk, dmg, k, opt);
-    if (i === 3 && !isSpellbook()) { // spellweaver.js swMoved does it for any movement spell. combos.js: the dash (or a pull: Paladin charge / Iron Pull, Machinist grapple) opens the finisher window when it lands
+    if (i === 3 && !isSpellbook() && !monkSkipCombo() && activeClass.name !== 'Witch') { // witch.js: her finisher is a press during the flight (witchBroomClick). monk.js: the Iron Will recast is no dash. spellweaver.js swMoved does it for any movement spell. combos.js: the dash (or a pull: Paladin charge / Iron Pull, Machinist grapple) opens the finisher window when it lands
         comboCastAt = fxTime; // only an LMB press from now on counts for the finisher
         if (player.dash) player.dash.combo = true; else if (player.grappleTarget) player.grappleTarget.combo = true;
         else openCombo({ x0: before.x, y0: before.y, x1: player.x, y1: player.y }); // an instant one (Blink): the path from where it started
@@ -329,8 +348,15 @@ function update(dt) {
     updateMachinist(dt); // machinist.js: decoys, mines, Exo-Frame, Orbital Strike
     updateCleric(dt); // cleric.js: Second Swap, Raven Swarm, the Ascensions' endings
     updateKensei(dt); // kensei.js: the guard, Twin Blades, Shard Shield, Echo Swap, Hurricane Draw
+    updateMonk(dt); // monk.js: recast windows, Iron Body, Dragon Kick flights, Chi
+    updateWitch(dt); // witch.js: souls, poison, zombies, the toads' curse on bosses
+    updateSwordsaint(dt); // swordsaint.js: Style, bullet time, Gale Step's window, Mana Burst's charges, the tornado
+    updatePotions(dt); // potions.js: the flask's heal, the elixirs' timers
+    updateNpcs(dt); // npcs.js: Cinderholt's friends wandering
+    updateSidequests(dt); // sidequests.js: the ruins' ambush, the wares to walk over
     updateBanditFx(dt); // bandits.js: fire on the ground, lit powder kegs
-    if (enemiesToSpawn > 0) { enemySpawnTimer -= dt; if (enemySpawnTimer <= 0) { spawnEnemy(); enemySpawnTimer = Math.max(0.5, 2.0 - (wave * 0.1)); } }
+    updateExpedition(dt); // expeditions.js: the chief's moves, the road home
+    if (enemiesToSpawn > 0) { enemySpawnTimer -= dt; if (enemySpawnTimer <= 0) { spawnEnemy(); enemySpawnTimer = activeExpedition ? EXP_SPAWN_GAP : Math.max(0.5, 2.0 - (wave * 0.1)); } }
     if (cooldowns.basic > 0) cooldowns.basic -= dt;
     if (cooldowns.rmb > 0) cooldowns.rmb -= dt;
     for(let i=1; i<=4; i++) if (cooldowns[`s${i}`] > 0) cooldowns[`s${i}`] -= dt;
@@ -629,6 +655,7 @@ function update(dt) {
 
     if (player.charge) player.charge.t += dt; // a held right-click charge (e.g. Storm Arrow)
     if (activeClass.name === 'Dragonknight') updateHeavySwing(dt); // skills.js: tap for a light swing, hold for an overhead slam
+    else if (player.broom) witchBroomClick(); // witch.js: no spray up there; a fresh press pours the toxic trail
     else if (comboInFlight()) { if (isMouseDown) comboQueued = true; } // combos.js: a press mid-dash waits for the landing, as the finisher
     else if ((isMouseDown || (comboQueued && comboOpen)) && cooldowns.basic <= 0 && !player.charge) { comboQueued = false; castBasic(); } // can't shoot while drawing a charged shot
 
@@ -639,6 +666,7 @@ function update(dt) {
     
     let currentSpeed = player.speed; 
     if (buffs.msBoost > 0) currentSpeed *= 1.5;
+    if (buffs.elixirSwift > 0) currentSpeed *= 1 + ELIXIR_SWIFT; // potions.js
     if (buffs.slowed > 0) currentSpeed *= 0.5;
     if (activeClass.name === 'Ranger') currentSpeed *= 1 + player.momentum; // Fleetfoot: momentum is move speed too
     if (player.charge) currentSpeed *= player.charge.slow; // drawing a charged shot
@@ -647,7 +675,9 @@ function update(dt) {
     if (player.wading) currentSpeed *= 0.5; // map_cavern.js: knee-deep in a slime lake
     if (buffs.rooted > 0) currentSpeed = 0;
 
-    if (player.dash) {
+    if (player.broom) {
+        witchFly(dt); // witch.js: the broom follows the cursor
+    } else if (player.dash) {
         updateDash(dt); // skillfx_space.js: timed dashes and leaps
     } else if (player.grappleTarget) {
         // Forced movement to a point (Machinist grapple, Paladin charge / Iron Pull).
@@ -686,8 +716,8 @@ function update(dt) {
         if (Math.hypot(player.x - d.x, player.y - d.y) < player.radius + d.radius) {
             if (d.type === 'hp') { player.hp = Math.min(player.maxHp, player.hp + (player.maxHp * 0.25)); } 
             else if (d.type === 'dmg') { pickUpDmgOrb(); }
+            else if (d.type === 'flask') { pickUpFlask(); } // potions.js
             else if (d.type === 'gold') { player.gold += d.val; }
-            else if (d.type === 'item') { inventory.push(d.itemData); }
             else if (d.type === 'scrap') { pickUpScrap(); } // skills.js: stored for bigger turrets
             drops.splice(i, 1); updateHUD();
         }
@@ -700,11 +730,15 @@ function update(dt) {
         if (effects[i].customUpdate) effects[i].customUpdate(dt, effects[i]);
         if (effects[i].type === 'smoke_bomb') {
             if (Math.hypot(player.x - effects[i].x, player.y - effects[i].y) <= effects[i].radius) player.inSmoke = true;
+            const sb = effects[i];
             for(let k=enemies.length-1; k>=0; k--) {
-                if (Math.hypot(enemies[k].x - effects[i].x, enemies[k].y - effects[i].y) <= effects[i].radius + enemies[k].size/2) {
-                    if (effects[i].poison) { applyDamage(enemies[k], effects[i].dmg * dt, 'dot'); nbFumes(effects[i], enemies[k], dt); } // nightblade.js: the Toxic Fumes talents
+                if (effects[i] !== sb) break; // a killing tick can clear the effects (wave or stage end)
+                const ek = enemies[k]; if (!ek) continue;
+                if (Math.hypot(ek.x - sb.x, ek.y - sb.y) <= sb.radius + ek.size/2) {
+                    if (sb.poison) { applyDamage(ek, sb.dmg * dt, 'dot'); nbFumes(sb, ek, dt); } // nightblade.js: the Toxic Fumes talents
                 }
             }
+            if (effects[i] !== sb) { i = Math.min(i, effects.length); continue; } // resume from the new list's end
         } else if (effects[i].type === 'fire_puddle' || effects[i].type === 'thorn_patch' || effects[i].type === 'consecrated_ground') {
             for(let k=enemies.length-1; k>=0; k--) {
                 const ek = enemies[k];
@@ -739,8 +773,10 @@ function update(dt) {
         }
     }
 
+    const realDt = dt; // swordsaint.js bullet time: enemy shots and enemies below run on a slower clock
     for (let i = projectiles.length - 1; i >= 0; i--) {
         const p = projectiles[i]; 
+        const dt = p && p.isEnemy ? realDt * ssShotScale() : realDt;
         if (!p) continue; // the Queen's last stand / death clears her shots mid-loop (map_hive.js)
         if (p.isEnemy && swShotStill(p)) continue; // spellweaver_evo.js Time Stop / Stasis Field: enemy shots hang in the air
         
@@ -791,6 +827,7 @@ function update(dt) {
                 projectiles.splice(i, 1);
                 continue;
             }
+            if (witchSoakShot(p)) { projectiles.splice(i, 1); continue; } // witch.js: a zombie in the way takes it
 
             if (p.type !== 'trap_throw' && p.type !== 'spore' && p.type !== 'sling_stone' && p.type !== 'firepot' && Math.hypot(p.x - player.x, p.y - player.y) < player.radius + p.radius) {
                 if (buffs.windwalk > 0) { if (!p.windPassed) { p.windPassed = true; windwalkShot(p); } continue; } // skills.js Ranger Windwalk: it passes through
@@ -843,7 +880,7 @@ function update(dt) {
                         }
                     } else if (p.type === 'shield_throw') {
                         applyDamage(e, p.damage, 'melee');
-                        if (!p.returning && hasTalent('shield_stun') && !e.dead && !e.type.startsWith('boss')) e.stunTimer = Math.max(e.stunTimer || 0, 0.4); // talents.js Heavy Rim
+                        if (!p.returning && hasTalent('shield_stun') && !e.dead && !isBossE(e)) e.stunTimer = Math.max(e.stunTimer || 0, 0.4); // talents.js Heavy Rim
                         if (!p.returning && !p.lodged && !e.dead && p.sourceSkill && p.sourceSkill.selectedUpg === 'B' && (p.lodges || 0) < (hasTalent('hunt_relentless') ? 2 : 1)) lodgeShield(p, e); // skills.js Hunting Shield
                     } else if (p.type === 'ricochet') {
                         applyDamage(e, p.damage, 'ranged');
@@ -860,7 +897,7 @@ function update(dt) {
                         salvagePellet(); // items.js: Salvager's Gauntlets
                         let [ebx, eby, ebd] = getVector(player.x, player.y, e.x, e.y);
                         const knock = p.knock || 15; // combos.js Point Blank pellets hit harder
-                        if (!e.type.startsWith('boss') && ebd > 0) { e.x += (ebx/ebd)*knock; e.y += (eby/ebd)*knock; clampToBounds(e, e.size/2); }
+                        if (!isBossE(e) && ebd > 0) { e.x += (ebx/ebd)*knock; e.y += (eby/ebd)*knock; clampToBounds(e, e.size/2); }
                     } else if (p.type === 'net_throw') {
                         applyDamage(e, p.damage, 'ranged');
                         e.rootedTimer = 2.0; e.netTimer = 2.0; e.nettedAt = fxTime; // combos.js Conductive Net
@@ -888,13 +925,15 @@ function update(dt) {
     }
 
     const bannermen = enemies.filter(o => o.type === 'bannerman' && !o.dead), RALLY_R2 = RALLY_RADIUS * RALLY_RADIUS; // once a frame, not per enemy
+    const anchor = monkAnchored() ? [player.x, player.y] : null; // monk.js Stone Skin: the enemies' knockbacks below can't move the hero
     for (let i = enemies.length - 1; i >= 0; i--) {
         const e = enemies[i];
+        const dt = realDt * ssTimeScale(e); // swordsaint.js bullet time
         if (e.dead) continue;
         if (e.pod) continue; // map_hive.js brood pods just sit there until popped or hatched
         if (swStill(e)) continue; // spellweaver_evo.js: Time Stop, Stasis Field, Ward Prison, Counterspell hold it still
         if (e.spawnT > 0) { e.spawnT -= dt; continue; } // stage.js spawn: still forming
-        const ccDt = e.type.startsWith('boss') ? dt * BOSS_CC_RATE : dt; // bosses shake crowd control off faster
+        const ccDt = isBossE(e) ? dt * BOSS_CC_RATE : dt; // bosses shake crowd control off faster
         if (e.frozenTimer > 0) { e.frozenTimer -= ccDt; e.renderColor = '#90caf9'; }
         else if (e.rootedTimer > 0) { e.rootedTimer -= ccDt; e.renderColor = '#b0bec5'; }
         else if (e.stunTimer > 0) { e.stunTimer -= ccDt; e.renderColor = '#ffeb3b'; }
@@ -912,6 +951,7 @@ function update(dt) {
         }
         
         if (e.dead) continue; // killed by a DoT this frame
+        if (witchToad(e, dt)) continue; // witch.js Hex of the Toad: it only hops about
 
         if (e.aoeResistTimer > 0) {
             e.aoeResistTimer -= dt;
@@ -926,7 +966,7 @@ function update(dt) {
         if (e.slowTimer > 0) { e.slowTimer -= dt; curSpd *= 1 - (e.slowAmount !== undefined ? e.slowAmount : 0.4); }
         
         // the bannerman's rally (ai.js RALLY_*): allies near a living bannerman run faster and hit harder; bosses and props never
-        if (!e.type.startsWith('boss') && !e.prop && (bannermen.length || e.rallyT > 0)) {
+        if (!isBossE(e) && !e.prop && (bannermen.length || e.rallyT > 0)) {
             let rallied = false;
             for (const o of bannermen) if (o !== e && (e.x - o.x) ** 2 + (e.y - o.y) ** 2 < RALLY_R2) { rallied = true; break; }
             if (rallied) {
@@ -953,7 +993,7 @@ function update(dt) {
         if (e.meleeTimer > 0) e.meleeTimer -= dt;
 
         // bodies push apart, but not while the hero dashes or leaps past (that used to carry a boss along under a Vault)
-        if (edist < player.radius + e.size / 2 && !e.submerged && !player.dash && e.state !== 'dash_execute' && e.state !== 'bounce_telegraph' && e.state !== 'charge' && e.state !== 'jousting' && e.state !== 'death_throes') {
+        if (edist < player.radius + e.size / 2 && !e.submerged && !(e.mkLift > 0) && !player.dash && !player.broom && e.state !== 'dash_execute' && e.state !== 'bounce_telegraph' && e.state !== 'charge' && e.state !== 'jousting' && e.state !== 'death_throes') {
             let overlap = (player.radius + e.size / 2) - edist;
             e.x -= (edx / edist) * overlap; e.y -= (edy / edist) * overlap;
         }
@@ -971,7 +1011,7 @@ function update(dt) {
             let [tx, ty, td] = getVector(e.x, e.y, e.tauntX, e.tauntY);
             if (td > e.size/2 + 25) { e.x += (tx/td)*curSpd*dt; e.y += (ty/td)*curSpd*dt; }
         } else if (window.EnemyAI[e.type]) {
-            if (e.stunTimer > 0 && !e.type.startsWith('boss_')) {}
+            if (e.stunTimer > 0 && !isBossE(e)) {}
             else window.EnemyAI[e.type](e, dt, curSpd, edx, edy, edist, i);
         } else {
             if (e.stunTimer > 0) {}
@@ -980,6 +1020,7 @@ function update(dt) {
         
         clampToBounds(e, e.size/2);
     }
+    if (anchor && !player.dash) { player.x = anchor[0]; player.y = anchor[1]; }
 
     removeDeadEnemies();
     updateHUD();
@@ -1000,6 +1041,10 @@ function draw() {
         drawHiveGround(); // map_hive.js: throne hall, pool, opened pods, the sleeping Queen
     } else if (currentMap.type === 'village') {
         drawVillageGround(); // map_village.js: the burned village at dusk, its fires and the barricade
+    } else if (currentMap.type === 'base') {
+        drawBaseGround(); // map_base.js: Cinderholt freed, by day
+    } else if (isInterior(currentMap.type)) {
+        drawInteriorGround(); // interiors.js: inside a house
     } else if (currentMap.type === 'trail') {
         drawTrailGround(); // map_trail.js: the road, the river, the camp, the logjams and the gate
     } else if (currentMap.type === 'training') {
@@ -1047,7 +1092,8 @@ function draw() {
     drawGroundProjectiles(); // skillfx_e.js: Hallowed Ground, Tesla field
 
     for (const d of drops) {
-        if (d.type === 'scrap') {
+        if (d.type === 'flask') drawFlaskDrop(d); // potions.js
+        else if (d.type === 'scrap') {
             ctx.fillStyle = '#ff9800'; ctx.beginPath();
             for(let j=0; j<6; j++) { let a = (Math.PI*2/6)*j; ctx.lineTo(d.x + Math.cos(a)*d.radius, d.y + Math.sin(a)*d.radius); }
             ctx.closePath(); ctx.fill(); ctx.fillStyle = '#fff'; ctx.font = '10px monospace'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('⚙', d.x, d.y);
@@ -1497,10 +1543,16 @@ function draw() {
 
     drawDruidGround(); // druid.js: scent rings, brambles, leap slams
     drawSpellweaverGround(); // spellweaver.js: runes, glyphs, wells, the anchor
+    if (activeClass.name === 'Monk' && typeof drawMonkGround === 'function') drawMonkGround(ctx); // monk_fx.js: marks, ground rings
+    if (activeClass.name === 'Witch') drawWitchGround(ctx); // witch_fx.js: souls, sigils, the toxic trail
+    if (activeClass.name === 'Swordsaint') drawSwordsaintGround(ctx); // swordsaint_fx.js: the Style aura, the beam's lane, the tornado's shadow
+    drawExpeditionGround(); // expeditions_fx.js: the chief's sigil, the road home (under the bodies: it used to be drawn over them)
     drawPaladinWorld();
 
     for (const e of enemies) {
         if (e.dead || e.state === 'split') continue;
+        const lift = e.mkLift || 0, shrink = witchShrink(e); // monk.js Rising Dragon: kicked up into the air (its shadow is monk_fx.js drawMonkGround); witch.js: a boss the toad hex shrank
+        if (lift || shrink < 1) { ctx.save(); ctx.translate(e.x, e.y - lift); ctx.scale(shrink, shrink); ctx.translate(-e.x, -e.y); }
         ctx.fillStyle = e.hitFlash > 0 ? '#ffffff' : (e.renderColor || e.color);
         const sprite = drawEnemySprite(e); // enemysprites.js
         
@@ -1519,7 +1571,7 @@ function draw() {
             ctx.fillStyle = '#9e9e9e';
             ctx.beginPath(); ctx.moveTo(e.x + 10, e.y); ctx.lineTo(e.x + 20, e.y - 5); ctx.lineTo(e.x + 20, e.y + 5); ctx.fill();
         }
-        else if (e.type === 'slime_ranged' || e.type.startsWith('boss') || e.type === 'voltaic_ooze' || e.type === 'toxic_sludge' || e.type === 'amalgam_minion' || e.type === 'caster' || e.type === 'spore_slime' || e.type === 'crystal_slime' || e.type === 'slime_warden' || e.type === 'queen_guard') { 
+        else if (e.type === 'slime_ranged' || isBossE(e) || e.type === 'voltaic_ooze' || e.type === 'toxic_sludge' || e.type === 'amalgam_minion' || e.type === 'caster' || e.type === 'spore_slime' || e.type === 'crystal_slime' || e.type === 'slime_warden' || e.type === 'queen_guard') { 
             ctx.beginPath(); ctx.arc(e.x, e.y, e.size/2, 0, Math.PI*2); ctx.fill(); 
         } 
         else { ctx.fillRect(e.x - e.size/2, e.y - e.size/2, e.size, e.size); }
@@ -1528,7 +1580,8 @@ function draw() {
         drawRmbEnemy(e); // skillfx_rmb.js: Net Shot wrap
         if (e.markAngle !== undefined) drawDeathMarkSigil(e); // skillfx_ult.js
 
-        if (!sprite && !e.type.startsWith('boss')) { ctx.fillStyle = '#000'; ctx.fillRect(e.x - e.size/2, e.y - e.size/2 - 12, e.size, 4); ctx.fillStyle = '#4caf50'; ctx.fillRect(e.x - e.size/2, e.y - e.size/2 - 12, e.size * (e.hp/e.maxHp), 4); }
+        if (!sprite && !isBossE(e)) { ctx.fillStyle = '#000'; ctx.fillRect(e.x - e.size/2, e.y - e.size/2 - 12, e.size, 4); ctx.fillStyle = '#4caf50'; ctx.fillRect(e.x - e.size/2, e.y - e.size/2 - 12, e.size * (e.hp/e.maxHp), 4); }
+        if (lift || shrink < 1) ctx.restore();
     }
 
     for (const p of projectiles) {
@@ -1684,14 +1737,17 @@ function draw() {
     }
 
     drawDruidWorld(); // druid.js: the wolves, the howl, the Maul
+    if (activeClass.name === 'Witch') drawWitchWorld(ctx); // witch_fx.js: the zombies
+    drawNpcs(); // npcs.js: Cinderholt's friends
+    drawQuestGround(); // sidequests_fx.js: the merchant's wares lying about
 
     if (player.hp > 0 && gameState !== STATE.MENU && gameState !== STATE.DEAD && !(player.fadeOut >= 1)) {
         if (player.fadeOut > 0) ctx.filter = `opacity(${1 - player.fadeOut})`; // walking into the dark at a stage exit
         if (player.grappleTarget) drawGrappleCable(player.grappleTarget); // skillfx_space.js
 
-        // Face the way you're dashing; otherwise face the cursor
+        // Face the way you're dashing; otherwise face the cursor (a scene can turn the hero: map_base.js arrival)
         const spin = ultFacing(); // skillfx_ult.js: Blade Whirlwind spins the hero
-        const aimAngle = player.dash ? player.dash.angle : spin !== null ? spin : Math.atan2(mouseY - player.y, mouseX - player.x);
+        const aimAngle = player.sceneFace != null ? player.sceneFace : player.broom ? player.broom.ang : player.dash ? player.dash.angle : spin !== null ? spin : Math.atan2(mouseY - player.y, mouseX - player.x);
         updatePlayerSpriteAnim();
         drawPlayerShadow(aimAngle);
         drawDashGhosts(); // skillfx_space.js
@@ -1726,6 +1782,8 @@ function draw() {
     if (currentMap.type === 'cavern') drawCavernAbove(); // map_cavern.js: falling stalactites, drips
     if (currentMap.type === 'hive') drawHiveAbove(); // map_hive.js: drifting spores
     if (currentMap.type === 'village') drawVillageAbove(); // map_village.js: roof fires, smoke, the canopy, ash
+    if (currentMap.type === 'base') drawBaseAbove(); // map_base.js: chimney smoke, the canopy, thistledown
+    if (isInterior(currentMap.type)) drawInteriorAbove(); // interiors.js: lamps, sunbeams, the E prompt
     if (currentMap.type === 'trail') drawTrailAbove(); // map_trail.js: the canopy, the campfire's smoke, pollen
     if (currentMap.type === 'bridge') drawBridgeAbove(); // map_bridge.js: banners, the castle's archers, mist off the gorge
     if (currentMap.type === 'castle') drawCastleAbove(); // map_castle.js: banners, the forge's smoke, chandeliers
@@ -1736,11 +1794,20 @@ function draw() {
     drawMachinist(); // machinist.js: the orbital beam, the exo-frame, mines
     drawCleric(); // cleric.js: the raven swarm
     drawKensei(); // kensei.js: the twin blade, the shards
+    if (activeClass.name === 'Monk' && typeof drawMonkWorld === 'function') drawMonkWorld(ctx); // monk_fx.js: auras, kick trails
+    if (activeClass.name === 'Swordsaint') drawSwordsaintWorld(ctx); // swordsaint_fx.js: the tornado, the rank letter
     drawUltOverlay(); // skillfx_ult.js: things in the air above everything
+    drawQuestAbove(); // sidequests_fx.js: the !/? over the friends, the straggler's shout (above the canopy)
+    drawExpeditionAbove(); // expeditions_fx.js: the chief's name plate
     drawDmgNumbers(); // fx.js
+    drawMatFx(); // caches.js: materials flying to the hero, their pickup lines
     ctx.restore(); // end camera shake
 
     drawStageScreen(); // stage.js: vignette, pointer to the cave
+    drawQuestScreen(); // sidequests_fx.js: chips pointing to a friend waiting with a '?', a fall in Cinderholt
+    drawExpeditionScreen(); // expeditions_fx.js: an arrow to a chief off the view, a memory's warm edges
+    drawDoorFade(); // interiors.js: through a door
+    if (activeClass && activeClass.name === 'Swordsaint') drawSwordsaintScreen(ctx); // swordsaint_fx.js: bullet time's tint
     drawHudOrbs(); // hud.js; the boss bar is part of the HTML HUD now
 
     if (gameState === STATE.PAUSED) {
@@ -1754,7 +1821,7 @@ function loop() {
     if (gameState === STATE.PLAYING && player.hp > 0) {
         if (hitStopTimer > 0) { hitStopTimer -= dt; } 
         else { update(dt); }
-    }
+    } else if (gameState === STATE.PLAYING && sqs.reviving) reviveTick(dt); // sidequests.js: a fall in Cinderholt: the world waits, the fade runs
     
     updateCamera(dt); // stage.js
     draw(); requestAnimationFrame(loop);

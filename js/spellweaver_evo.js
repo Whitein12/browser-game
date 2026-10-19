@@ -14,7 +14,7 @@
 
 const swT = id => hasTalent(id);
 const SW_TAU = Math.PI * 2;
-const isBossE = e => e.type.startsWith('boss');
+// isBossE: utils.js (also true for an expedition's chief)
 const swAngDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 const BRAND_TIME = { searing: 2, shackle: 4, storm: 4, hex: 2 }, BRAND_COLOR = { searing: '#ff7043', shackle: '#ffd54f', storm: '#80d8ff', hex: '#e040fb' };
 

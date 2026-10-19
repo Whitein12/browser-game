@@ -78,6 +78,24 @@ function icPaw(c, x, y, s, fill) {
     icEll(c, x, y + 3 * s, 7 * s, 6 * s, fill, 1.5);
     for (const [dx, dy] of [[-8, -5], [-3, -10], [3, -10], [8, -5]]) icEll(c, x + dx * s, y + dy * s, 2.8 * s, 3.4 * s, fill, 1.2);
 }
+// A white-wrapped fist from above, knuckles toward `rot`; `wrap` tints the cloth (gold studs on a rare)
+function icFist(c, x, y, s, rot, wrap = '#eceff1', line = '#b0bec5') {
+    c.save(); c.translate(x, y); c.rotate(rot);
+    c.beginPath(); c.roundRect(-s, -s * 0.85, s * 2, s * 1.7, s * 0.6); icFill(c, wrap, 2);
+    c.strokeStyle = line; c.lineWidth = Math.max(1, s * 0.12); c.beginPath();
+    for (const o of [-0.42, 0, 0.42]) { c.moveTo(s * 0.45, o * s); c.lineTo(s * 0.95, o * s); } // the knuckles
+    c.moveTo(-s * 0.35, -s * 0.8); c.lineTo(-s * 0.35, s * 0.8); c.stroke(); // a band of the wrap
+    icEll(c, s * 0.05, -s * 0.88, s * 0.5, s * 0.28, wrap, 1.4); // the thumb over the fingers
+    c.restore();
+}
+// A palm print: palm, four fingers and the thumb, fingers toward `rot`
+function icPalm(c, x, y, s, rot, fill) {
+    c.save(); c.translate(x, y); c.rotate(rot); c.beginPath();
+    c.ellipse(-2 * s, 0, 9 * s, 8 * s, 0, 0, Math.PI * 2);
+    for (const [fx, fy, l] of [[9, -5.4, 7], [11, -1.8, 8.5], [11, 1.8, 8.5], [9, 5.4, 6.5]]) { c.moveTo((fx + l) * s, fy * s); c.ellipse((fx + l / 2) * s, fy * s, l / 2 * s, 1.7 * s, 0, 0, Math.PI * 2); }
+    c.moveTo(6 * s, -10 * s); c.ellipse(1 * s, -10 * s, 5 * s, 2 * s, -0.7, 0, Math.PI * 2);
+    icFill(c, fill, 1.8); c.restore();
+}
 function icSpeed(c, pts, color = 'rgba(255, 255, 255, 0.6)') { c.strokeStyle = color; c.lineWidth = 2; c.lineCap = 'round'; c.beginPath(); for (const [x, y, l] of pts) { c.moveTo(x, y); c.lineTo(x + l, y); } c.stroke(); }
 
 // ---------- skill glyphs: SKILL_GLYPHS[classId][slot](c) ----------
@@ -357,6 +375,130 @@ const SKILL_GLYPHS = {
             icPoly(c, [[30.5, 11], [33.5, 11], [33.5, 28], [30.5, 28]], 'rgba(255, 255, 255, 0.6)', 0);
         },
     },
+    monk: {
+        1(c) { // Chi Wave / Rushing Fist: a crescent of chi flying with a fist at its heart
+            icSpeed(c, [[4, 22, 14], [2, 32, 16], [6, 42, 12]], 'rgba(255, 224, 130, 0.75)');
+            icGlow(c, 38, 32, 26, '#ffca28', 0.55);
+            c.beginPath(); c.arc(28, 32, 26, -1.15, 1.15); c.arc(19, 32, 22, 1.0, -1.0, true); c.closePath(); icFill(c, '#ffca28', 2);
+            c.beginPath(); c.arc(28, 32, 23, -0.9, 0.9); c.strokeStyle = '#fffde7'; c.lineWidth = 2; c.stroke();
+            icFist(c, 33, 32, 9, 0);
+        },
+        2(c) { // Earth Palm / Crippling Tremor: a palm of chi struck into the ground, rings of earth rolling out
+            for (const [rx, ry, a] of [[29, 10, 0.5], [21, 7, 0.75]]) { c.strokeStyle = `rgba(215, 168, 90, ${a})`; c.lineWidth = 2.5; c.beginPath(); c.ellipse(32, 44, rx, ry, 0, 0, Math.PI * 2); c.stroke(); }
+            icGlow(c, 32, 40, 22, '#ff9800', 0.5);
+            icPalm(c, 32, 34, 1.55, -Math.PI / 2, '#ffcc80');
+            for (const [x, y] of [[6, 52], [58, 50], [12, 58], [52, 58]]) icEll(c, x, y, 2.5, 2.5, '#a08a6a', 0);
+        },
+        3(c) { // Swift Step / Iron Will: two light steps on the wind, a red-gold drop of life
+            icSpeed(c, [[4, 30, 12], [8, 40, 10], [4, 50, 12]], 'rgba(255, 255, 255, 0.55)');
+            for (const [x, y, r] of [[24, 44, -0.5], [42, 26, -0.5]]) {
+                c.save(); c.translate(x, y); c.rotate(r);
+                icEll(c, 0, 0, 10, 5.5, '#8d6e63', 2); icEll(c, 0, 0, 7.5, 3.5, '#d9a066', 0);
+                icLine(c, '#c62828', 1.8, [[-2, -5], [-2, 5]], false); c.restore();
+            }
+            icGlow(c, 50, 48, 13, '#ff5252', 0.8);
+            c.beginPath(); c.moveTo(50, 38); c.quadraticCurveTo(57, 48, 54, 52); c.arc(50, 51, 4.5, 0.2, Math.PI - 0.2); c.quadraticCurveTo(43, 48, 50, 38); c.closePath(); icFill(c, '#ff5252', 1.6);
+            icEll(c, 48, 48, 1.4, 2, '#ffe082', 0);
+        },
+        4(c) { // Dragon Kick / Dragon's Descent: a kick out of a coiling dragon of fire
+            icGlow(c, 44, 22, 22, '#ff7043', 0.6);
+            const body = () => { c.moveTo(6, 58); c.bezierCurveTo(30, 60, 8, 34, 26, 30); c.quadraticCurveTo(36, 28, 42, 22); };
+            c.lineCap = 'round'; c.lineJoin = 'round';
+            c.beginPath(); body(); c.strokeStyle = IC_LINE; c.lineWidth = 13; c.stroke();
+            c.beginPath(); body(); c.strokeStyle = '#d84315'; c.lineWidth = 10; c.stroke();
+            c.beginPath(); body(); c.strokeStyle = '#ff9800'; c.lineWidth = 4.5; c.stroke();
+            c.strokeStyle = '#ffd54f'; c.lineWidth = 1.5; c.beginPath(); for (const [x, y] of [[14, 56], [20, 46], [20, 36], [30, 29]]) { c.moveTo(x - 3, y - 2); c.lineTo(x + 1, y + 2); } c.stroke(); // scales
+            icLine(c, '#ffb74d', 2, [[38, 18], [30, 8], [24, 10]]); icLine(c, '#ffb74d', 2, [[44, 26], [50, 34], [58, 32]]); // whiskers
+            c.save(); c.translate(48, 18); c.rotate(-0.65); // the foot, wrapped in white, kicking up and out
+            icEll(c, 0, 0, 10, 6, '#eceff1', 2); icLine(c, '#b0bec5', 1.2, [[-3, -5], [-3, 5]], false); c.restore();
+        },
+        rmb(c) { // Iron Body: a bronze bell closed round the monk (the golden bell), rivets and a rim of chi
+            icGlow(c, 32, 36, 30, '#ffca28', 0.45);
+            c.beginPath(); c.moveTo(20, 18); c.quadraticCurveTo(32, 4, 44, 18); c.lineTo(48, 44); c.quadraticCurveTo(56, 52, 56, 54); c.lineTo(8, 54); c.quadraticCurveTo(8, 52, 16, 44); c.closePath(); icFill(c, '#b87333', 2.2);
+            icPoly(c, [[24, 14], [28, 10], [28, 44], [22, 46]], 'rgba(255, 224, 178, 0.45)', 0); // the sheen
+            c.strokeStyle = '#6d3f1c'; c.lineWidth = 2; c.beginPath(); c.moveTo(18, 30); c.lineTo(46, 30); c.moveTo(13, 47); c.lineTo(51, 47); c.stroke();
+            for (let i = 0; i < 5; i++) icEll(c, 20 + i * 6, 38, 1.8, 1.8, '#ffe0b2', 0);
+            icEll(c, 32, 8, 4, 3, '#8d5a2b', 1.5); // the crown loop
+            icLine(c, '#ffd54f', 2, [[6, 57], [58, 57]]);
+        },
+    },
+    swordsaint: {
+        1(c) { // Gale Step: three steps of wind toward the top right, a ring of sword-light where the last one lands
+            icSpeed(c, [[4, 50, 12], [6, 58, 10]], 'rgba(227, 242, 253, 0.6)');
+            for (const [x, y, a] of [[16, 46, 0.45], [28, 34, 0.7]]) { c.strokeStyle = `rgba(255, 248, 225, ${a})`; c.lineWidth = 3; c.lineCap = 'round'; c.beginPath(); c.arc(x, y, 8, 0, Math.PI * 1.6); c.stroke(); }
+            icGlow(c, 44, 20, 20, '#ffd54f', 0.6);
+            c.strokeStyle = IC_LINE; c.lineWidth = 7; c.beginPath(); c.arc(44, 20, 13, 0, Math.PI * 2); c.stroke();
+            c.strokeStyle = '#ffd54f'; c.lineWidth = 4; c.beginPath(); c.arc(44, 20, 13, 0, Math.PI * 2); c.stroke();
+            icSword(c, 34, 30, 56, 8, 3.2, '#fff8e1', '#1f4aa8', '#e8b931');
+        },
+        2(c) { // Strike Air: the wind seal bursting off the blade in curling gusts
+            icGlow(c, 32, 32, 28, '#90caf9', 0.55);
+            for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; c.strokeStyle = i % 2 ? '#ffffff' : '#90caf9'; c.lineWidth = 3; c.lineCap = 'round'; c.beginPath(); c.arc(32, 32, 20 + (i % 2) * 6, a, a + 0.9); c.stroke(); }
+            icSword(c, 14, 50, 50, 14, 3.5, '#eceff1', '#1f4aa8', '#e8b931');
+        },
+        3(c) { // Mana Burst: a jet of blue prana streaking forward
+            icGlow(c, 40, 28, 22, '#82b1ff', 0.7);
+            icPoly(c, [[4, 40], [36, 22], [56, 18], [40, 32], [10, 50]], '#82b1ff', 2);
+            icPoly(c, [[16, 40], [38, 26], [50, 22], [38, 30], [18, 44]], '#e3f2fd', 0);
+            icSpeed(c, [[4, 24, 14], [6, 32, 10]], 'rgba(255, 255, 255, 0.6)');
+            icEll(c, 52, 20, 4, 4, '#ffffff', 1.5);
+        },
+        4(c) { // Unsealed Blade / Excalibur: the sword raised, a column of golden light pouring from it
+            icGlow(c, 32, 24, 30, '#ffd54f', 0.75);
+            icPoly(c, [[26, 2], [38, 2], [44, 30], [20, 30]], 'rgba(255, 248, 225, 0.85)', 0);
+            icSword(c, 32, 60, 32, 6, 4.2, '#fff3c4', '#1f4aa8', '#e8b931');
+            for (const [x, y] of [[12, 16], [52, 14], [16, 36], [50, 38]]) icStar(c, x, y, 4, '#fff59d');
+        },
+        rmb(c) { // Hammer of the Wind King: a funnel of compressed wind fired forward
+            icGlow(c, 34, 32, 28, '#e3f2fd', 0.55);
+            for (let i = 0; i < 4; i++) { c.strokeStyle = i % 2 ? '#ffffff' : '#90caf9'; c.lineWidth = 3.5 - i * 0.5; c.lineCap = 'round'; c.beginPath(); c.ellipse(26 + i * 7, 32, 6 + i * 4, 14 - i * 2, 0, 0.6, Math.PI * 2 - 0.6); c.stroke(); }
+            icSpeed(c, [[4, 22, 12], [2, 32, 14], [4, 42, 12]], 'rgba(227, 242, 253, 0.7)');
+        },
+    },
+    witch: {
+        1(c) { // Grave Hex: a violet circle on the ground, a skull at its heart, crescents riding the ring
+            icGlow(c, 32, 34, 30, '#ab47bc', 0.6);
+            c.strokeStyle = '#e1bee7'; c.lineWidth = 2.5; c.beginPath(); c.ellipse(32, 36, 26, 22, 0, 0, Math.PI * 2); c.stroke();
+            c.lineWidth = 1.5; c.beginPath(); c.ellipse(32, 36, 19, 16, 0, 0, Math.PI * 2); c.stroke();
+            for (let i = 0; i < 3; i++) { const a = -Math.PI / 2 + i * Math.PI * 2 / 3, x = 32 + Math.cos(a) * 22.5, y = 36 + Math.sin(a) * 19; c.beginPath(); c.arc(x, y, 4, 0, Math.PI * 2); c.arc(x + 1.8, y - 1, 3.3, 0, Math.PI * 2, true); c.fillStyle = '#ce93d8'; c.fill('evenodd'); }
+            icEll(c, 32, 33, 10, 9.5, '#e8e0cc', 2); icPoly(c, [[26, 40], [38, 40], [36, 46], [28, 46]], '#e8e0cc', 2);
+            icEll(c, 28, 34, 2.8, 3.2, '#4a148c', 0); icEll(c, 36, 34, 2.8, 3.2, '#4a148c', 0); icPoly(c, [[31, 38], [33, 38], [32, 40]], '#4a148c', 0);
+        },
+        2(c) { // Raise Dead: a rotting hand clawing out of a grave, a soul rising over it
+            icGlow(c, 32, 22, 18, '#69f0ae', 0.7);
+            c.beginPath(); c.moveTo(29, 14); c.quadraticCurveTo(27, 6, 33, 2); c.quadraticCurveTo(36, 8, 35, 14); c.arc(32, 15, 4, 0, Math.PI); c.closePath(); icFill(c, '#b9f6ca', 1.5);
+            icEll(c, 32, 52, 24, 8, '#3e2723', 2); icEll(c, 32, 51, 18, 5, '#1a120e', 0);
+            icLine(c, '#8a9a74', 6, [[30, 52], [32, 36]]);
+            for (const [x0, y0, x1, y1] of [[28, 36, 22, 26], [31, 34, 29, 23], [34, 34, 36, 24], [36, 37, 42, 30]]) icLine(c, '#8a9a74', 3, [[x0, y0], [x1, y1]]);
+            icEll(c, 32, 37, 6, 5, '#8a9a74', 1.8);
+            for (const [x, y] of [[12, 50], [52, 48], [18, 57], [47, 57]]) icEll(c, x, y, 2.5, 2, '#5d4037', 0);
+        },
+        3(c) { // Broom Flight: the broom seen from the side, the bristles fanning out behind, wind lines
+            icSpeed(c, [[4, 18, 12], [2, 30, 10], [6, 44, 14]], 'rgba(185, 246, 202, 0.7)');
+            c.save(); c.translate(32, 34); c.rotate(-0.35);
+            for (let i = -3; i <= 3; i++) icLine(c, i % 2 ? '#a1887f' : '#795548', 2.5, [[-12, 0], [-26, i * 3.2]], i === 0);
+            icPoly(c, [[-14, -3], [-10, -3], [-10, 3], [-14, 3]], '#3e2723', 1.2);
+            icLine(c, '#6d4c41', 4, [[-10, 0], [24, 0], [28, -4]]);
+            c.restore();
+            icGlow(c, 50, 16, 9, '#69f0ae', 0.8); icEll(c, 50, 16, 2.5, 2.5, '#b9f6ca', 0);
+        },
+        4(c) { // Hex of the Toad: a fat toad from above in a puff of violet hex smoke
+            icGlow(c, 32, 34, 30, '#ab47bc', 0.55);
+            for (const [x, y, r] of [[12, 16, 6], [52, 14, 5], [8, 46, 5], [56, 44, 6]]) icEll(c, x, y, r, r, 'rgba(206, 147, 216, 0.6)', 0);
+            for (const s of [-1, 1]) { icEll(c, 32 + s * 14, 44, 7, 4.5, '#6b8e23', 1.8, s * 0.6); icEll(c, 32 + s * 16, 26, 3, 2.4, '#3e5a12', 1.2); }
+            icEll(c, 32, 38, 15, 14, '#6b8e23', 2);
+            icEll(c, 32, 40, 9, 5, '#9ccc65', 0);
+            for (const [x, y] of [[26, 44], [37, 46], [30, 33], [38, 37]]) icEll(c, x, y, 1.6, 1.6, '#3e5a12', 0);
+            for (const s of [-1, 1]) { icEll(c, 32 + s * 7, 26, 4.2, 4.2, '#9ccc65', 1.5); icEll(c, 32 + s * 7, 26, 2.8, 2.8, '#ffd54f', 0); c.fillStyle = '#111'; c.fillRect(32 + s * 7 - 2, 25.4, 4, 1.2); }
+        },
+        rmb(c) { // Dark Pact: a zombie's skull bursting in poison, a green drop of life flying out of it
+            icGlow(c, 30, 36, 30, '#76ff03', 0.55);
+            for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4 + 0.2; icLine(c, 'rgba(178, 255, 89, 0.85)', 2.5, [[30 + Math.cos(a) * 16, 36 + Math.sin(a) * 16], [30 + Math.cos(a) * 27, 36 + Math.sin(a) * 27]], false); }
+            icEll(c, 30, 34, 12, 11, '#8a9a74', 2); icPoly(c, [[23, 42], [37, 42], [35, 49], [25, 49]], '#8a9a74', 2);
+            icEll(c, 25.5, 35, 3, 3.5, '#1b5e20', 0); icEll(c, 34.5, 35, 3, 3.5, '#1b5e20', 0);
+            c.beginPath(); c.moveTo(52, 6); c.quadraticCurveTo(59, 16, 56, 20); c.arc(52, 19, 4.5, 0.2, Math.PI - 0.2); c.quadraticCurveTo(45, 16, 52, 6); c.closePath(); icFill(c, '#69f0ae', 1.6);
+        },
+    },
 };
 
 // ---------- item glyphs ----------
@@ -380,6 +522,17 @@ const WEAPON_GLYPHS = {
     },
     censer(c, p) { c.setLineDash([3, 2]); icLine(c, p.metal, 2, [[32, 4], [32, 26]], false); c.setLineDash([]); icEll(c, 32, 40, 14, 13, p.metal, 2); c.beginPath(); c.arc(32, 36, 12, Math.PI, 0); icFill(c, p.dark, 2); icGlow(c, 32, 42, 10, '#ffeb3b', 0.6); icEll(c, 32, 22, 4, 4, p.metal, 1.5); },
     totem(c, p) { icLine(c, '#5d4037', 6, [[24, 60], [30, 40], [26, 24], [32, 12]]); icEll(c, 33, 12, 9, 9, '#6d4c41', 2); icEll(c, 33, 12, 4, 4, '#aeea00', 0); c.save(); c.translate(38, 8); c.scale(2, 2); sprLeaf(c, 0, 0, -0.6, 8, '#8bc34a'); c.restore(); },
+    blightstaff(c, p) { // the Witch's grave-wood staff with its little skull; a rare one is bound in gold
+        icLine(c, '#4e342e', 4.5, [[14, 60], [24, 42], [30, 30], [40, 20]]); icLine(c, p.metal, 2, [[36, 26], [40, 22]], false);
+        icGlow(c, 46, 14, 14, '#76ff03', 0.6); icEll(c, 46, 14, 9, 8.5, '#e8e0cc', 2); icEll(c, 43, 13, 2.2, 2.6, '#1b5e20', 0); icEll(c, 49, 13, 2.2, 2.6, '#1b5e20', 0);
+    },
+    saint_sword(c, p) { icSword(c, 12, 52, 56, 8, 5.5, p.metal === '#ffd54f' ? '#fff8e1' : '#e0e6ea', '#1f4aa8', p.metal === '#ffd54f' ? '#ffd54f' : '#e8b931'); if (p.metal === '#ffd54f') icGlow(c, 40, 22, 14, '#82b1ff', 0.45); }, // the Swordsaint's longsword; Caliburn has a wind-blue light
+    fists(c, p) { // two wrapped fists, the ends of the wraps trailing; a rare's wraps are bound with gold
+        const rare = p.metal === '#ffd54f', wrap = rare ? '#fff8e1' : '#eceff1', band = rare ? '#ffca28' : '#b0bec5';
+        icLine(c, wrap, 3, [[10, 50], [4, 60]]); icLine(c, wrap, 3, [[24, 58], [20, 63]]);
+        if (rare) icGlow(c, 34, 30, 26, '#ffca28', 0.4);
+        icFist(c, 24, 38, 12, -0.9, wrap, band); icFist(c, 42, 24, 12, -0.6, wrap, band);
+    },
     mace(c, p) { icLine(c, '#8d6e63', 5, [[16, 58], [38, 24]]); c.save(); c.translate(42, 18); c.rotate(0.55); for (const s of [-1, 1]) icPoly(c, [[s * 9, -10], [s * 17, -4], [s * 17, 6], [s * 9, 10]], p.metal, 1.8); c.beginPath(); c.roundRect(-10, -13, 20, 26, 4); icFill(c, '#cfd8dc', 2); c.restore(); },
 };
 const ITEM_GLYPHS = {
@@ -433,5 +586,49 @@ function itemIcon(item) {
     const glyph = item.type === 'weapon' ? (WEAPON_GLYPHS[wtype] || WEAPON_GLYPHS.sword) : ITEM_GLYPHS[item.type];
     return renderIcon(`i:${item.type}:${item.type === 'weapon' ? wtype : ''}:${rare}`, rare ? '#7e57c2' : '#8d7a5a', c => glyph(c, p));
 }
+// Materials (caches.js): small glyphs with no backdrop, for inline use in text (the rebuild screen, the plaque, the sheets)
+// and stamped in the world by the pickup lines. matIconCanvas for canvas drawing, matIcon for <img src>.
+const MAT_GLYPHS = {
+    wood(c) { // three planks tied with a rope band
+        c.save(); c.translate(32, 33); c.rotate(-0.55);
+        [['#a8743f', -11, 2], ['#d4a467', 0, -3], ['#b98448', 11, 1]].forEach(([col, y, dx]) => {
+            c.beginPath(); c.roundRect(-25 + dx, y - 5.5, 50, 11, 2); icFill(c, col, 2.4);
+            c.strokeStyle = 'rgba(70, 40, 15, 0.55)'; c.lineWidth = 1.3; c.beginPath(); c.moveTo(-19 + dx, y - 1); c.quadraticCurveTo(0, y + 2, 19 + dx, y); c.stroke();
+            c.fillStyle = 'rgba(255, 236, 190, 0.35)'; c.fillRect(-23 + dx, y - 4.5, 46, 2);
+        });
+        for (const x of [-11, 11]) { c.beginPath(); c.rect(x - 3.5, -19, 7, 38); icFill(c, '#e3cc94', 2); c.strokeStyle = 'rgba(90, 64, 30, 0.6)'; c.lineWidth = 1.2; c.beginPath(); for (let y = -16; y < 18; y += 5) { c.moveTo(x - 3.5, y); c.lineTo(x + 3.5, y + 3); } c.stroke(); }
+        c.restore();
+    },
+    iron(c) { // two ingots, one stacked on the other
+        const ingot = (x, y, s, top, side) => {
+            icPoly(c, [[x - 16 * s, y - 4 * s], [x - 10 * s, y - 13 * s], [x + 14 * s, y - 13 * s], [x + 20 * s, y - 4 * s], [x + 20 * s, y + 5 * s], [x - 16 * s, y + 5 * s]], side, 2.4);
+            icPoly(c, [[x - 16 * s, y - 4 * s], [x - 10 * s, y - 13 * s], [x + 14 * s, y - 13 * s], [x + 20 * s, y - 4 * s]], top, 0);
+            c.strokeStyle = 'rgba(240, 248, 255, 0.7)'; c.lineWidth = 1.6; c.beginPath(); c.moveTo(x - 9 * s, y - 11 * s); c.lineTo(x + 12 * s, y - 11 * s); c.stroke();
+        };
+        ingot(36, 31, 1, '#8ea3b3', '#56687a');
+        ingot(27, 47, 1, '#b4c6d4', '#6e8494');
+    },
+    stone(c) { // two cut blocks
+        const block = (x, y, w, h, d) => {
+            icPoly(c, [[x, y], [x + w, y], [x + w + d, y - d], [x + d, y - d]], '#e0dfd6', 2.2); // the top face
+            icPoly(c, [[x + w, y], [x + w + d, y - d], [x + w + d, y + h - d], [x + w, y + h]], '#85847b', 2.2); // the side in shade
+            c.beginPath(); c.rect(x, y, w, h); icFill(c, '#b3b2a8', 2.2); // the face
+            c.strokeStyle = 'rgba(60, 58, 52, 0.45)'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(x + 5, y + h * 0.4); c.lineTo(x + w * 0.45, y + h * 0.35); c.moveTo(x + w * 0.3, y + h * 0.75); c.lineTo(x + w - 5, y + h * 0.7); c.stroke(); // chisel marks
+        };
+        block(22, 18, 24, 15, 7);
+        block(10, 37, 26, 17, 7);
+    },
+};
+const matIconCanvases = {};
+function matIconCanvas(k) {
+    if (matIconCanvases[k]) return matIconCanvases[k];
+    const cv = document.createElement('canvas'); cv.width = cv.height = IC_PX;
+    const c = cv.getContext('2d'); c.scale(IC_PX / IC, IC_PX / IC); c.lineJoin = 'round';
+    (MAT_GLYPHS[k] || MAT_GLYPHS.wood)(c);
+    return (matIconCanvases[k] = cv);
+}
+function matIcon(k) { return iconCache['m:' + k] || (iconCache['m:' + k] = matIconCanvas(k).toDataURL()); }
+const matImg = k => `<img class="mat-ic" src="${matIcon(k)}" alt="">`; // inline in a line of text (ui.css .mat-ic)
+
 // The class id used by classes.json / SKILL_GLYPHS for the running class
 function activeClassId() { return Object.keys(classDataConfig).find(k => classDataConfig[k].name === (activeClass && activeClass.name)) || selectedClassId; }

@@ -162,7 +162,7 @@ function swNearest(x, y, maxD, skip) {
 function swHitCircle(x, y, r, dmg, src = 'magic') { let n = 0; for (const e of enemies) if (swHittable(e) && Math.hypot(e.x - x, e.y - y) <= r + e.size / 2) { applyDamage(e, dmg, src); n++; } return n; }
 function swShove(x, y, r, dist) {
     for (const e of enemies) {
-        if (!swOk(e) || e.type.startsWith('boss')) continue;
+        if (!swOk(e) || isBossE(e)) continue;
         const dx = e.x - x, dy = e.y - y, d = Math.hypot(dx, dy);
         if (d > r + e.size / 2 || d < 1) continue;
         e.x += dx / d * dist; e.y += dy / d * dist; clampToBounds(e, e.size / 2);
@@ -470,7 +470,7 @@ function updateSpellweaver(dt) {
                 applyDamage(e, z.dmg * dt, 'dot');
                 const slow = well ? 0.4 : 0.5;
                 if (!(e.slowTimer > 0) || e.slowAmount <= slow) { e.slowTimer = Math.max(e.slowTimer || 0, 0.3); e.slowAmount = slow; }
-                if (well && d > 12 && swOk(e) && !e.type.startsWith('boss')) { const s = Math.min(d - 10, WELL_PULL * dt); e.x += dx / d * s; e.y += dy / d * s; clampToBounds(e, e.size / 2); }
+                if (well && d > 12 && swOk(e) && !isBossE(e)) { const s = Math.min(d - 10, WELL_PULL * dt); e.x += dx / d * s; e.y += dy / d * s; clampToBounds(e, e.size / 2); }
                 if (!well && !e.prop) { // two seconds in the storm freeze it (once per Blizzard)
                     const c = (z.chill.get(e) || 0) + dt; z.chill.set(e, c);
                     if (c >= BLIZZ_FREEZE && c - dt < BLIZZ_FREEZE) { e.frozenTimer = Math.max(e.frozenTimer || 0, 1.5); effects.push({ type: 'text', text: 'FROZEN', x: e.x, y: e.y - 24, color: '#b3e5fc', life: 0.6, maxLife: 0.6 }); }

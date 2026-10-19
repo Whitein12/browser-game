@@ -85,6 +85,7 @@ function resetCastle() {
     for (let i = D.obstacles.length - 1; i >= 0; i--) if (D.obstacles[i].kind === 'keg') D.obstacles.splice(i, 1);
     for (const k of cst.kegs) { if (k.ent) k.ent.dead = true; k.ent = null; makeKeg(k); } // bandits.js
     showStagePrompt(true);
+    if (activeExpedition) expOpenMap('castle'); // expeditions.js: the castle as it is now, every door open
 }
 
 // Entering the castle at a wave: a jump straight to wave 14 / 16 (dev console) opens the doors behind it and starts in that part
@@ -672,7 +673,10 @@ function updateThroneDoors(ev, dt) {
     if (t > 0.9 && !ev.opened) { ev.opened = true; cst.open = 2; castleSeat(true); for (const i of cst.throneCells) cst.grid.data[i] = T_FLOOR; updateNav(true); addShake(3); }
     if (t > 2.2 && !ev.asked) { ev.asked = true; openDialogue({ name: 'Valerius', title: 'Lord of the Bastion', portrait: 'valerius_bare', lines: VALERIUS_INVITE_LINES, onClose: () => { ev.talked = true; } }); } // dialogue.js
     if (!ev.talked) return;
-    if ((ev.t2 += dt) > 0.4) { camera.tx = camera.ty = null; stageEvent = null; showStagePrompt(true, 'The throne room is open'); cst.promptAt = fxTime; }
+    if ((ev.t2 += dt) > 0.4) {
+        camera.tx = camera.ty = null; stageEvent = null; showStagePrompt(true, 'The throne room is open'); cst.promptAt = fxTime;
+        if (!isEndlessMode) showWaveCleared({ title: 'Before the Throne', sub: 'The Bastion &middot; Wave 15', next: 'The Royal Guard', shops: true }); // ui.js: a last merchant, smith and apothecary, so the castle's gold has a use before the guard and the King
+    }
 }
 
 // ---------- wave 16: the audience and the Royal Guard ----------
@@ -938,8 +942,7 @@ function updateValeriusFall(ev, dt) {
     if (t > 1.7) { // the way to it is clear: his fires die down, his gold and XP are yours
         stageEvent = null; camera.tx = camera.ty = null;
         for (const f of effects) if (f.type === 'ground_fire') f.life = Math.min(f.life, 0.6);
-        drops.push({ x: e.x, y: e.y, type: 'item', itemData: generateItem(wave + 2), radius: 10, life: 30.0 });
-        for (let i = 0; i < 5; i++) drops.push({ x: e.x, y: e.y, type: 'gold', val: 20 + wave * 2, radius: 8, life: 30.0 });
+        for (let i = 0; i < BOSS_PURSE; i++) drops.push({ x: e.x, y: e.y, type: 'gold', val: 20 + wave * 2, radius: 8, life: 30.0 });
         collectAllDrops(); // combat.js
         crownExit();
         gainXP(e.xp); // combat.js: after the scene, so a level-up doesn't cover it
@@ -1048,6 +1051,7 @@ function drawCastleDark() {
         for (const [x, y, s] of cst.torches) if (cavIn(x, y, V)) hole(x, y + s * 14, 230 + Math.sin(t * 11 + x) * 8, 0.6);
         CS_CHAND.forEach(([x, y], i) => { if (cst.chand[i].state === 'up' && cavIn(x, y, V)) hole(x, y, 340 * (1 - 0.45 * cst.dimK), 0.6 * (1 - 0.5 * cst.dimK)); });
         if (cst.crown) hole(cst.crown.x, cst.crown.y, 300, 0.8);
+        cacheLights(hole); // caches.js: props get no pool below, so the caches are added here
         if (cst.throneK > 0 && cst.open < 2) hole(CS.throne, CS.y, 400 * cst.throneK, 0.7);
         let n = 0; // every bandit and every enemy shot stands in its own pool of light: dark browns on dark ground were hard to pick out
         for (const e of enemies) if (!e.dead && !e.prop && !e.pod && !e.submerged && n < 40 && cavIn(e.x, e.y, V)) { n++; hole(e.x, e.y, e.size * 2 + 90, 0.5); }

@@ -191,18 +191,14 @@ function fillGauge() {
     player.zeal = player.maxZeal || 100;
     player.bond = BOND_MAX; player.scrap = SCRAP_MAX; player.momentum = 0.2;
     player.arcaneResonance = resonanceMax(); player.frenzyStacks = frenzyMax();
+    mk.chi = MK_CHI_MAX; mk.flurry = MK_FLURRY_MAX; mk.combatT = fxTime; // monk.js
+    if (activeClass.name === 'Swordsaint') { ss.style = SS_MAX; ss.hitT = fxTime; ss.charges = ssMaxCharges(); } // swordsaint.js: S rank
+    if (activeClass.name === 'Witch') for (let i = wt.souls.length; i < WT_ZOMBIE_MAX; i++) { const a = i / WT_ZOMBIE_MAX * Math.PI * 2; dropSoul(player.x + Math.cos(a) * 90, player.y + Math.sin(a) * 90); } // witch.js: souls round her
     updateHUD();
 }
-function setTrainingKit(on) { // the late-game kit of the DPS tests: the class's five rares (weapon fully awakened), +80 orb Power
+function setTrainingKit(on) { // the late-game kit of the DPS tests: the class's five rares (the weapon at +10), +80 orb Power
     training.kit = on;
-    const C = activeClass;
-    equipment = on ? {
-        weapon: { name: C.rareWeapon.name, type: 'weapon', val: AWAKEN_MAX, awaken: 99, rarity: 'rare', desc: C.rareWeapon.desc },
-        armor: { name: C.rareArmor.name, type: 'armor', val: Math.round(240 * armorHpMult()), rarity: 'rare', desc: C.rareArmor.desc },
-        amulet: { name: C.rareAmulet.name, type: 'amulet', val: C.rareAmulet.val || 0.2, rarity: 'rare', desc: C.rareAmulet.desc },
-        boots: { name: C.rareBoots.name, type: 'boots', val: C.rareBoots.val || 50, rarity: 'rare', desc: C.rareBoots.desc },
-        gloves: { name: C.rareGloves.name, type: 'gloves', val: C.rareGloves.val || 0.25, rarity: 'rare', desc: C.rareGloves.desc },
-    } : { weapon: null, armor: null, amulet: null, boots: null, gloves: null };
+    equipment = on ? Object.fromEntries(GEAR_SLOT_LIST.map(t => [t, makeRare(t, t === 'weapon' ? 10 : 0)])) : { weapon: null, armor: null, amulet: null, boots: null, gloves: null }; // items.js: the rare weapon at +10 (90 Power)
     player.orbDmg = on ? 0.8 : 0;
     recalcStats(); player.hp = player.maxHp; hud.sig = null; updateHUD();
 }
@@ -253,6 +249,7 @@ function renderTrainingPanel() {
         <div class="tr-sec">Cheats</div>
         <div class="tr-row">${tog('cds', devNoCooldowns, 'No cooldowns')}<button class="tr-btn" data-act="gauge">Fill gauge</button><button class="tr-btn" data-act="reset">Reset cooldowns</button></div>
         <div class="tr-row">${tog('kit', training.kit, 'Late-game kit (rare set, +80 Power)')}</div>
+        ${activeClass.name === 'Swordsaint' ? `<div class="tr-sec">Sword (to compare)</div><div class="tr-row">${tog('blade-og', ssBlade === 'og', 'Original: 110 px')}${tog('blade-long', ssBlade === 'long', 'Long: 120 px')}</div>` : ''}
         <div class="tr-sec">Skills: rank · evolution</div>${isSpellbook() ? '<div class="tr-row"><button class="tr-btn" data-act="spellbook">Spellbook: change spells</button></div>' : ''}${skills}
         <div class="tr-row" style="margin-top:10px"><button class="tr-btn tr-exit" data-act="exit">Leave the Training Room</button></div>`;
 }
@@ -267,6 +264,7 @@ function onTrainingClick(ev) {
     else if (act === 'gauge') fillGauge();
     else if (act === 'reset') { for (const k in cooldowns) cooldowns[k] = 0; }
     else if (act === 'kit') setTrainingKit(!training.kit);
+    else if (act === 'blade-og' || act === 'blade-long') ssBlade = act.slice(6); // swordsaint.js: the two swords side by side
     else if (act === 'rank') { setSkill(+b.dataset.slot, +b.dataset.v); return; }
     else if (act === 'evo') { setSkill(+b.dataset.slot, undefined, b.dataset.v || null); return; }
     else if (act === 'spellbook') { b.blur(); showSpellbook(null, true); return; } // spellweaver.js: any spell on any key, free here

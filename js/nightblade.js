@@ -125,7 +125,7 @@ function updateDecoys(dt) {
         for (let j = projectiles.length - 1; j >= 0; j--) { const p = projectiles[j]; if (p.isEnemy && Math.hypot(p.x - d.x, p.y - d.y) < 22 + p.radius) { projectiles.splice(j, 1); struck = true; break; } }
         if (struck || (d.t -= dt) <= 0) { nb.decoys.splice(i, 1); nbDecoyEnd(d); continue; }
         for (const e of enemies) { // idle non-bosses go for the nearest shadow (never cut an attack wind-up short)
-            if (e.dead || e.pod || e.prop || e.type.startsWith('boss') || (e.state && e.state !== 'idle') || Math.hypot(e.x - d.x, e.y - d.y) > 400) continue;
+            if (e.dead || e.pod || e.prop || isBossE(e) || (e.state && e.state !== 'idle') || Math.hypot(e.x - d.x, e.y - d.y) > 400) continue;
             if (e.tauntTimer > 0 && e.tauntX !== d.x && Math.hypot(e.x - e.tauntX, e.y - e.tauntY) < Math.hypot(e.x - d.x, e.y - d.y)) continue;
             e.tauntTimer = 0.3; e.tauntX = d.x; e.tauntY = d.y;
         }

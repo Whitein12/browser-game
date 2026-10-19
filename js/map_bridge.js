@@ -371,8 +371,7 @@ function updateValeriusEscape(ev, dt) {
     if (t >= t3) { b.spear = null; b.liftZ = 0; b.x = W.x; b.y = W.y; b.facingAngle = Math.PI; b.fadeK = clamp01((t - t3) / VE.fade); } // a last look back, and he drops behind the wall
     if (t >= t3 + VE.fade + 0.4) { // he's gone: what he dropped as he knelt is yours, and the gate grinds open
         b.dead = true; activeEnemies = Math.max(0, activeEnemies - 1); camera.tx = camera.ty = null;
-        drops.push({ x: ev.x0 + 20, y: ev.y0, type: 'item', itemData: generateItem(wave + 2), radius: 10, life: 30.0 });
-        for (let i = 0; i < 5; i++) drops.push({ x: ev.x0 - 20 + i * 10, y: ev.y0 + i * 10, type: 'gold', val: 20 + wave * 2, radius: 8, life: 30.0 });
+        for (let i = 0; i < BOSS_PURSE; i++) drops.push({ x: ev.x0 - 20 + i * 10, y: ev.y0 + i * 10, type: 'gold', val: 20 + wave * 2, radius: 8, life: 30.0 });
         startBridgeGate(b.xp);
     }
 }

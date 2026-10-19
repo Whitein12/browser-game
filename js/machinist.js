@@ -53,7 +53,7 @@ function maTurretTick(t, dt) {
         applyDamage(e, hit, 'magic');
         if (e.dead) continue;
         if (hasTalent('ma_snipe_mark')) e.maSightUntil = fxTime + 2.5; // Laser Sight
-        if (head && !e.type.startsWith('boss')) e.stunTimer = Math.max(e.stunTimer || 0, 1); // Headshot
+        if (head && !isBossE(e)) e.stunTimer = Math.max(e.stunTimer || 0, 1); // Headshot
     }
     if (head) effects.push({ type: 'text', text: 'HEADSHOT', x: target.x, y: target.y - 40, color: '#ff5252', life: 0.7, maxLife: 0.7 });
     addShake(head ? 2 : 0.8);
@@ -81,7 +81,7 @@ function maCoil(sk, dmg) {
 function maCoilTick(c, dt) {
     const R = c.fieldRadius;
     if (c.hv && hasTalent('ma_hv_pull')) for (const e of enemies) { // Magnetic Field
-        if (!maLive(e) || e.type.startsWith('boss')) continue;
+        if (!maLive(e) || isBossE(e)) continue;
         const dx = c.x - e.x, dy = c.y - e.y, d = Math.hypot(dx, dy);
         if (d < R + e.size / 2 && d > 20) { e.x += dx / d * 60 * dt; e.y += dy / d * 60 * dt; clampToBounds(e, e.size / 2); }
     }
@@ -145,7 +145,7 @@ function maDecoyTick(d, dt, second) {
         return false;
     }
     for (const e of enemies) {
-        if (!maLive(e) || e.type.startsWith('boss') || (e.state && e.state !== 'idle') || Math.hypot(e.x - d.x, e.y - d.y) > 300) continue;
+        if (!maLive(e) || isBossE(e) || (e.state && e.state !== 'idle') || Math.hypot(e.x - d.x, e.y - d.y) > 300) continue;
         e.tauntTimer = Math.max(e.tauntTimer || 0, 0.3); e.tauntX = d.x; e.tauntY = d.y;
         if (hasTalent('ma_decoy_twin')) e.maHateUntil = fxTime + 3; // Double Signal: they take +20% from you
     }
@@ -164,7 +164,7 @@ function maCrash(sk) {
     for (const e of enemies) {
         if (e.dead || e.submerged || Math.hypot(e.x - player.x, e.y - player.y) > R + e.size / 2) continue;
         applyDamage(e, dmg, 'melee'); n++;
-        if (e.dead || e.type.startsWith('boss') || e.prop) continue;
+        if (e.dead || isBossE(e) || e.prop) continue;
         const [kx, ky, kd] = getVector(player.x, player.y, e.x, e.y);
         if (kd > 0) { e.x += kx / kd * 80; e.y += ky / kd * 80; clampToBounds(e, e.size / 2); }
         e.stunTimer = Math.max(e.stunTimer || 0, 0.6);
@@ -224,7 +224,7 @@ function updateMachinist(dt) { // main.js update
             if (t) { const a = Math.atan2(t.y - player.y, t.x - player.x); projectiles.push({ x: player.x, y: player.y, vx: Math.cos(a) * 650, vy: Math.sin(a) * 650, radius: 9, color: '#ff7043', life: 1.4, type: 'fireball', shape: 'fireball', damage: calcDmg(20, X.lvl), pierce: false, isEnemy: false, homeTarget: t }); }
         }
         if (hasTalent('ma_exo_stomp')) for (const e of enemies) { // Servo Stomp: small enemies are shoved aside
-            if (!maLive(e) || e.type.startsWith('boss')) continue;
+            if (!maLive(e) || isBossE(e)) continue;
             const dx = e.x - player.x, dy = e.y - player.y, d = Math.hypot(dx, dy), R = player.radius + e.size / 2 + 6;
             if (d < R && d > 0) { e.x += dx / d * (R - d + 4); e.y += dy / d * (R - d + 4); clampToBounds(e, e.size / 2); }
         }

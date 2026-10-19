@@ -404,7 +404,7 @@ var CutpurseAI = (e, dt, curSpd, edx, edy, edist, i) => {
         garPrep(e, 'dash_prep', CUT_WINDUP, { kind: 'lane', len: CUT_DASH + e.size / 2 + CUT_REACH, w: e.size + CUT_REACH * 2, lock: CUT_LOCK });
 };
 function cutpurseSteal(e) {
-    const room = Math.floor((waveStats.gold0 || 0) * CUT_WAVE_CAP) - (waveStats.stolen || 0), n = Math.max(0, Math.min(player.gold, CUT_STEAL(wave), room));
+    const room = Math.floor((waveStats.gold0 || 0) * CUT_WAVE_CAP) - (waveStats.stolen || 0), n = Math.max(0, Math.min(player.gold, CUT_STEAL(statWave()), room));
     if (n <= 0) return false; // nothing left it may take: it keeps fighting instead
     player.gold -= n; e.loot = (e.loot || 0) + n; waveStats.stolen = (waveStats.stolen || 0) + n;
     effects.push({ type: 'text', text: `-${n} gold`, x: player.x, y: player.y - 40, color: '#ffd54f', life: 1.2, maxLife: 1.2 });
@@ -442,8 +442,8 @@ function cutpurseLoot(e) { // combat.js checkEnemyDeath: killed with the purse, 
 function beastHounds(e, spots, spawnT) {
     const m = (activeDungeon.stage2_minions || []).find(mn => mn.type === 'hound'); if (!m) return;
     for (const [x, y] of spots) {
-        const hp = m.baseHp + wave * m.hpScale;
-        enemies.push({ x, y, size: m.size, color: m.color, speed: m.baseSpeed + Math.random() * m.speedVar + wave * 2.5, hp, maxHp: hp, type: m.type, dmg: m.baseDmg + wave * m.dmgScale, xp: 0, attackTimer: 0, meleeTimer: 0, ammo: 0, frozenTimer: 0, facingAngle: 0, puddleTimer: 0, bleedTimer: 0, bleedDmg: 0, orbs: 0, maxOrbs: 0, master: e, spawnT, spawnMax: spawnT });
+        const sc = bastionScale(wave), hp = Math.round((m.baseHp + wave * m.hpScale) * sc.hp); // combat.js: rebased like the wave
+        enemies.push({ x, y, size: m.size, color: m.color, speed: m.baseSpeed + Math.random() * m.speedVar + wave * 2.5, hp, maxHp: hp, type: m.type, dmg: (m.baseDmg + wave * m.dmgScale) * sc.dmg, xp: 0, attackTimer: 0, meleeTimer: 0, ammo: 0, frozenTimer: 0, facingAngle: 0, puddleTimer: 0, bleedTimer: 0, bleedDmg: 0, orbs: 0, maxOrbs: 0, master: e, spawnT, spawnMax: spawnT });
         activeEnemies++;
     }
 }

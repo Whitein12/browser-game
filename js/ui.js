@@ -39,8 +39,7 @@ function fmtStat(type, v) {
     const n = pctStat(type) ? Math.round(v * 100) : Math.round(v);
     return itemDataConfig.slotData[type].descTemplate.replace('{VAL}', n);
 }
-function itemTier(item) { const m = /^T(\d+)/.exec(item.name); return m ? +m[1] : null; }
-function itemTypeLine(item) { return item.rarity === 'rare' ? `Rare ${SLOT_NAMES[item.type]}` : `Tier ${itemTier(item) || 1} ${SLOT_NAMES[item.type]}`; }
+function itemTypeLine(item) { return `${item.rarity === 'rare' ? 'Rare ' : ''}${SLOT_NAMES[item.type]} · +${item.up || 0} of +${upgradeCap()}`; }
 function itemDelta(item) { const eq = equipment[item.type]; if (!eq || eq === item) return null; return item.val - eq.val; }
 function isUpgrade(item) { const eq = equipment[item.type]; if (!eq) return true; const d = itemDelta(item); return d !== null && d > 0; }
 
@@ -51,20 +50,19 @@ function itemTooltip(item, foot) {
         if (!eq) cmp = `<div class="tt-cmp up">Empty slot: a straight upgrade</div>`;
         else {
             const d = item.val - eq.val, cls = d > 0 ? 'up' : d < 0 ? 'down' : 'same';
-            cmp = `<div class="tt-cmp ${cls}">${d > 0 ? '▲' : d < 0 ? '▼' : '='} ${d === 0 ? 'Same as worn' : fmtStat(item.type, Math.abs(d)).replace(/^\+?/, d > 0 ? '+' : '-')} vs. ${eq.name}</div>`;
+            cmp = `<div class="tt-cmp ${cls}">${d > 0 ? '▲' : d < 0 ? '▼' : '='} ${d === 0 ? 'Same as worn' : fmtStat(item.type, Math.abs(d)).replace(/^\+?/, d > 0 ? '+' : '-')} vs. ${itemName(eq)}</div>`;
         }
     }
-    return `<div class="tt-name" style="color:${item.rarity === 'rare' ? 'var(--rare)' : 'var(--text)'}">${item.name}</div>
+    return `<div class="tt-name" style="color:${item.rarity === 'rare' ? 'var(--rare)' : 'var(--text)'}">${itemName(item)}</div>
         <div class="tt-type">${itemTypeLine(item)}${worn ? ' · worn' : ''}</div>
-        <div class="tt-stat">${item.desc}</div>${cmp}${foot ? `<div class="tt-foot">${foot}</div>` : ''}`;
+        <div class="tt-stat">${itemDesc(item)}</div>${cmp}${foot ? `<div class="tt-foot">${foot}</div>` : ''}`;
 }
 // An inventory-style square showing one item (or an empty slot)
 function itemCell(item, opts = {}) {
     const d = document.createElement('div');
     d.className = 'item-cell' + (!item ? ' empty' : item.rarity === 'rare' ? ' rare' : '');
     if (item) {
-        const tier = itemTier(item);
-        d.innerHTML = `<img src="${itemIcon(item)}">${tier ? `<span class="tier">T${tier}</span>` : ''}${opts.better && isUpgrade(item) ? '<span class="better">▲</span>' : ''}`;
+        d.innerHTML = `<img src="${itemIcon(item)}">${item.up > 0 ? `<span class="tier">+${item.up}</span>` : ''}${opts.better && isUpgrade(item) ? '<span class="better">▲</span>' : ''}`;
         if (opts.tip) bindTooltip(d, () => itemTooltip(item, opts.tip(item)));
         if (opts.click) d.onclick = () => { hideTooltip(); opts.click(item); };
     } else if (opts.slot) {
@@ -82,9 +80,9 @@ function fillBackpack(list, opts) {
 // Inventory
 // ==========================================
 
-let dollAnim = 0, invFromFight = false; // opened mid-fight (I): the game pauses, and closing goes straight back to it
+let dollAnim = 0, invFromFight = false, invFromHub = false; // opened mid-fight (I): the game pauses, and closing goes straight back to it
 window.openInventory = () => {
-    invFromFight = gameState === STATE.PLAYING;
+    invFromFight = gameState === STATE.PLAYING; invFromHub = gameState === STATE.MENU; // save.js hub
     gameState = STATE.INVENTORY; uiOpenedAt = performance.now();
     el('intermission-screen').classList.add('hidden'); el('inventory-screen').classList.remove('hidden');
     renderInventory();
@@ -98,7 +96,8 @@ window.openInventory = () => {
 };
 window.closeInventory = () => {
     hideTooltip(); el('inventory-screen').classList.add('hidden');
-    if (invFromFight) { gameState = STATE.PLAYING; lastTime = performance.now(); return; }
+    if (invFromFight) { gameState = STATE.PLAYING; lastTime = performance.now(); baseSave(); return; }
+    if (invFromHub) { invFromHub = false; hubReturn(); return; } // save.js: back to Cinderholt
     el('intermission-screen').classList.remove('hidden'); gameState = STATE.INTERMISSION;
 };
 
@@ -125,7 +124,7 @@ function renderInventory() {
         ['Max Health', Math.round(player.maxHp)], ['Armor', `${player.armor} (${Math.round(armorReduction(player.armor) * 100)}%)`], ['Power', playerPower()], // combat.js
         ['Attack Speed', `+${Math.round((equipment.gloves ? equipment.gloves.val : 0) * 100)}%`],
         ['Cooldown Reduction', `${Math.round((1 - getCDR()) * 100)}%`], ['Move Speed', Math.round(player.speed)],
-        ['Gold', player.gold],
+        ['Gold', player.gold], ...MAT_KEYS.map(k => [matImg(k) + MAT_NAMES[k], mats[k]]), // caches.js, icons.js
     ];
     el('stats-sheet').innerHTML = `<div class="ui-label" style="margin-bottom:6px">${activeClass.name} · Lv. ${player.level}</div>` + rows.map(([k, v]) => `<div class="row">${k}<b>${v}</b></div>`).join('');
     fillBackpack(el('backpack-list'), {
@@ -138,53 +137,106 @@ function renderInventory() {
 // Shop
 // ==========================================
 
-let shopFromFight = false; // opened mid-fight from the dev console: leaving goes back to the fight, not to the wave-cleared screen
+let shopFromFight = false, shopFromHub = false; // opened mid-fight from the dev console: leaving goes back to the fight, not to the wave-cleared screen
 window.openShop = () => {
-    shopFromFight = gameState === STATE.PLAYING;
+    shopFromFight = gameState === STATE.PLAYING; shopFromHub = gameState === STATE.MENU; // save.js hub
     gameState = STATE.SHOP; uiOpenedAt = performance.now();
     el('intermission-screen').classList.add('hidden'); el('shop-screen').classList.remove('hidden');
-    if (shopWave !== wave) { generateShop(); shopWave = wave; } // stock is fixed for this visit; leaving and coming back doesn't re-roll it
-    renderShop();
+    generateShop(); renderShop();
 };
 window.closeShop = () => {
     hideTooltip(); el('shop-screen').classList.add('hidden');
-    if (shopFromFight) { gameState = STATE.PLAYING; lastTime = performance.now(); return; }
+    if (shopFromFight) { gameState = STATE.PLAYING; lastTime = performance.now(); baseSave(); return; }
+    if (shopFromHub) { shopFromHub = false; hubReturn(); return; } // save.js: back to Cinderholt
     el('intermission-screen').classList.remove('hidden'); gameState = STATE.INTERMISSION;
 };
 
-function generateShop() {
-    shopItems = []; for (let i = 0; i < 3; i++) shopItems.push(generateItem(wave + 2));
-    shopItems.push(rareWeaponItem()); // items.js: +50 Power, awakens with every wave cleared
-    const armorHp = Math.round(240 * armorHpMult()); // combat.js: scaled to the class's base HP, 240 at most
-    shopItems.push({ id: 'rare_arm', name: activeClass.rareArmor.name, type: 'armor', val: armorHp, desc: activeClass.rareArmor.desc.replace(/^\+240 Max HP/, `+${armorHp} Max HP`), price: 250, rarity: 'rare' });
-    shopItems.push({ id: 'rare_amu', name: activeClass.rareAmulet.name, type: 'amulet', val: activeClass.rareAmulet.val || 0.20, desc: activeClass.rareAmulet.desc, price: 250, rarity: 'rare' });
-    shopItems.push({ id: 'rare_bot', name: activeClass.rareBoots.name, type: 'boots', val: activeClass.rareBoots.val || 50, desc: activeClass.rareBoots.desc, price: 200, rarity: 'rare' }); // a class rare can override the stat (classes.json "val")
-    shopItems.push({ id: 'rare_glv', name: activeClass.rareGloves.name, type: 'gloves', val: activeClass.rareGloves.val || 0.25, desc: activeClass.rareGloves.desc, price: 200, rarity: 'rare' });
-}
+// A fixed catalogue (items.js): the five commons and the class's five rares, always at +0. No rerolls, and no drops: the smith raises them.
+function generateShop() { shopItems = [...GEAR_SLOT_LIST.map(makeCommon), ...GEAR_SLOT_LIST.map(t => makeRare(t))]; }
 
-const SELL_RATE = 0.2; // items sell for a fifth of their price, so selling every drop no longer buys the whole shop
-function sellPrice(item) { return Math.floor(item.price * SELL_RATE); }
+const owned = item => (equipment[item.type] && equipment[item.type].name === item.name) || inventory.some(o => o.name === item.name);
 function renderShop() {
     el('shop-gold-display').textContent = player.gold;
     const buy = el('shop-buy-list'); buy.innerHTML = '';
     shopItems.forEach(item => {
-        const afford = player.gold >= item.price, d = document.createElement('div');
-        d.className = 'ware' + (item.rarity === 'rare' ? ' rare' : '') + (afford ? '' : ' poor');
+        const price = shopPrice(item), have = owned(item), afford = player.gold >= price, d = document.createElement('div'); // sidequests.js: the merchant's favour
+        d.className = 'ware' + (item.rarity === 'rare' ? ' rare' : '') + (afford && !have ? '' : ' poor');
         d.appendChild(itemCell(item));
-        d.insertAdjacentHTML('beforeend', `<div class="w-name">${item.name}</div><div class="w-stat">${item.desc}</div><div class="w-price"><span class="coin"></span>${item.price}</div>`);
-        bindTooltip(d, () => itemTooltip(item, afford ? `Click to buy for ${item.price} gold` : `You need ${item.price - player.gold} more gold`));
+        d.insertAdjacentHTML('beforeend', `<div class="w-name">${item.name}</div><div class="w-stat">${fmtStat(item.type, item.val)}</div><div class="w-price">${have ? 'Owned' : `<span class="coin"></span>${price}`}</div>`);
+        bindTooltip(d, () => itemTooltip(item, have ? 'You already own this one: raise it at the smith' : afford ? `Click to buy for ${price} gold` : `You need ${price - player.gold} more gold`));
         d.onclick = () => {
-            if (player.gold < item.price) return;
-            hideTooltip(); player.gold -= item.price; inventory.push(item); shopItems.splice(shopItems.indexOf(item), 1); renderShop(); updateHUD();
+            if (owned(item) || player.gold < price) return;
+            hideTooltip(); player.gold -= price; inventory.push({ ...item, spent: price }); renderShop(); updateHUD(); // `spent` = what it cost, so selling it back is half of that
         };
         buy.appendChild(d);
     });
-    if (!shopItems.length) buy.innerHTML = '<div class="ui-hint" style="grid-column:1/-1">Sold out. The merchant looks pleased.</div>';
     fillBackpack(el('shop-sell-list'), {
         tip: item => `Click to sell for ${sellPrice(item)} gold`,
         click: item => { player.gold += sellPrice(item); inventory.splice(inventory.indexOf(item), 1); renderShop(); updateHUD(); },
     });
 }
+
+// ==========================================
+// Smith
+// ==========================================
+
+let smithFromFight = false, smithFromHub = false, smithSel = null; // the same return pattern as the shop
+window.openSmith = () => {
+    smithFromFight = gameState === STATE.PLAYING; smithFromHub = gameState === STATE.MENU;
+    gameState = STATE.SHOP; uiOpenedAt = performance.now(); smithSel = null;
+    el('intermission-screen').classList.add('hidden'); el('smith-screen').classList.remove('hidden');
+    renderSmith();
+};
+window.closeSmith = () => {
+    hideTooltip(); el('smith-screen').classList.add('hidden');
+    if (smithFromFight) { gameState = STATE.PLAYING; lastTime = performance.now(); baseSave(); return; }
+    if (smithFromHub) { smithFromHub = false; hubReturn(); return; }
+    el('intermission-screen').classList.remove('hidden'); gameState = STATE.INTERMISSION;
+};
+function smithDetail() {
+    const it = smithSel, box = el('smith-detail');
+    if (!it) { box.innerHTML = '<div class="ui-hint">Pick a piece of gear to see what the next +1 does.</div>'; return; }
+    const cap = upgradeCap(), cost = upgradeCost(it), capped = it.up >= cap, poor = player.gold < cost;
+    const nv = itemVal({ ...it, up: it.up + 1 });
+    const why = capped ? (cap < itemDataConfig.upgrade.capCaves ? `At +${cap} for now: clear the Slime Caves to go further` : `At +${cap}: the most the smith can do`) : poor ? `You need ${cost - player.gold} more gold` : '';
+    box.innerHTML = `<div class="tt-name" style="color:${it.rarity === 'rare' ? 'var(--rare)' : 'var(--text)'}">${itemName(it)}</div>
+        <div class="tt-type">${itemTypeLine(it)}</div>
+        <div class="sm-stat">${fmtStat(it.type, it.val)}${capped ? '' : ` <span class="sm-arrow">&rarr;</span> <b>${fmtStat(it.type, nv)}</b>`}</div>
+        ${it.rarity === 'rare' ? `<div class="ui-hint" style="text-align:left">${rareFx(it)}</div>` : ''}
+        ${capped ? '' : `<div class="w-price sm-cost">Cost <span class="coin"></span>${cost}</div>`}
+        <button class="btn btn-gold" id="btn-smith-up"${capped || poor ? ' disabled' : ''}>${capped ? 'Fully upgraded' : `Upgrade to +${it.up + 1}`}</button>
+        <div class="sm-why">${why}</div>
+        <div class="ui-hint" style="text-align:left">Worth ${sellPrice(it)} gold at the merchant (half of all you put in).</div>`;
+    el('btn-smith-up').onclick = () => { if (upgradeItem(it)) { renderSmith(); updateHUD(); } };
+}
+function renderSmith() {
+    el('smith-gold-display').textContent = player.gold;
+    const worn = el('smith-worn'); worn.innerHTML = '';
+    const pick = item => { hideTooltip(); smithSel = item; renderSmith(); };
+    for (const t of GEAR_SLOT_LIST) {
+        const c = itemCell(equipment[t], { slot: t, tip: () => 'Click to inspect', click: pick });
+        if (equipment[t] && equipment[t] === smithSel) c.classList.add('picked');
+        worn.appendChild(c);
+    }
+    fillBackpack(el('smith-pack'), { tip: () => 'Click to inspect', click: pick });
+    el('smith-pack').querySelectorAll('.item-cell').forEach((c, i) => { if (inventory[i] && inventory[i] === smithSel) c.classList.add('picked'); });
+    smithDetail();
+}
+
+// Apothecary (potions.js renderApothecary): the same return pattern as the smith
+let apoFromFight = false, apoFromHub = false;
+window.openApothecary = () => {
+    apoFromFight = gameState === STATE.PLAYING; apoFromHub = gameState === STATE.MENU;
+    gameState = STATE.SHOP; uiOpenedAt = performance.now();
+    el('intermission-screen').classList.add('hidden'); el('apothecary-screen').classList.remove('hidden');
+    renderApothecary();
+};
+window.closeApothecary = () => {
+    hideTooltip(); el('apothecary-screen').classList.add('hidden');
+    if (apoFromFight) { gameState = STATE.PLAYING; lastTime = performance.now(); baseSave(); return; }
+    if (apoFromHub) { apoFromHub = false; hubReturn(); return; }
+    el('intermission-screen').classList.remove('hidden'); gameState = STATE.INTERMISSION;
+};
 
 // ==========================================
 // Rank numbers (the skill tree's tooltips, skilltree.js)
@@ -243,6 +295,30 @@ const RANK_STATS = {
         3: (r, sk) => [['Landing', RH(sk.baseDmg, r)]],
         4: (r, sk) => [['Howl', RH(sk.baseDmg, r)], ['Spirit bites', `${Math.round(SPIRIT_DMG * RU(1, r) * 100)}%`]],
     },
+    Witch: { // witch.js
+        1: (r, sk) => [['Hex', RH(sk.baseDmg, r)]],
+        2: (r, sk) => { const kind = sk.selectedUpg === 'A' ? 'knight' : sk.selectedUpg === 'B' ? 'archer' : 'zombie';
+            return [[{ zombie: 'Zombie claw', knight: 'Knight sword', archer: 'Skeleton arrow' }[kind], RH(sk.baseDmg, r, WT_KINDS[kind].dmg)], ['Minion HP', Math.round(minionHp(r, kind))]]; },
+        3: (r, sk) => [['Flight', RS(broomTime(r))], ['Speed', `${Math.round(broomSpeed(r))} px/s`], ...(sk.selectedUpg === 'A' ? [['Crash', RH(sk.baseDmg, r)]] : []), ['Toxic trail', `${RH(activeClass.basicDmg, 1, WT_TRAIL_DPS)}/s`]],
+        4: (r, sk) => [['Hex burst', RH(sk.baseDmg, r)], ...(sk.selectedUpg === 'A' ? [['Toad burst', RH(sk.baseDmg, r, 0.5)]] : sk.selectedUpg === 'B' ? [['Familiar bite', RH(sk.baseDmg, r, 0.15)]] : [])],
+    },
+    Swordsaint: { // swordsaint.js
+        1: (r, sk) => [[sk.selectedUpg === 'B' ? 'Lunge' : 'Spin cut', RH(sk.baseDmg, r)], ['Leap slam', RH(sk.baseDmg, r, SS_SLAM_MULT)], ...(sk.selectedUpg === 'B' ? [['Plunge', RH(sk.baseDmg, r, hasTalent('ss_duel_coup') ? SS_DUEL_COUP : SS_DUEL_PLUNGE)]] : [])],
+        2: (r, sk) => [[sk.selectedUpg === 'A' ? 'Cannon' : 'Burst', RH(sk.baseDmg, r)], ['Stun', RS(sk.selectedUpg === 'A' ? SS_CANNON_STUN : hasTalent('ss_air_stun') ? 0.9 : SS_AIR_STUN)]],
+        3: (r, sk) => [['Charges', ssMaxCharges()], ['Crosscut', `${RH(activeClass.basicDmg, 1, SS_CROSS_MULT * basicLevelMult())} x2 + ${RH(activeClass.basicDmg, 1, SS_CROSS_BURST * basicLevelMult())}`], // a finisher: it grows with the level, as the basic does
+            ...(sk.selectedUpg === 'A' ? [['Counter', RH(activeClass.basicDmg, 1, SS_COUNTER_MULT)]] : sk.selectedUpg === 'B' ? [['Overdrive cut', RH(activeClass.basicDmg, 1)]] : [])],
+        4: (r, sk) => [['Unsealed', `+${Math.round(SS_UNSEAL_POWER * 100)} Power, ${hasTalent('ss_unseal_long') ? 15 : SS_UNSEAL_TIME}s`],
+            sk.selectedUpg === 'B' ? ['Each moon', `${RH(sk.baseDmg, r, 0.6)} - ${RH(sk.baseDmg, r, 1.2)}`] : ['Excalibur', `${RH(sk.baseDmg, r)} - ${RH(sk.baseDmg, r, 2)}`]],
+    },
+    Monk: { // monk.js
+        1: (r, sk) => [['Chi Wave', RH(sk.baseDmg, r)], ['Rushing Fist', `${RH(sk.baseDmg, r)} - ${RH(sk.baseDmg, r, MK_RUSH_MAX)}`],
+            ...(sk.selectedUpg === 'A' && hasTalent('mk_star_splash') ? [['Falling Star', RH(sk.baseDmg, r, 0.4)]] : [])],
+        2: (r, sk) => [['Palm', RH(sk.baseDmg, r)], ...(sk.selectedUpg === 'B' ? [['Stone burst', RH(sk.baseDmg, r, 0.6)]] : [])],
+        3: (r, sk) => [['Iron Will lifesteal', `${Math.round(monkWillPct(r) * 100)}%`]],
+        4: (r, sk) => sk.selectedUpg === 'B'
+            ? [['Kick', RH(sk.baseDmg, r, MK_KICK_MULT)], ['Air blow', RH(sk.baseDmg, r, MK_RISE_BLOW)], ['Spike', RH(sk.baseDmg, r)], ['Shockwave', RH(sk.baseDmg, r, MK_RISE_SHOCK)]]
+            : [['Kick', RH(sk.baseDmg, r, MK_KICK_MULT)], ['Wall slam', RH(sk.baseDmg, r, MK_SLAM_MULT)], ...(sk.selectedUpg === 'A' ? [['Wall bounce', RH(sk.baseDmg, r, MK_PIN_WALL)]] : []), ['Stomp', RH(sk.baseDmg, r, MK_STOMP_MULT)]],
+    },
     Paladin: {
         1: (r, sk) => [['Throw', RH(sk.baseDmg, r)], ['Pulse', RH(sk.baseDmg, r, 0.25)]],
         2: (r, sk) => [['Chain tick', RH(sk.baseDmg, r, TETHER_TICK_MULT)]],
@@ -272,9 +348,9 @@ function skillStats(slot, sk, from, to) {
 function statBoxes(list) { return `<div class="stat-row">${list.map(([v, l]) => `<div class="stat-box"><div class="sv">${v}</div><div class="sl">${l}</div></div>`).join('')}</div>`; }
 
 function showWaveCleared(o = {}) { // o: optional title / sub / next overrides (stage endings)
-    gameState = STATE.INTERMISSION; uiOpenedAt = performance.now();
+    gameState = STATE.INTERMISSION; uiOpenedAt = performance.now(); el('intermission-screen').classList.remove('memory-fade');
     const s = siteById(activeDungeonId), nextBoss = (wave + 1) % 5 === 0, gold = Math.max(0, player.gold - waveStats.gold0);
-    const boss = isBossWave;
+    const boss = isBossWave || !!o.shops; // o.shops: the rest before the throne room (map_castle.js)
     el('intermission-panel').innerHTML = `
         <h1 class="ui-title" id="intermission-title">${o.title || (boss ? 'Boss Defeated' : `Wave ${wave} Cleared`)}</h1>
         <div class="ui-sub">${o.sub || ((isEndlessMode ? 'Limitless' : s ? s.name : '') + (boss ? ` · Wave ${wave}` : ''))}</div>
@@ -282,25 +358,32 @@ function showWaveCleared(o = {}) { // o: optional title / sub / next overrides (
         ${statBoxes([[waveStats.kills, 'Kills'], [`+${gold}`, 'Gold'], [fmtTime(waveStats.time), 'Time'], [Math.round(waveStats.dmgTaken), 'Damage taken']])}
         <div class="next-wave${nextBoss ? ' boss' : ''}">Next: <b>${o.next ? o.next + ' · ' : ''}Wave ${wave + 1}${nextBoss ? ' · Boss' : ''}</b></div>
         <div class="ui-hint" style="margin-top:0">Starting the next wave restores 30% of your health &middot; <kbd>I</kbd> inventory &middot; <kbd>K</kbd> skill tree${player.skillPoints > 0 ? ` (<b style="color:var(--gold-hi)">${player.skillPoints}</b> point${player.skillPoints > 1 ? 's' : ''})` : ''}</div>
-        <div class="ui-row" style="margin-top:18px">
-            <button class="btn btn-gold${boss ? '' : ' hidden'}" id="btn-shop" onclick="openShop()">Visit Shop</button>
+        <div class="ui-row town-row${boss ? '' : ' hidden'}" style="margin-top:18px">
+            <button class="btn btn-gold" id="btn-shop" onclick="openShop()">Merchant</button>
+            <button class="btn btn-gold" id="btn-smith" onclick="openSmith()">Smith</button>
+            <button class="btn btn-gold" id="btn-apoth" onclick="openApothecary()">Apothecary</button>
+        </div>
+        <div class="ui-row" style="margin-top:${boss ? 12 : 18}px">
             <button class="btn btn-primary" onclick="startNextWave()">Next Wave <kbd>Enter</kbd></button>
-        </div>`;
+            ${heroSlot >= 0 && !isTraining() && !isEndlessMode ? '<button class="btn btn-danger" onclick="heroSaveQuit()">Save &amp; Quit</button>' : ''}
+        </div>`; // save.js: the hero saved here, resumed at the next wave
     el('intermission-screen').classList.remove('hidden');
 }
 
 function showVictory() {
     gameState = STATE.VICTORY;
+    heroCleared(); // save.js: the dungeon is marked cleared and the hero saved
     const s = siteById(activeDungeonId);
     el('intermission-panel').innerHTML = `
         <h1 class="ui-title" id="intermission-title">Dungeon Cleared</h1>
-        <div class="ui-sub">You have conquered ${s ? s.name : 'this domain'}.</div>
+        <div class="ui-sub">${activeMemory ? MEMORIES.fade : `You have conquered ${s ? s.name : 'this domain'}.`}</div>
         <div class="ui-divider"><span></span></div>
         ${statBoxes([[wave, 'Waves'], [score, 'Kills'], [player.level, 'Level'], [player.gold, 'Gold']])}
         <div class="ui-row" style="margin-top:22px">
             <button class="btn btn-primary" onclick="startEndlessMode()">Enter Limitless Mode</button>
-            <button class="btn btn-danger" onclick="location.reload()">End Run</button>
+            <button class="btn btn-danger" onclick="${heroSlot >= 0 ? 'heroToMap()' : 'location.reload()'}">${heroSlot >= 0 ? (baseOpen() ? 'Return to Cinderholt' : 'Back to the Map') : 'End Run'}</button>
         </div>`;
+    el('intermission-screen').classList.toggle('memory-fade', !!activeMemory); // expeditions.js: the memory fades to sepia under the panel (ui.css)
     el('intermission-screen').classList.remove('hidden');
 }
 
@@ -324,6 +407,9 @@ window.addEventListener('keydown', e => {
     } else if (k === 'escape' || (k === 'i' && open('inventory-screen'))) {
         if (open('inventory-screen')) closeInventory();
         else if (open('shop-screen')) closeShop();
+        else if (open('smith-screen')) closeSmith();
+        else if (open('apothecary-screen')) closeApothecary();
+        else if (open('rebuild-screen')) closeRebuild(); // rebuild.js
     }
 });
 
@@ -336,7 +422,7 @@ window.openDevMenu = function() {
     const s = siteById(activeDungeonId);
     el('dev-readout').innerHTML = [
         ['Class', activeClass.name], ['Dungeon', s ? s.name : activeDungeonId], ['Wave', wave + (isBossWave ? ' (boss)' : '')],
-        ['Level', `${player.level} (${Math.floor(player.xp)}/${player.maxXp} XP)`], ['Health', `${Math.ceil(player.hp)} / ${Math.round(player.maxHp)}`],
+        ['Level', `${player.level} (${Math.floor(player.xp)}/${player.maxXp} XP)`], ['Upgrade cap', '+' + upgradeCap()], ['Health', `${Math.ceil(player.hp)} / ${Math.round(player.maxHp)}`],
         ['Enemies', `${activeEnemies} alive, ${enemiesToSpawn} to spawn`], ['Gold', player.gold],
     ].map(([k, v]) => `${k}: <b>${v}</b>`).join('<br>');
     el('dev-wave-input').value = wave + 1;
@@ -351,7 +437,16 @@ window.devJumpWave = function() {
     }
 }
 window.devLevelUp = function() { gainXP(player.maxXp - player.xp); openDevMenu(); } // the point waits on the skill tree (K)
-window.devAddGold = function() { player.gold += 1000; updateHUD(); openDevMenu(); }
+window.devAddGold = function(n = 1000) { player.gold += n; updateHUD(); openDevMenu(); }
+window.devSetLevel = function() { // the points come as for real level-ups (two a level); going down only lowers the level
+    const L = parseInt(el('dev-level-input').value); if (isNaN(L) || L < 1) return;
+    if (L > player.level) player.skillPoints += (L - player.level) * TREE_PTS_PER_LEVEL;
+    player.level = L; player.xp = 0; player.maxXp = xpToNext(L); updateHUD(); openDevMenu();
+}
+window.devUnlockDungeons = function() { // the story gate: the Slime Caves count as cleared on this hero (Quick Play has no gate)
+    if (heroData) { heroData.cleared = [...new Set([...(heroData.cleared || []), 'slime_caves'])]; saveHero({ cleared: heroData.cleared }); heroMapLocks(); }
+    openDevMenu();
+}
 window.devKillAll = function() {
     closeDevMenu(); // back to PLAYING first, so the last kill can trigger the wave-cleared screen
     for(let i = enemies.length - 1; i >= 0; i--) { enemies[i].hp = 0; checkEnemyDeath(enemies[i]); }
@@ -363,4 +458,14 @@ window.devToggleCooldowns = function() {
     el('btn-dev-cd').classList.toggle('on', devNoCooldowns);
 }
 window.devOpenShop = function() { closeDevMenu(); openShop(); } // closeDevMenu sets PLAYING, so the shop knows to return to the fight
+window.devTalk = function(id) { closeDevMenu(); const f = FRIENDS[id]; openDialogue({ name: f.name, title: f.title, portrait: id, lines: f.lines }); } // npcs.js: the talk alone, no shop after
+window.devVisitBase = function() { closeDevMenu(); startBase(); } // map_base.js: the village by day, the friends in it
+window.devVisitSmithy = function() { closeDevMenu(); if (!isBase()) startBase(); goThrough('smithy', INTERIORS.smithy.arrive); } // interiors.js: no door leads there yet
+window.devAddMats = function() { for (const k of MAT_KEYS) mats[k] += 50; updateHUD(); openDevMenu(); } // caches.js
+window.devResetBase = function() { closeDevMenu(); resetCinderholt(); } // rebuild.js: no rebuilds, the arrival unseen
+window.devFriendsWalk = function() { // npcs.js: the three wander round the hero's spot; again sends them away
+    closeDevMenu();
+    if (npcs.length) { npcs = []; return; }
+    ['smith', 'apothecary', 'merchant'].forEach((id, i) => addNpc(id, player.x + Math.cos(i * 2.1) * 170, player.y + Math.sin(i * 2.1) * 170));
+}
 window.closeDevMenu = function() { el('dev-screen').classList.add('hidden'); gameState = STATE.PLAYING; lastTime = performance.now(); }

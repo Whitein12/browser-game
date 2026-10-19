@@ -464,7 +464,7 @@ function drawEnemyStatus(e) {
         for (let i = 0; i < 4; i++) { const a = fxTime * 0.8 + i * Math.PI / 2; ctx.beginPath(); ctx.arc(e.x, e.y, r + 7, a, a + 1.05); ctx.stroke(); }
         ctx.restore();
     }
-    if (e.stunTimer > 0 && !e.type.startsWith('boss')) {
+    if (e.stunTimer > 0 && !isBossE(e)) {
         for (let i = 0; i < 3; i++) {
             const a = fxTime * 5 + i * Math.PI * 2 / 3;
             sprStar(ctx, e.x + Math.cos(a) * (r + 4), e.y - r - 6 + Math.sin(a) * 4, 3.5, '#ffeb3b');

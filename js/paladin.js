@@ -93,7 +93,7 @@ function updateAura(dt) {
     if (hasTalent('pa_aura_flare') && (A.flare -= dt) <= 0) {
         A.flare = 3;
         effects.push({ type: 'holy_impact', x: player.x, y: player.y, radius: A.ef.radius, life: 0.45, maxLife: 0.45 });
-        for (const e of enemies) if (!e.dead && Math.hypot(e.x - player.x, e.y - player.y) <= A.ef.radius + e.size / 2) { applyDamage(e, A.dmg * 2, 'magic'); if (!e.dead && !e.type.startsWith('boss')) e.stunTimer = Math.max(e.stunTimer || 0, 0.5); }
+        for (const e of enemies) if (!e.dead && Math.hypot(e.x - player.x, e.y - player.y) <= A.ef.radius + e.size / 2) { applyDamage(e, A.dmg * 2, 'magic'); if (!e.dead && !isBossE(e)) e.stunTimer = Math.max(e.stunTimer || 0, 0.5); }
     }
 }
 const paMoveMult = () => isPaladin() && hasTalent('pa_grace_lift') && player.shield > 0 ? 1.15 : 1; // main.js movement: Lifted
@@ -108,7 +108,7 @@ function inCone(e, cx, cy, angle, radius, halfArc) {
 }
 
 function shove(e, angle, dist) {
-    if (e.type.startsWith('boss')) return;
+    if (isBossE(e)) return;
     e.x += Math.cos(angle) * dist; e.y += Math.sin(angle) * dist;
     clampToBounds(e, e.size / 2);
 }
@@ -153,7 +153,7 @@ BasicAttackRegistry['mace'] = (dmg) => {
     for (const e of enemies) {
         if (!inCone(e, player.x, player.y, angle, radius, halfArc)) continue;
         applyDamage(e, dmg, 'melee_basic'); hits++;
-        if (!e.type.startsWith('boss')) e.stunTimer = Math.max(e.stunTimer || 0, 0.15);
+        if (!isBossE(e)) e.stunTimer = Math.max(e.stunTimer || 0, 0.15);
         shove(e, Math.atan2(e.y - player.y, e.x - player.x), 12);
     }
     if (hasItem('Gauntlets of Devotion')) basicHitHeal(hits); // items.js
@@ -245,7 +245,7 @@ SkillRegistry['Paladin'] = {
                         if (e.dead || Math.hypot(e.x - h.x, e.y - h.y) > R + e.size / 2) continue;
                         applyDamage(e, dmg * 1.2 * (grounding && hasTalent('pa_grav_crater') ? 2 : 1), 'melee'); // Crater
                         if (grounding) { e.slowTimer = 3.0; e.slowAmount = 0.5; if (hasTalent('pa_grav_root') && !e.dead) e.rootedTimer = Math.max(e.rootedTimer || 0, 1); } // Heavy
-                        if (hasItem('Crusader Sabatons') && !e.type.startsWith('boss') && !e.dead) e.stunTimer = Math.max(e.stunTimer || 0, 0.5); // items.js
+                        if (hasItem('Crusader Sabatons') && !isBossE(e) && !e.dead) e.stunTimer = Math.max(e.stunTimer || 0, 0.5); // items.js
                     }
                     if (grounding) effects.push({ type: 'text', text: 'GROUNDED', x: h.x, y: h.y - 50, color: '#ffca28', life: 0.8, maxLife: 0.8 });
                 }
@@ -277,12 +277,12 @@ SkillRegistry['Paladin'] = {
                     applyDamage(e, dmg * (sealed ? 1.5 : 1), 'melee');
                     burst(e.x, e.y, Math.atan2(dirY, dirX), 1.4, 8, { kind: 'spark', color: '#ffe082', size: 2.5, life: 0.25, speed: [200, 420], drag: 6 });
                     addShake(2);
-                    if (dozer && !e.dead && !e.prop && !e.type.startsWith('boss')) { carried.push(e); continue; } // swept up in front of you
+                    if (dozer && !e.dead && !e.prop && !isBossE(e)) { carried.push(e); continue; } // swept up in front of you
                     // Knock enemies forward and off to whichever side of the charge they were on
                     const side = (dirX * (e.y - player.y) - dirY * (e.x - player.x)) >= 0 ? 1 : -1;
                     shove(e, Math.atan2(dirY, dirX), 50);
                     shove(e, Math.atan2(dirX * side, -dirY * side), 70);
-                    if (!e.type.startsWith('boss')) e.stunTimer = Math.max(e.stunTimer || 0, 0.3 + (hasItem('Crusader Sabatons') ? 0.5 : 0)); // items.js
+                    if (!isBossE(e)) e.stunTimer = Math.max(e.stunTimer || 0, 0.3 + (hasItem('Crusader Sabatons') ? 0.5 : 0)); // items.js
                 }
                 carried.forEach((e, k) => { // the pile rides the shield
                     if (e.dead) return;
@@ -381,7 +381,7 @@ function hammerSweep(h, drag) {
         if (Math.hypot(e.x - h.x, e.y - h.y) > HAMMER_HIT_RADIUS + e.size / 2) continue;
         h.hitList.push(e);
         applyDamage(e, h.dmg, 'melee');
-        if (drag && !e.type.startsWith('boss')) {
+        if (drag && !isBossE(e)) {
             const a = Math.random() * Math.PI * 2;
             h.dragged.push({ e: e, ox: Math.cos(a) * 20, oy: Math.sin(a) * 20 });
         }
@@ -403,7 +403,7 @@ function triggerMagneticPulse(h) {
     if (touched.length === 0) return;
     let pulled = 0;
     for (const e of enemies) {
-        if (e.dead || e.type.startsWith('boss')) continue;
+        if (e.dead || isBossE(e)) continue;
         const onFracture = touched.some(ef => ef.segments.some(s => distToSegment(e.x, e.y, s[0], s[1], s[2], s[3]) < 30 + e.size / 2));
         if (!onFracture) continue;
         effects.push({ type: 'rune_chain', x1: e.x, y1: e.y, x2: h.x, y2: h.y, life: 0.45, maxLife: 0.45 }); // runes link into a chain
@@ -456,7 +456,7 @@ function updateDeployedHammer(h, dt) {
         for (const e of enemies) {
             if (e.dead || Math.hypot(e.x - h.x, e.y - h.y) > HAMMER_PULSE_RADIUS + e.size / 2) continue;
             applyDamage(e, h.dmg * 0.25 * (hasTalent('pa_hammer_pulse') ? 1.5 : 1), 'magic'); // Resonant Head
-            if (!e.type.startsWith('boss') && (!e.state || e.state === 'idle')) { e.tauntTimer = 0.5; e.tauntX = h.x; e.tauntY = h.y; }
+            if (!isBossE(e) && (!e.state || e.state === 'idle')) { e.tauntTimer = 0.5; e.tauntX = h.x; e.tauntY = h.y; }
         }
     }
 
@@ -474,7 +474,7 @@ function updateDeployedHammer(h, dt) {
                 effects.push({ type: 'lightning', x1: h.x, y1: h.y, x2: e.x, y2: e.y, color: '#fff59d', life: 0.15, maxLife: 0.15 });
                 applyDamage(e, h.dmg * 0.4, 'magic');
                 h.zaps = (h.zaps || 0) + 1;
-                if (hasTalent('pa_conduit_shock') && h.zaps % 4 === 0 && !e.dead && !e.type.startsWith('boss')) e.stunTimer = Math.max(e.stunTimer || 0, 0.5); // Shock
+                if (hasTalent('pa_conduit_shock') && h.zaps % 4 === 0 && !e.dead && !isBossE(e)) e.stunTimer = Math.max(e.stunTimer || 0, 0.5); // Shock
             }
         }
     }
@@ -485,7 +485,7 @@ function updateDeployedHammer(h, dt) {
         h.spin += dt * 25;
         const R = hasTalent('pa_gods_wide') ? 380 : WRATH_RADIUS + 60;
         for (const e of enemies) {
-            if (e.dead || e.type.startsWith('boss')) continue;
+            if (e.dead || isBossE(e)) continue;
             const [dx, dy, dist] = getVector(e.x, e.y, h.x, h.y);
             if (dist > R || dist < 30 + e.size / 2) continue;
             const pull = Math.min(dist - (30 + e.size / 2), 240 * dt);
@@ -501,7 +501,7 @@ function updateDeployedHammer(h, dt) {
     if (h.anchorPull > 0) { // Gravity Anchor: the planted hammer keeps drawing enemies in
         h.anchorPull -= dt;
         for (const e of enemies) {
-            if (e.dead || e.pod || e.prop || e.type.startsWith('boss')) continue;
+            if (e.dead || e.pod || e.prop || isBossE(e)) continue;
             const [dx, dy, dist] = getVector(e.x, e.y, h.x, h.y);
             if (dist > 260 || dist < 30 + e.size / 2) continue;
             const pull = Math.min(dist - (30 + e.size / 2), 130 * dt);
@@ -535,7 +535,7 @@ function updateTether(dt) {
         const e = t.target;
         if (!e || e.dead || e.submerged) { player.tether = null; return; }
         const [dx, dy, d] = getVector(e.x, e.y, player.x, player.y);
-        if (d > SHACKLE_LEASH && !e.type.startsWith('boss')) { // reeled back in
+        if (d > SHACKLE_LEASH && !isBossE(e)) { // reeled back in
             const pull = Math.min(d - SHACKLE_LEASH, 500 * dt);
             e.x += (dx / d) * pull; e.y += (dy / d) * pull; clampToBounds(e, e.size / 2);
         }
@@ -615,7 +615,7 @@ function updateFlail(h, dt) {
             if (!head || e.dead) continue;
             burst(e.x, e.y, f.a + Math.PI / 2, 1.2, 10, { kind: 'spark', color: '#ffe082', size: 2.8, life: 0.3, speed: [220, 480], drag: 6 });
             effects.push({ type: 'holy_impact', x: e.x, y: e.y, radius: 40, life: 0.3, maxLife: 0.3 });
-            if (!e.type.startsWith('boss')) { shove(e, Math.atan2(e.y - player.y, e.x - player.x), FLAIL_KNOCK); e.stunTimer = Math.max(e.stunTimer || 0, FLAIL_STUN); }
+            if (!isBossE(e)) { shove(e, Math.atan2(e.y - player.y, e.x - player.x), FLAIL_KNOCK); e.stunTimer = Math.max(e.stunTimer || 0, FLAIL_STUN); }
         }
     } else f.r = Math.max(0, f.r - (f.r + 60) * dt / FLAIL_REEL); // reeled in
     h.x = player.x + Math.cos(f.a) * f.r; h.y = player.y + Math.sin(f.a) * f.r;
@@ -651,7 +651,7 @@ function ringHammer(angle, radius, halfArc) {
     for (const e of enemies) {
         if (e.dead || e.pod || Math.hypot(e.x - h.x, e.y - h.y) > HAMMER_PULSE_RADIUS + e.size / 2) continue;
         applyDamage(e, h.dmg * 0.25 * RING_MULT, 'magic');
-        if (!e.type.startsWith('boss') && !e.dead) e.stunTimer = Math.max(e.stunTimer || 0, RING_STUN);
+        if (!isBossE(e) && !e.dead) e.stunTimer = Math.max(e.stunTimer || 0, RING_STUN);
     }
     comboText(); addShake(2.5);
 }

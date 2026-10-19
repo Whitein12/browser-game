@@ -302,7 +302,7 @@ function vilHouse(c, h, rnd) {
     const toWorld = (lx, ly) => horiz ? [h.cx + lx, h.cy + ly] : [h.cx - ly, h.cy + lx];
     if (h.state === 'burnt') vilBurnt(c, h, L, Sd, rnd, toWorld);
     else {
-        const e = 7, thatch = !h.hall, pal = h.hall ? ['#6b3b2b', '#48251a', '#2e160f'] : thatch ? ['#937538', '#665025', '#3e2d12'] : ['#6a4a3a', '#4a3328', '#2e1e16'];
+        const e = 7, thatch = !h.hall && !h.forge, pal = h.hall ? ['#6b3b2b', '#48251a', '#2e160f'] : h.forge ? ['#6d747c', '#4d535a', '#24282d'] : thatch ? ['#937538', '#665025', '#3e2d12'] : ['#6a4a3a', '#4a3328', '#2e1e16']; // forge: map_base.js's rebuilt smithy, slate against the sparks
         for (const s of [-1, 1]) { // the two roof slopes
             c.save(); c.beginPath(); c.rect(-L / 2 - e, s < 0 ? -Sd / 2 - e : 0, L + e * 2, Sd / 2 + e); c.clip();
             c.fillStyle = s === lit ? pal[0] : pal[1]; c.fillRect(-L / 2 - e, -Sd / 2 - e, L + e * 2, Sd + e * 2);
@@ -320,7 +320,7 @@ function vilHouse(c, h, rnd) {
         c.strokeStyle = pal[2]; c.lineWidth = 2.5; c.strokeRect(-L / 2 - e, -Sd / 2 - e, L + e * 2, Sd + e * 2); // eaves
         c.fillStyle = pal[2]; c.fillRect(-L / 2 - e, -5, L + e * 2, 10); // ridge cap
         c.strokeStyle = 'rgba(255, 220, 160, 0.15)'; c.lineWidth = 1; c.beginPath(); c.moveTo(-L / 2 - e, -4); c.lineTo(L / 2 + e, -4); c.stroke();
-        if (!h.hall && h.state === 'intact') { // a stone chimney
+        if (!h.hall && !h.forge && h.state === 'intact') { // a stone chimney (a forge gets its own: map_base.js baseForge)
             const cx = L * 0.28, cy = -Sd * 0.22; c.fillStyle = '#6f6a62'; c.strokeStyle = '#1e1b18'; c.lineWidth = 2; c.fillRect(cx - 9, cy - 9, 18, 18); c.strokeRect(cx - 9, cy - 9, 18, 18);
             c.fillStyle = '#141210'; c.fillRect(cx - 4.5, cy - 4.5, 9, 9);
         }
@@ -738,6 +738,7 @@ function drawVillageDark() { drawDarkLayer('rgba(26, 12, 6, 0.42)', hole => { //
         else if (ef.type === 'torch_arc') hole(lerp(ef.x0, ef.x, 1 - ef.life / ef.maxLife), lerp(ef.y0, ef.y, 1 - ef.life / ef.maxLife), 200, 0.55);
     }
     for (const e of enemies) if (!e.dead && e.type === 'boss_warlord') hole(e.x, e.y, 260, 0.55);
+    cacheLights(hole); // caches.js
 }); }
 
 // Above the fighters: roof fires, smoke drifting downwind, the tree canopy (see-through around the hero), falling ash

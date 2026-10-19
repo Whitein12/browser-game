@@ -6,11 +6,12 @@ Handoff doc for the campaign rework, like STAGE4.md. **Read the status first**, 
 
 | Step | What | State |
 |---|---|---|
-| 1 | The skill web replaces the level-up cards | Engine and screen done. **Dragonknight** done (playtested). **Ranger** done, awaiting playtest. **Nightblade, Machinist, Kensei, Cleric, Druid, Paladin** built 2026-10-14 (CLASS_WEBS.md), tested headless, awaiting playtest. **Spellweaver**: reworked into a spellbook class (20 spells, any key, one Greater) with 40 evolutions and 64 talents, built and awaiting playtest: **SPELLWEAVER.md** |
-| 2 | Save slots, the hub (the start map as Cinderholt), dungeon retries | Not started |
-| 3 | Gear bought and upgraded at a smith (no gear drops) | Not started |
-| 4 | Potions: the flask (F) and elixirs (1 / 2) | Not started |
-| 5 | Balance across the campaign (XP curve, the Bastion rebased for a Lv. 10 hero, bot runs) | Not started |
+| 1 | The skill web replaces the level-up cards | Engine and screen done. **Dragonknight** done (playtested). **Ranger** done, awaiting playtest. **Nightblade, Machinist, Kensei, Cleric, Druid, Paladin** built 2026-10-14 (CLASS_WEBS.md), tested headless, awaiting playtest. **Spellweaver**: reworked into a spellbook class (20 spells, any key, one Greater) with 40 evolutions and 64 talents, built and awaiting playtest: **SPELLWEAVER.md**. **Monk**: its web built 2026-10-15 (the user picked the four evolution pairs; design in **MONK.md** "Step 2"), tested headless, awaiting playtest |
+| 2 | Save slots, the hub (the start map as Cinderholt), dungeon retries | **Started 2026-10-14** (js/save.js): save slots, the slot screen before the map, heroes carrying level, web, gold, gear and cleared dungeons, the entry snapshot, death's Retry / Back to the map, victory marking a dungeon cleared. Tested headless. Also done: the Bastion locked until the hero clears the Caves (Quick Play opens it), Lv. 10-20 on its label, a Change hero link on the map, Save & Quit on the stage-cleared screen with Continue resuming at the next wave (death still returns to the dungeon's entry), the seasoned start (Lv. 10, 20 points, the Caves cleared, a rare weapon +3 and rare armor +1 (was 300 gold until step 5); offered once any hero has cleared them), play time on the slot cards, Back to the Map after a victory, and the hub: Cinderholt's panel on the map (portrait, level, gold, unspent points) with the Skill Tree (respec free there), Inventory, Merchant and Smith, each returning to the map and saving. The dev console has Set level, +500 gold and Unlock all dungeons. **Still to do:** menu labels |
+| 3 | Gear bought and upgraded at a smith (no gear drops) | **Built 2026-10-14, awaiting playtest:** no gear drops (bosses pay 8 coins), the fixed merchant (five commons, the class's five rares), the Smith screen (stage-cleared screen on boss waves, the hub, the dev console's shop path), `+N` upgrades with a cap of +5 / +10, selling for half of everything spent, old saves migrated. Tested headless. Numbers below |
+| later | **Save Export / Import** (the user's idea, 2026-10-14): a button per slot that downloads the hero as a file and loads one back. A backup against Safari's 7-day wipe of site storage and cleared browser data, a way to move heroes between browsers or devices, and for friends to send a save with a bug. Saves live in each player's browser `localStorage` (per address: localhost:8000 and the GitHub Pages site are separate) | Not started |
+| 4 | Potions: the flask (F) and elixirs (1 / 2) | **Done (playtested 2026-10-14):** js/potions.js: the flask (3 charges to 5, 40% to 60% of Max HP over 1.5 s, refilled each wave, dropped by kills), three elixirs on a two-slot belt, the Apothecary screen (stage-cleared screen on boss waves, the hub), a HUD piece by the health orb, saved with the hero. Numbers below |
+| 5 | Balance across the campaign (XP curve, the Bastion rebased for a Lv. 10 hero, bot runs) | **First pass built 2026-10-14, awaiting playtest** (BALANCE.md "The campaign pass"): the campaign bot (save slots, web points, shopping, the flask; Caves into the Bastion, 9 classes), `XP_TABLE` (Caves end at Lv. 10, the Bastion at Lv. 20; Bastion XP ×7.3), a starter kit (common weapon and armor), a rest with the shops before the throne room, the Bastion's village and trail rebased for a Lv. 10 hero (`bastionScale`). Kept: the 30% wave heal; the Slime King left for the playtest. Bot in the session scratchpad (`bot5\`; memory: bot-runs) |
 
 The user playtests each step before the next. Commit only when asked.
 
@@ -187,6 +188,25 @@ This is a big change, so it's built in **five steps the user playtests one at a 
 
 **UI:** item cells and tooltips show `+N` (`itemCell`, `itemTooltip`).
 
+### Step 3 numbers
+
+Stats are `base + up × step` (items.json `gear`, helpers in items.js). Armor scales with the class's HP as before (`armorHpMult`).
+
+| Slot | Common (+0 → +10) | Class rare (+0 → +10) | Prices (common / rare) |
+|---|---|---|---|
+| Weapon (Power) | 6 → 46 (+4 per +1) | 50 → 90 (+4) | 40 / 250 |
+| Armor (Max HP) | 40 → 220 (+18) | 240 → 440 (+20) | 40 / 250 |
+| Amulet (CDR) | 3% → 16% (+1.3%) | 20% → 30% (+1%) | 40 / 250 |
+| Boots (Move Speed) | 10 → 40 (+3) | 50 → 80 (+3) | 30 / 200 |
+| Gloves (Attack Speed) | 5% → 20% (+1.5%) | 25% → 37% (+1.2%) | 30 / 200 |
+
+- Commons end under their +0 rare, so a rare is worth buying first; a rare at +10 is about 1.6x its old best (the weapon matches the old awakened 90).
+- **Upgrade cost:** price × 0.3 × (up + 1), in steps of 5. A rare weapon costs 75, 150, 225, 300, 375 up to +5 (1125) and 450 to 750 for +6 to +10; a common is a fifth of that.
+- **Sell:** half of everything spent (`item.spent`: the purchase price plus every upgrade).
+- **Cap:** +5 until the hero has cleared the Slime Caves, +10 after; Quick Play uses +10 only in the Bandit Bastion.
+- **Boss purse:** 8 coins of 20 + 2 × wave (was 5 plus an item); the Royal Guard pay 3 each. The merchant shows a piece you already own as "Owned".
+- **Old saves:** an item without `up` becomes +0 of its slot's common; a class rare keeps its name and becomes +0 (a half-awakened weapon keeps its Power as the matching +N).
+
 ## Step 4: potions (flask and elixirs)
 
 **Healing flask on F:**
@@ -206,6 +226,17 @@ The effects live in `buffs` and show as buff chips. In the Training Room, keys 1
 - Logic goes in a new `js/potions.js`: `drinkFlask`, `useElixir`, ticking from `update()`.
 - `hud.js`: the flask (charges and refill fill) and the belt sit next to the health orb.
 - The drink visual is a green swirl via `spawnParticle`.
+
+### Step 4 numbers
+
+| | |
+|---|---|
+| Flask heal | 40% / 50% / 60% of Max HP over 1.5 s (potency level 0 / 1 / 2), then a 0.5 s lockout; refused at full health |
+| Flask charges | 3, upgradable to 4 (150 gold) and 5 (300); refilled every wave start and on a new run |
+| Stronger brew | 40% to 50% costs 120, 50% to 60% costs 240 |
+| Flask drop | of an orb roll (`dropChances.orb`): 25% flask, 25% hp orb, 50% power orb; at full charges it is consumed ("Flask full") |
+| Elixirs | 30 gold each, stacks of 3 per belt slot (2 slots, keys 1 / 2). Might +30 Power for 20 s; Swiftness +25% move and attack speed for 20 s; Iron Skin -35% damage taken for 12 s. The same elixir again refreshes the timer |
+| Training Room | F works and refills freely; 1 / 2 stay the dummy keys, the belt is hidden |
 
 ## Step 5: balance across the campaign
 

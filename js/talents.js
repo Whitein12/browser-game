@@ -517,6 +517,219 @@ const TALENT_WEBS = {
         },
         bridges: { 12: 'might', 24: 'focus', 43: 'fleet', 31: 'vit' },
     },
+    monk: { // monk.js "the web"; MONK.md Step 2
+        1: { // Chi Wave / Rushing Fist
+            modL: { id: 'mk_wave_far', name: 'Long Reach', icon: 'range', desc: 'The chi wave flies 900 px (was 600).' },
+            modR: { id: 'mk_wave_chi', name: 'Focused Chi', icon: 'count', desc: 'A chi wave that hits gives 15 Chi.' },
+            pass: ['might', 'fleet'],
+            A: [ // Seven-Star Rush: chain executions through a weakened pack
+                { id: 'mk_star_far', name: 'Shooting Star', icon: 'range', desc: 'The next star can be up to 500 px away (was 350).' },
+                { id: 'mk_star_heal', name: 'Star\'s Breath', icon: 'heal', desc: 'A rush that kills heals 3% Max HP.' },
+                { id: 'mk_star_splash', name: 'Falling Star', icon: 'radius', desc: 'Every rush also strikes everything within 70 px of its target (x0.4).' },
+                { id: 'mk_star_seven', name: 'Seven Stars', icon: 'burst', desc: 'Up to 7 rushes, and a chain of 3 or more ends in a Hundred-Hand Strike where you stand, without spending Chi.' },
+            ],
+            B: [ // Resonating Mark: the burst for bosses and elites
+                { id: 'mk_res_long', name: 'Lingering Echo', icon: 'duration', desc: 'The mark and its window last 5 s (was 3).' },
+                { id: 'mk_res_deep', name: 'Deep Resonance', icon: 'damage', desc: 'The mark stores 45% of your damage (was 30%).' },
+                { id: 'mk_res_spread', name: 'Sympathetic Echo', icon: 'radius', desc: 'The detonation also hits enemies within 120 px for half the store.' },
+                { id: 'mk_res_twice', name: 'Echo of Echoes', icon: 'burst', desc: 'After the detonation the mark comes back once more for 3 s, for a second Rushing Fist.' },
+            ],
+        },
+        2: { // Earth Palm / Crippling Tremor
+            modL: { id: 'mk_palm_wide', name: 'Broad Palm', icon: 'radius', desc: 'Earth Palm\'s blast reaches 170 px (was 130).' },
+            modR: { id: 'mk_palm_daze', name: 'Stunning Palm', icon: 'stun', desc: 'Earth Palm staggers what it hits for 0.4 s (not bosses).' },
+            pass: ['vit', 'might'],
+            A: [ // Gathering Palm: heap the pack up for the flurry
+                { id: 'mk_gather_far', name: 'Long Arms', icon: 'range', desc: 'The recast pulls marked enemies from 700 px (was 500).' },
+                { id: 'mk_gather_slow', name: 'Heavy Earth', icon: 'slow', desc: 'The gathered are slowed as by the Tremor: 60%, fading over 2 s.' },
+                { id: 'mk_gather_chi', name: 'Gathering Storm', icon: 'count', desc: '5 Chi for every enemy gathered.' },
+                { id: 'mk_gather_quake', name: 'Collapse', icon: 'burst', desc: 'When they land, the heap is struck by an earth slam (the palm\'s hit, 150 px) and stunned for 1 s (not bosses).' },
+            ],
+            B: [ // Stone Skin: dive in, palm, stand in it
+                { id: 'mk_stone_thick', name: 'Granite', icon: 'shield', desc: 'Every mark gives 7% Max HP of stone (was 5%).' },
+                { id: 'mk_stone_thorns', name: 'Jagged Stone', icon: 'thorns', desc: 'While the stone is hardened, enemies touching you take a basic every 0.5 s.' },
+                { id: 'mk_stone_spring', name: 'Mountain Spring', icon: 'heal', desc: 'If the stone runs out unbroken, what\'s left of it heals you.' },
+                { id: 'mk_stone_avalanche', name: 'Avalanche', icon: 'burst', desc: 'The hardened stone\'s burst reaches 200 px (was 140), stuns for 1 s (not bosses) and gives back half of Earth Palm\'s cooldown.' },
+            ],
+        },
+        3: { // Swift Step / Iron Will
+            modL: { id: 'mk_step_far', name: 'Long Stride', icon: 'range', desc: 'Swift Step goes 80 px farther.' },
+            modR: { id: 'mk_crane_wide', name: 'Crane Wings', icon: 'radius', desc: 'Crane Kick reaches 150 px (was 110) and pushes 120 px (was 80).' },
+            pass: ['fleet', 'vit'],
+            A: [ // Tiger's Path: a dash that strikes
+                { id: 'mk_tiger_mark', name: 'Tiger\'s Mark', icon: 'damage', desc: 'Enemies the step strikes take +15% damage from you for 3 s.' },
+                { id: 'mk_tiger_prowl', name: 'Prowl', icon: 'cooldown', desc: 'Each enemy the step strikes takes 0.5 s off Swift Step\'s cooldown (up to 2 s).' },
+                { id: 'mk_tiger_blood', name: 'Blood Trail', icon: 'heal', desc: 'Each enemy the step strikes heals you 1.5% Max HP (up to 6%).' },
+                { id: 'mk_tiger_frenzy', name: 'Tiger\'s Frenzy', icon: 'burst', desc: 'A step that strikes 3 or more makes your next flurry a Hundred-Hand Strike, without spending Chi.' },
+            ],
+            B: [ // Karmic Will: take it, then give it back
+                { id: 'mk_karma_long', name: 'Long Will', icon: 'duration', desc: 'Iron Will lasts 6 s (was 4).' },
+                { id: 'mk_karma_taunt', name: 'Provoke', icon: 'pull', desc: 'Iron Will draws the non-bosses within 250 px to you for 1.5 s: they walk in and hold their attacks.' },
+                { id: 'mk_karma_heal', name: 'Balance', icon: 'heal', desc: 'The shockwave heals you for 25% of what was stored.' },
+                { id: 'mk_karma_wheel', name: 'Wheel of Karma', icon: 'burst', desc: 'The store hits x3 (was x2) and the shockwave stuns for 1 s (not bosses).' },
+            ],
+        },
+        4: { // Dragon Kick / Dragon's Descent
+            modL: { id: 'mk_kick_far', name: 'Long Kick', icon: 'range', desc: 'The kicked body flies 500 px (was 350).' },
+            modR: { id: 'mk_kick_chi', name: 'Inner Dragon', icon: 'count', desc: 'Dragon Kick gives 40 Chi.' },
+            pass: ['focus', 'might'],
+            A: [ // Pinball Kick: chaos in a crowded room
+                { id: 'mk_pin_more', name: 'Extra Ball', icon: 'count', desc: 'The body bounces 5 times (was 3).' },
+                { id: 'mk_pin_speed', name: 'Gathering Speed', icon: 'damage', desc: 'Every bounce adds +25% to everything the body hits after it.' },
+                { id: 'mk_pin_ring', name: 'Ringing Blow', icon: 'stun', desc: 'The body\'s stuns last 1.2 s (was 0.6), the final slam\'s 1.5 s (was 1).' },
+                { id: 'mk_pin_multi', name: 'Multiball', icon: 'burst', desc: 'The first enemy the body bounces off is launched too, bouncing on its own (not bosses).' },
+            ],
+            B: [ // Rising Dragon: lift one out of the fight and take it apart
+                { id: 'mk_rise_wings', name: 'Hundred Wings', icon: 'count', desc: '10 blows in the air (was 6).' },
+                { id: 'mk_rise_sunder', name: 'Skyward Sunder', icon: 'damage', desc: 'The launched enemy takes +25% damage from you while it\'s up and for 3 s after.' },
+                { id: 'mk_rise_meteor', name: 'Meteor Spike', icon: 'radius', desc: 'The spike\'s shockwave reaches 200 px (was 140) and stuns for 1 s (not bosses).' },
+                { id: 'mk_rise_endless', name: 'Endless Sky', icon: 'burst', desc: 'The spike bounces it back up once: recast within 1.5 s for a second combo.' },
+            ],
+        },
+        bridges: { 12: 'might', 24: 'vit', 43: 'focus', 31: 'fleet' },
+    },
+    swordsaint: { // swordsaint.js (the web is inside each skill); SWORDSAINT.md Step 2. No self-healing anywhere, by the user's design
+        1: { // Gale Step
+            modL: { id: 'ss_step_far', name: 'Long Stride', icon: 'range', desc: 'Gale Step\'s dashes go 170 px (was 130) and the leap 240 px (was 190).' },
+            modR: { id: 'ss_spin_wide', name: 'Wide Arc', icon: 'radius', desc: 'The steps\' spin cuts reach 130 px (was 100).' },
+            pass: ['might', 'fleet'],
+            A: [ // Tempest Dance: the steps gather the pack, the slam throws it
+                { id: 'ss_tempest_reach', name: 'Gathering Wind', icon: 'pull', desc: 'The spins draw enemies in from 220 px (was 160).' },
+                { id: 'ss_tempest_hang', name: 'Hang Time', icon: 'duration', desc: 'Launched enemies stay up, helpless, for 1 s (was 0.6).' },
+                { id: 'ss_tempest_style', name: 'Storm Rhythm', icon: 'count', desc: 'A spin that hits 3 or more enemies gives 25 more Style.' },
+                { id: 'ss_tempest_eye', name: 'Eye of the Tempest', icon: 'burst', desc: 'The slam leaves a cyclone for 2 s: it keeps the enemies within 160 px pulled in and cuts each for a basic every 0.4 s.' },
+            ],
+            B: [ // Duelist's Lunge: three cuts through one enemy, then the plunge
+                { id: 'ss_duel_far', name: 'Long Lunge', icon: 'range', desc: 'The steps lock on from 300 px (was 220).' },
+                { id: 'ss_duel_mark', name: 'Challenge', icon: 'damage', desc: 'An enemy your lunge cuts takes +20% damage from you for 4 s.' },
+                { id: 'ss_duel_precise', name: 'Precise Cuts', icon: 'damage', desc: 'Each lunge through the same enemy hits harder: x1, then x1.3, then x1.6.' },
+                { id: 'ss_duel_coup', name: 'Coup de Grâce', icon: 'burst', desc: 'The plunge kills a non-boss under 25% HP outright; on a boss it hits x4 (was x3).' },
+            ],
+        },
+        2: { // Strike Air
+            modL: { id: 'ss_air_wide', name: 'Broad Gust', icon: 'radius', desc: 'Strike Air\'s burst reaches 150 px (was 120).' },
+            modR: { id: 'ss_air_stun', name: 'Pressure', icon: 'stun', desc: 'Strike Air\'s stuns last 0.9 s (was 0.6).' },
+            pass: ['focus', 'might'],
+            A: [ // Wind Cannon: control at range
+                { id: 'ss_cannon_far', name: 'Long Barrel', icon: 'range', desc: 'The cannon reaches 650 px (was 450).' },
+                { id: 'ss_cannon_bowl', name: 'Bowling Wind', icon: 'pierce', desc: 'An enemy hurled into another sends that one flying too, and so on down the line.' },
+                { id: 'ss_cannon_called', name: 'Called Shot', icon: 'count', desc: 'Every enemy slammed into rock or another body gives 50 Style (2 a blast at most).' },
+                { id: 'ss_cannon_twin', name: 'Second Barrel', icon: 'burst', desc: 'Strike Air can be cast again within 2 s for a second blast.' },
+            ],
+            B: [ // Eye of the Storm: gather the pack for the spins and Crosscut
+                { id: 'ss_eye_far', name: 'Wide Eye', icon: 'pull', desc: 'The pull reaches 320 px (was 240).' },
+                { id: 'ss_eye_shear', name: 'Shearing Pull', icon: 'damage', desc: 'Pulled enemies take the hit again when they arrive.' },
+                { id: 'ss_eye_center', name: 'Still Center', icon: 'stun', desc: 'Stunned enemies take +20% damage from you while the stun lasts.' },
+                { id: 'ss_eye_implode', name: 'Implosion', icon: 'burst', desc: 'Pulling in 5 or more enemies repeats the burst 0.5 s later (150 px, x1.5).' },
+            ],
+        },
+        3: { // Mana Burst
+            modL: { id: 'ss_burst_far', name: 'Long Jet', icon: 'range', desc: 'Mana Burst goes 220 px (was 160).' },
+            modR: { id: 'ss_cross_wide', name: 'Wide Cross', icon: 'radius', desc: 'Crosscut\'s cuts reach 170 px (was 130).' },
+            pass: ['fleet', 'vit'],
+            A: [ // Counter Burst: the dodge answers itself
+                { id: 'ss_counter_charge', name: 'Flowing Counter', icon: 'cooldown', desc: 'A counter gives a Mana Burst charge back.' },
+                { id: 'ss_counter_shot', name: 'Return Fire', icon: 'pierce', desc: 'Shots you dodge are countered too: you flash to the shooter (up to 450 px).' },
+                { id: 'ss_counter_stun', name: 'Disarm', icon: 'stun', desc: 'The counter stuns for 1 s (not bosses).' },
+                { id: 'ss_counter_time', name: 'Time Stands Still', icon: 'burst', desc: 'A counter during bullet time makes it last 1 s longer.' },
+            ],
+            B: [ // Overdrive: the burst is a cut
+                { id: 'ss_over_far', name: 'Afterburner', icon: 'range', desc: 'Mana Burst goes 240 px.' },
+                { id: 'ss_over_wake', name: 'Prana Wake', icon: 'fire', desc: 'The burst leaves a trail of blue fire for 1.5 s that cuts for half a basic every 0.3 s.' },
+                { id: 'ss_over_momentum', name: 'Momentum', icon: 'cooldown', desc: 'Cutting 3 or more enemies takes 1 s off the next charge.' },
+                { id: 'ss_over_crossfire', name: 'Crossfire', icon: 'burst', desc: 'A Crosscut right after an Overdrive also lands, at half power, on up to 3 of the enemies the burst cut.' },
+            ],
+        },
+        4: { // Unsealed Blade / Excalibur
+            modL: { id: 'ss_unseal_long', name: 'Long Unsealing', icon: 'duration', desc: 'Unsealed Blade lasts 15 s (was 12).' },
+            modR: { id: 'ss_beam_wide', name: 'Broad Light', icon: 'radius', desc: 'Excalibur\'s beam is 100 px wide (was 70).' },
+            pass: ['focus', 'might'],
+            A: [ // Endless Seal: a long stance fed by dodges
+                { id: 'ss_seal_flow', name: 'Flowing Seal', icon: 'duration', desc: 'While Unsealed, every 50 Style you gain adds 0.5 s to it.' },
+                { id: 'ss_seal_crescendo', name: 'Crescendo', icon: 'damage', desc: 'Unsealed\'s Power grows +5 for every 2 s it has lasted, up to +30 more.' },
+                { id: 'ss_seal_golden', name: 'Golden Hour', icon: 'cooldown', desc: 'While Unsealed, bullet time lasts 1.5 s and can come every 2 s (was 3).' },
+                { id: 'ss_seal_ever', name: 'Everlasting Light', icon: 'burst', desc: 'Excalibur can be fired again every 6 s for as long as the seal lasts.' },
+            ],
+            B: [ // Twin Moons: quick beams, two angles
+                { id: 'ss_moon_cross', name: 'Crossing Moons', icon: 'burst', desc: 'Where two beams cross, the light bursts (90 px, the beam\'s hit x1).' },
+                { id: 'ss_moon_rhythm', name: 'Double Rhythm', icon: 'count', desc: 'Every beam counts as a new action for Style, and one fired within 1 s of the last hits +25%.' },
+                { id: 'ss_moon_step', name: 'Moonlit Step', icon: 'cooldown', desc: 'Every beam gives a Mana Burst charge.' },
+                { id: 'ss_moon_third', name: 'Third Moon', icon: 'burst', desc: 'A third beam.' },
+            ],
+        },
+        bridges: { 12: 'might', 24: 'focus', 43: 'fleet', 31: 'vit' },
+    },
+    witch: { // witch.js; WITCH.md Step 2
+        1: { // Grave Hex
+            modL: { id: 'wt_hex_wide', name: 'Wide Circle', icon: 'radius', desc: 'Grave Hex\'s circle reaches 150 px (was 110).' },
+            modR: { id: 'wt_hex_long', name: 'Lingering Curse', icon: 'duration', desc: 'The hex lasts 9 s (was 6).' },
+            pass: ['might', 'focus'],
+            A: [ // Grave Pull: heap the pack up for the spray and the toads
+                { id: 'wt_pull_root', name: 'Grasping Hands', icon: 'stun', desc: 'The hands hold what they pull: rooted for 1.5 s (not bosses).' },
+                { id: 'wt_pull_miasma', name: 'Choking Miasma', icon: 'count', desc: 'Everything pulled takes 2 poison stacks.' },
+                { id: 'wt_pull_crush', name: 'Crushing Grip', icon: 'damage', desc: 'When the pull ends, the heap is crushed: everything pulled takes the hex\'s hit again.' },
+                { id: 'wt_pull_grave', name: 'Open Grave', icon: 'burst', desc: 'The centre opens into a grave for 4 s: enemies in it are slowed 50%, and every one that dies there rises at once as your minion, no soul needed.' },
+            ],
+            B: [ // Soul Leech: hex the pack, stand in it and spray
+                { id: 'wt_leech_deep', name: 'Deep Leech', icon: 'heal', desc: 'Soul Leech heals 25% of the poison\'s damage (was 15%).' },
+                { id: 'wt_leech_feast', name: 'Shared Feast', icon: 'heal', desc: 'Your minions within 300 px are mended by the same amount.' },
+                { id: 'wt_leech_hoard', name: 'Hoarded Life', icon: 'shield', desc: 'Healing past full health becomes a shield (up to 15% Max HP).' },
+                { id: 'wt_leech_siphon', name: 'Soul Siphon', icon: 'burst', desc: 'A hexed enemy that dies heals you 5% Max HP and leaves 2 souls.' },
+            ],
+        },
+        2: { // Raise Dead
+            modL: { id: 'wt_raise_far', name: 'Far Call', icon: 'range', desc: 'Raise Dead calls souls from 650 px (was 450).' },
+            modR: { id: 'wt_raise_tough', name: 'Grave Toughness', icon: 'shield', desc: 'Your minions have 30% more HP.' },
+            pass: ['vit', 'might'],
+            A: [ // Grave Knights: the front line
+                { id: 'wt_knight_cleave', name: 'Cleave', icon: 'radius', desc: 'A knight\'s swing hits everything in the arc in front of it.' },
+                { id: 'wt_knight_guard', name: 'Shield Wall', icon: 'shield', desc: 'Knights take 35% less damage.' },
+                { id: 'wt_knight_charge', name: 'Charge', icon: 'stun', desc: 'A knight charges the first enemy it sets on, striking and stunning it for 0.8 s (not bosses).' },
+                { id: 'wt_knight_undying', name: 'Undying Legion', icon: 'burst', desc: 'A knight that falls gets back up once, with half its HP.' },
+            ],
+            B: [ // Skeleton Archers: damage from behind her
+                { id: 'wt_skel_volley', name: 'Split Shot', icon: 'count', desc: 'Every third shot is three arrows in a fan.' },
+                { id: 'wt_skel_venom', name: 'Venom Tips', icon: 'damage', desc: 'Each arrow adds half a poison stack.' },
+                { id: 'wt_skel_pierce', name: 'Bodkin', icon: 'pierce', desc: 'Arrows pierce the first enemy they hit.' },
+                { id: 'wt_skel_rain', name: 'Bone Rain', icon: 'burst', desc: 'Every 6 s the archers loose together into the sky: a rain of bone falls on their target, 120 px round it, two shots from each archer.' },
+            ],
+        },
+        3: { // Broom Flight
+            modL: { id: 'wt_broom_fumes', name: 'Lasting Fumes', icon: 'duration', desc: 'The toxic trail lingers 5 s (was 3) and is 40% wider.' },
+            modR: { id: 'wt_broom_after', name: 'Afterglide', icon: 'range', desc: 'For 2 s after you land you move 50% faster.' },
+            pass: ['fleet', 'vit'],
+            A: [ // Swoop: a dive that crashes into the pack
+                { id: 'wt_swoop_wide', name: 'Great Crash', icon: 'radius', desc: 'The crash reaches 180 px (was 130).' },
+                { id: 'wt_swoop_stun', name: 'Brutal Landing', icon: 'stun', desc: 'The crash stuns for 0.8 s (not bosses).' },
+                { id: 'wt_swoop_saddle', name: 'Back in the Saddle', icon: 'cooldown', desc: 'Each enemy the crash hits takes 0.5 s off Broom Flight\'s cooldown (up to 3 s).' },
+                { id: 'wt_swoop_crater', name: 'Toxic Crater', icon: 'burst', desc: 'The crash leaves a poison pool for 4 s (150 px) that adds a poison stack every 0.5 s.' },
+            ],
+            B: [ // Soul Sweep: harvest the field from the air
+                { id: 'wt_sweep_wide', name: 'Wide Sweep', icon: 'radius', desc: 'The broom gathers souls from 120 px (was 60).' },
+                { id: 'wt_sweep_warm', name: 'Soul Warmth', icon: 'heal', desc: 'Each soul gathered heals you 2% Max HP.' },
+                { id: 'wt_sweep_fresh', name: 'Fresh Recruits', icon: 'heal', desc: 'Landing restores your living minions to full HP.' },
+                { id: 'wt_sweep_reap', name: 'Reaper\'s Ride', icon: 'burst', desc: 'Enemies below 15% HP that the broom passes over are reaped at once (not bosses), each leaving a soul.' },
+            ],
+        },
+        4: { // Hex of the Toad
+            modL: { id: 'wt_toad_wide', name: 'Wide Hex', icon: 'radius', desc: 'The hex reaches 230 px (was 180).' },
+            modR: { id: 'wt_toad_long', name: 'Long Croak', icon: 'duration', desc: 'The toads last 5.5 s (was 4).' },
+            pass: ['focus', 'might'],
+            A: [ // Toad Plague: every toad a poison bomb
+                { id: 'wt_plague_big', name: 'Bloated', icon: 'radius', desc: 'The bursts reach 130 px (was 90).' },
+                { id: 'wt_plague_virulent', name: 'Virulent', icon: 'count', desc: 'The bursts add 4 poison stacks (was 2).' },
+                { id: 'wt_plague_chain', name: 'Chain Croak', icon: 'stun', desc: 'An enemy caught in a burst turns into a toad for 2 s (once each, not bosses), and bursts in turn.' },
+                { id: 'wt_plague_pond', name: 'Plague Pond', icon: 'burst', desc: 'Each burst leaves a poison pond for 4 s (70 px): a poison stack every 0.5 s and a 30% slow.' },
+            ],
+            B: [ // Familiar Toads: the pack turned on itself
+                { id: 'wt_fam_venom', name: 'Venomous Bite', icon: 'damage', desc: 'Their bites add a poison stack.' },
+                { id: 'wt_fam_lure', name: 'Croaking Lure', icon: 'pull', desc: 'They draw the non-bosses within 200 px to them.' },
+                { id: 'wt_fam_loyal', name: 'Loyal', icon: 'duration', desc: 'Familiars stay toads 2 s longer.' },
+                { id: 'wt_fam_forever', name: 'Forever Yours', icon: 'burst', desc: 'When the hex ends, every familiar still alive dies and rises at once as your minion, no soul needed.' },
+            ],
+        },
+        bridges: { 12: 'might', 24: 'vit', 43: 'focus', 31: 'fleet' },
+    },
     ranger: {
         1: { // Storm Arrow
             modL: { id: 'storm_steady', name: 'Steady Hands', icon: 'cooldown', desc: 'Storm Arrow draws fully 30% faster.' },
@@ -643,6 +856,9 @@ function talentDmgMult(e) {
     if (activeClass.name === 'Machinist') m *= maDmgMult(e);             // machinist.js: Laser Sight, Double Signal
     if (activeClass.name === 'Cleric') m *= clDmgMult(e);                // cleric.js: Judgment, Wither
     if (activeClass.name === 'Kensei') m *= keDmgMult(e);                // kensei.js: Sever, Ghost Step's first hit
+    if (activeClass.name === 'Monk') m *= mkDmgMult(e);                  // monk.js: Tiger's Mark, Skyward Sunder
+    if (activeClass.name === 'Witch') m *= witchDmgMult(e);               // witch.js: a toad takes +25%
+    if (activeClass.name === 'Swordsaint') m *= ssDmgMult(e);             // swordsaint.js: Challenge, Still Center
     return m;
 }
 
@@ -691,6 +907,6 @@ function talentsOnKill(e) {
 }
 
 function knockFrom(e, x, y, d) { // push an enemy (not a boss) d px away from a point
-    if (e.type.startsWith('boss')) return;
+    if (isBossE(e)) return;
     const a = Math.atan2(e.y - y, e.x - x); e.x += Math.cos(a) * d; e.y += Math.sin(a) * d; clampToBounds(e, e.size / 2);
 }

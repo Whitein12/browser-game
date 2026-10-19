@@ -846,5 +846,239 @@
         }
       }
     }
+  },
+  "monk": {
+    "name": "Monk",
+    "color": "#ef6c00",
+    "weapon": "fists",
+    "baseMaxHp": 130,
+    "baseArmor": 3,
+    "dmgMult": 1.1,
+    "basicAttackCD": 0.25,
+    "basicDmg": 10,
+    "passive": "Flurry of Blows: every skill cast or recast, the right-click included, stores a charge (2 at most). Your next basic spends one and becomes 4 quick blows, and each blow that lands builds Chi. At 100 Chi the next flurry is a Hundred-Hand Strike: 8 blows and a shockwave. Every skill can be recast within a short window.",
+    "rareWeapon": {
+      "name": "Dragon Fang Wraps",
+      "desc": "RMB: Iron Body | For 1.5 s you take 50% less damage and roots and traps can't hold you; it ends in a chi pulse that hurts and pushes back enemies within 140px",
+      "rmbSkill": "Iron Body"
+    },
+    "rareArmor": {
+      "name": "Robes of the Still Mountain",
+      "desc": "+240 Max HP | Iron Will's lifesteal past full health becomes a shield"
+    },
+    "rareAmulet": {
+      "name": "Hundred-Bead Rosary",
+      "desc": "+20% CDR | Chi fills 50% faster"
+    },
+    "rareBoots": {
+      "name": "Cloudstep Sandals",
+      "desc": "+50 Move Speed | Swift Step goes 30% farther and its recast window lasts 4.5 s"
+    },
+    "rareGloves": {
+      "name": "Tiger Claw Wraps",
+      "desc": "+25% Attack Speed | A flurry throws 2 more blows"
+    },
+    "skills": {
+      "1": {
+        "name": "Chi Wave / Rushing Fist",
+        "level": 0,
+        "maxCd": 6.0,
+        "baseDmg": 40,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Seven-Star Rush",
+          "desc": "A Rushing Fist that kills marks the nearest enemy within 350 px and reopens the window, up to 6 rushes a cast. Weaken the pack, then zig-zag through it."
+        },
+        "upgB": {
+          "name": "Resonating Mark",
+          "desc": "While the mark lasts it stores 30% of all the damage you deal its enemy. Rushing Fist detonates the store on top of its strike: the burst for bosses and elites."
+        }
+      },
+      "2": {
+        "name": "Earth Palm / Crippling Tremor",
+        "level": 0,
+        "maxCd": 8.0,
+        "baseDmg": 45,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Gathering Palm",
+          "desc": "The recast pulls every marked enemy within 500 px into a heap in front of you and staggers it for 0.5 s (bosses are only tugged). Set up the Hundred-Hand Strike and Crane Kick."
+        },
+        "upgB": {
+          "name": "Stone Skin",
+          "desc": "Every enemy the palm marks gives a shield of 5% Max HP (up to 5) for 6 s. The recast hardens it: while it holds, roots, traps and knockbacks can't move you, and when it breaks it bursts outward."
+        }
+      },
+      "3": {
+        "name": "Swift Step / Iron Will",
+        "level": 0,
+        "maxCd": 6.0,
+        "baseDmg": 0,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Tiger's Path",
+          "desc": "Swift Step strikes everything it passes (a basic and a half each, 6 Chi each); 3 or more struck give an extra flurry charge. Iron Will stays."
+        },
+        "upgB": {
+          "name": "Karmic Will",
+          "desc": "Iron Will keeps its lifesteal, and for its 4 s you take 25% less and everything you take is stored. When it ends, a shockwave round you deals the store x2 (160 px)."
+        }
+      },
+      "4": {
+        "name": "Dragon Kick / Dragon's Descent",
+        "level": 0,
+        "maxCd": 14.0,
+        "baseDmg": 120,
+        "selectedUpg": null,
+        "upgA": {
+          "name": "Pinball Kick",
+          "desc": "The kicked body bounces off rock, boulders, the map's edge and enemies up to 3 times, bowling and stunning on every leg. Dragon's Descent still follows it."
+        },
+        "upgB": {
+          "name": "Rising Dragon",
+          "desc": "The kick launches the enemy straight up for 1.5 s, out of the fight (not bosses). The recast leaps up after it: 6 blows in the air, then you spike it down for a 140 px shockwave. On a boss, the same combo on the ground."
+        }
+      }
+    }
+  },
+  "witch": {
+    "name": "Witch",
+    "color": "#6a1b9a",
+    "weapon": "blightstaff",
+    "baseMaxHp": 115,
+    "baseArmor": 2,
+    "dmgMult": 1.0,
+    "basicAttackCD": 0.3,
+    "basicDmg": 12,
+    "passive": "Contagion: your basic is a poison spray that hits every enemy in a short cone and stacks poison (5 stacks at most). When a poisoned enemy dies, its stacks jump to the nearest enemies. Killed enemies may leave a soul behind (Hexed ones always do, bosses shed them as they bleed); Raise Dead turns the souls near you into zombies that fight for you and draw enemies to them.",
+    "rareWeapon": {
+      "name": "Gravewood Staff",
+      "desc": "RMB: Dark Pact | Sacrifice the zombie nearest the cursor: it bursts in poison (140px, 3 basics and 2 poison stacks), and you heal for the HP it had left",
+      "rmbSkill": "Dark Pact"
+    },
+    "rareArmor": {
+      "name": "Shroud of the Coven",
+      "desc": "+240 Max HP | You take 4% less damage for each living zombie (20% at most)"
+    },
+    "rareAmulet": {
+      "name": "Bone Phylactery",
+      "desc": "+20% CDR | Souls drop 50% more often"
+    },
+    "rareBoots": {
+      "name": "Midnight Broom",
+      "desc": "+50 Move Speed | Broom Flight lasts 0.7 s longer"
+    },
+    "rareGloves": {
+      "name": "Blightweaver Gloves",
+      "desc": "+25% Attack Speed | Poison stacks up to 8 instead of 5"
+    },
+    "skills": {
+      "1": {
+        "name": "Grave Hex",
+        "level": 0,
+        "maxCd": 8.0,
+        "baseDmg": 30,
+        "selectedUpg": null,
+        "upgA": { "name": "Grave Pull", "desc": "Hands out of the ground drag everything in the circle to its centre (bosses are only tugged): heap the pack up for the spray and the toads." },
+        "upgB": { "name": "Soul Leech", "desc": "Your poison on hexed enemies heals you for 15% of its damage (at most 3% Max HP a second): hex the pack, stand in it and spray." }
+      },
+      "2": {
+        "name": "Raise Dead",
+        "level": 0,
+        "maxCd": 10.0,
+        "baseDmg": 9,
+        "selectedUpg": null,
+        "upgA": { "name": "Grave Knights", "desc": "The dead rise armed: knights with rusted swords and shields, 50% more HP, swings x1.8, and they draw enemies from 260 px (was 180). Your front line." },
+        "upgB": { "name": "Skeleton Archers", "desc": "The dead rise as skeletons with bows: they keep their places round you and shoot the nearest enemy within 450 px (x1.6 a shot), but don't draw enemies and have 30% less HP. Damage from behind you." }
+      },
+      "3": {
+        "name": "Broom Flight",
+        "level": 0,
+        "maxCd": 8.0,
+        "baseDmg": 40,
+        "selectedUpg": null,
+        "upgA": { "name": "Swoop", "desc": "Space again dives you at the cursor (250 px at most): you crash down for the Swoop's hit and 2 poison stacks round you (130 px), knocking enemies back." },
+        "upgB": { "name": "Soul Sweep", "desc": "The broom gathers the souls it flies over, and when you land they rise round you at once: a free Raise Dead, from souls anywhere on the field." }
+      },
+      "4": {
+        "name": "Hex of the Toad",
+        "level": 0,
+        "maxCd": 18.0,
+        "baseDmg": 60,
+        "selectedUpg": null,
+        "upgA": { "name": "Toad Plague", "desc": "When the hex ends, or a toad dies, it bursts in a poison cloud: half the hex's hit and 2 poison stacks to everything within 90 px." },
+        "upgB": { "name": "Familiar Toads", "desc": "The toads are yours: they hop at the nearest of their old allies and bite them (15% of the hex's hit every 0.8 s)." }
+      }
+    }
+    },
+  "swordsaint": {
+    "name": "Swordsaint",
+    "color": "#1f4aa8",
+    "weapon": "saint_sword",
+    "baseMaxHp": 120,
+    "baseArmor": 4,
+    "dmgMult": 1.0,
+    "basicAttackCD": 0.3,
+    "basicDmg": 11,
+    "passive": "Style: every action that lands a hit raises your Style rank (D, C, B, A, S), much more when it differs from the last one, so weave cuts and skills. Dodge an enemy hit with Gale Step or Mana Burst for a Perfect dodge: a full rank and a second of bullet time. Each rank adds Power and a little attack speed, up to +60 Power and +20% at S; a hit taken drops two ranks. Every skill cancels the sword's recovery.",
+    "rareWeapon": {
+      "name": "Caliburn",
+      "desc": "RMB: Hammer of the Wind King | Fire a tornado of compressed wind 450px forward; it carries enemies along its path (not bosses) and hits each for 2 basics over its flight",
+      "rmbSkill": "Hammer of the Wind King"
+    },
+    "rareArmor": {
+      "name": "Mail of Avalon",
+      "desc": "+240 Max HP | Once every 30 s, a blow that would kill you is a Perfect dodge instead"
+    },
+    "rareAmulet": {
+      "name": "Seal of the Round",
+      "desc": "+20% CDR | A hit taken drops your Style one rank, not two"
+    },
+    "rareBoots": {
+      "name": "Prana Greaves",
+      "desc": "+50 Move Speed | Mana Burst holds 3 charges"
+    },
+    "rareGloves": {
+      "name": "Lionheart Gauntlets",
+      "desc": "+25% Attack Speed | The third cut's thrust also sends a wave of sword-light 250px ahead"
+    },
+    "skills": {
+      "1": {
+        "name": "Gale Step",
+        "level": 0,
+        "maxCd": 8.0,
+        "baseDmg": 22,
+        "selectedUpg": null,
+        "upgA": { "name": "Tempest Dance", "desc": "Each spin draws the enemies within 160 px in to you, and the slam throws the heap into the air for 0.6 s, helpless (not bosses). The Q gathers the pack." },
+        "upgB": { "name": "Duelist's Lunge", "desc": "Each step locks onto the enemy nearest the cursor and lunges through it. Two lunges through the same enemy make the third step a plunge onto it for x3. The Q duels one." }
+      },
+      "2": {
+        "name": "Strike Air",
+        "level": 0,
+        "maxCd": 7.0,
+        "baseDmg": 30,
+        "selectedUpg": null,
+        "upgA": { "name": "Wind Cannon", "desc": "Strike Air becomes a 450 px blast forward that hurls enemies 150 px back; one slammed into rock or another body is stunned for 1.2 s. Control at range." },
+        "upgB": { "name": "Eye of the Storm", "desc": "The burst hauls every enemy within 240 px in to you, then stuns them (bosses only take the hit). It gathers the pack for the spins and Crosscut." }
+      },
+      "3": {
+        "name": "Mana Burst",
+        "level": 0,
+        "maxCd": 5.0,
+        "baseDmg": 0,
+        "selectedUpg": null,
+        "upgA": { "name": "Counter Burst", "desc": "A perfect dodge with Mana Burst marks the attacker; when the burst lands you flash back through them for a counter of 3 basics. The dodge answers itself." },
+        "upgB": { "name": "Overdrive", "desc": "Mana Burst cuts everything it passes through for a basic each, and every enemy cut gives 15 Style (3 at most). The dash is an attack." }
+      },
+      "4": {
+        "name": "Unsealed Blade / Excalibur",
+        "level": 0,
+        "maxCd": 40.0,
+        "baseDmg": 150,
+        "selectedUpg": null,
+        "upgA": { "name": "Endless Seal", "desc": "Each perfect dodge while Unsealed adds 2 s to it. Keep dodging and the seal never closes." },
+        "upgB": { "name": "Twin Moons", "desc": "Excalibur can be fired twice, and charges in half the time: two quick beams, each x0.6 to x1.2, aimed two ways or crossed." }
+      }
+    }
   }
 }

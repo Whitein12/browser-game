@@ -77,6 +77,7 @@
             </div>
             <div id="boss-bar">
                 <div id="boss-name"></div>
+                <div id="boss-sub"></div> <!-- expeditions.js: a chief's title -->
                 <div class="boss-track"><div id="boss-ghost"></div><div id="boss-fill"></div></div>
             </div>
             <div id="gold-plaque"><div class="coin"></div><div id="gold-display">0</div></div>
@@ -90,6 +91,7 @@
                 <div class="orb-text" id="hp-text" style="top: 62px;"></div>
                 <div class="orb-text" id="shield-text" style="top: 82px; font-size: 10px; color: #cfe8f5;"></div>
                 <div class="orb-label">Health</div>
+                <div id="potion-bar"></div>
             </div>
             <div id="hud-center">
                 <div id="lvl-toast"></div>
@@ -107,6 +109,7 @@
 
         <div id="stage-prompt" class="hidden"><span class="sp-arrow">&#10148;</span> The way is open &middot; walk into the cave to go deeper</div>
 
+        <div id="quest-tracker" class="hidden"></div> <!-- sidequests.js: the active quests, top right under the gold -->
         <div id="tab-sheet" class="panel hidden"></div>
 
         <div id="tooltip" class="hidden"></div>
@@ -114,12 +117,31 @@
         <div id="start-screen" class="modal-overlay">
             <div id="loading-text">Loading Game Data...</div>
 
+            <div id="slots-screen" class="hidden">
+                <h1 class="menu-title">YOUR HEROES</h1>
+                <div id="slot-cards"></div>
+                <div class="menu-hint">A hero keeps their level, skill web, gold and gear from dungeon to dungeon &middot; <span class="slot-quick" onclick="quickPlay()">Quick play without saving</span></div>
+            </div>
+
             <div id="dungeon-selection" class="hidden">
                 <div id="map-wrap">
                     <canvas id="map-canvas"></canvas>
                     <div id="map-info" class="hidden"></div>
                 </div>
-                <div class="menu-hint">Hover a location to scout it &middot; Click to travel</div>
+                <div class="menu-hint">Hover a location to scout it &middot; Click to travel<span id="map-hero"></span></div>
+                <button class="btn btn-primary hidden" id="board-back" onclick="closeBoard()">&lsaquo; Back to the noticeboard <kbd>Esc</kbd></button>
+                <div id="hub-panel" class="hidden">
+                    <div class="hub-place">Cinderholt</div>
+                    <canvas id="hub-portrait" width="300" height="230"></canvas>
+                    <div id="hub-name"></div><div id="hub-meta"></div>
+                    <div class="hub-btns">
+                        <button class="btn btn-primary" id="hub-tree" onclick="hubOpen('tree')">Skill Tree</button>
+                        <button class="btn btn-primary" onclick="hubOpen('inv')">Inventory</button>
+                        <button class="btn btn-gold" onclick="hubOpen('shop')">Merchant</button>
+                        <button class="btn btn-gold" onclick="hubOpen('smith')">Smith</button>
+                        <button class="btn btn-gold" onclick="hubOpen('apoth')">Apothecary</button>
+                    </div>
+                </div>
             </div>
 
             <div id="class-selection" class="hidden">
@@ -200,6 +222,30 @@
                             <p class="card-meta">Weapon: Phantom Blade | Stance Dancer | Low HP</p>
                             <div class="card-details"></div>
                         </div>
+                        <div class="class-card" data-class="monk" style="--cc:#ef6c00;">
+                            <canvas class="class-portrait" data-class="monk"></canvas>
+                            <div class="class-title">Monk</div>
+                            <div class="diff-tag" style="--dc:#ff7043;">Difficulty: Hard</div>
+                            <p class="card-desc">A fist fighter who recasts every skill. Each cast stores a flurry of blows; chi builds to a Hundred-Hand Strike.</p>
+                            <p class="card-meta">Weapon: Fists | Medium HP | Mobile Bruiser</p>
+                            <div class="card-details"></div>
+                        </div>
+                        <div class="class-card" data-class="witch" style="--cc:#6a1b9a;">
+                            <canvas class="class-portrait" data-class="witch"></canvas>
+                            <div class="class-title">Witch</div>
+                            <div class="diff-tag" style="--dc:#ff7043;">Difficulty: Hard</div>
+                            <p class="card-desc">A necromancer who sprays poison, hexes her foes into toads and raises the souls of the fallen as a horde of zombies.</p>
+                            <p class="card-meta">Weapon: Blightstaff | Low HP | Summoner, Damage over Time</p>
+                            <div class="card-details"></div>
+                        </div>
+                        <div class="class-card" data-class="swordsaint" style="--cc:#1f4aa8;">
+                            <canvas class="class-portrait" data-class="swordsaint"></canvas>
+                            <div class="class-title">Swordsaint</div>
+                            <div class="diff-tag" style="--dc:#e53935;">Difficulty: Expert</div>
+                            <p class="card-desc">A sword-saint who fights in a rhythm: weave cuts and skills, dash through enemy blows for a perfect dodge, and her Style climbs to S rank. Unseal the blade and release its light.</p>
+                            <p class="card-meta">Weapon: Longsword | Mid HP | High Skill, Burst</p>
+                            <div class="card-details"></div>
+                        </div>
                     </div>
                     <button class="car-arrow" onclick="stepCarousel(1)">&rsaquo;</button>
                 </div>
@@ -261,9 +307,11 @@
 
         <div id="dialogue-screen" class="hidden" onclick="dialogueAdvance()">
             <canvas id="dialogue-portrait"></canvas>
+            <canvas id="dialogue-hero" class="hidden"></canvas>
             <div class="dialogue-box panel">
                 <div class="dialogue-plate"><div class="dialogue-name" id="dialogue-name"></div><div class="dialogue-title" id="dialogue-title"></div></div>
                 <div class="dialogue-text" id="dialogue-text"></div>
+                <div class="dialogue-choices hidden" id="dialogue-choices"></div>
                 <div class="dialogue-more hidden" id="dialogue-more">Enter &#9662;</div>
             </div>
         </div>
@@ -294,6 +342,44 @@
             </div>
         </div>
 
+        <div id="smith-screen" class="modal-overlay hidden">
+            <div class="panel inv-panel">
+                <h1 class="ui-title">The Smith</h1>
+                <div class="ui-sub">&ldquo;Good steel remembers every blow.&rdquo;</div>
+                <div class="ui-row" style="margin-top: 12px;"><div style="display: flex; align-items: center; gap: 8px;"><div class="coin"></div><b id="smith-gold-display" style="font: bold 20px Consolas, monospace; color: #f1d48a;"></b></div></div>
+                <div class="smith-body">
+                    <div class="smith-left">
+                        <div class="backpack-head"><span class="ui-label">Worn</span></div>
+                        <div class="smith-worn" id="smith-worn"></div>
+                        <div class="backpack-head"><span class="ui-label">Backpack</span><span class="ui-hint" style="margin: 0;">Click a piece to inspect it</span></div>
+                        <div class="backpack" id="smith-pack"></div>
+                    </div>
+                    <div class="smith-detail" id="smith-detail"></div>
+                </div>
+                <div class="ui-row" style="margin-top: 14px;"><button class="btn" onclick="closeSmith()">Leave <kbd>Esc</kbd></button></div>
+            </div>
+        </div>
+
+        <div id="apothecary-screen" class="modal-overlay hidden">
+            <div class="panel inv-panel">
+                <h1 class="ui-title">The Apothecary</h1>
+                <div class="ui-sub">&ldquo;Drink fast, drink often, and keep moving.&rdquo;</div>
+                <div class="ui-row" style="margin-top: 12px;"><div style="display: flex; align-items: center; gap: 8px;"><div class="coin"></div><b id="apo-gold-display" style="font: bold 20px Consolas, monospace; color: #f1d48a;"></b></div></div>
+                <div class="apo-body" id="apo-body"></div>
+                <div class="ui-row" style="margin-top: 14px;"><button class="btn" onclick="closeApothecary()">Leave <kbd>Esc</kbd></button></div>
+            </div>
+        </div>
+
+        <div id="rebuild-screen" class="modal-overlay hidden">
+            <div class="panel inv-panel" style="width: 640px;">
+                <h1 class="ui-title" id="rb-title">Rebuild</h1>
+                <div class="ui-sub" id="rb-sub"></div>
+                <div class="ui-row" style="margin-top: 12px;"><div style="display: flex; align-items: center; gap: 8px;"><div class="coin"></div><b id="rb-gold" style="font: bold 20px Consolas, monospace; color: #f1d48a;"></b></div></div>
+                <div class="apo-card" id="rb-body"></div>
+                <div class="ui-row" style="margin-top: 14px;"><button class="btn" onclick="closeRebuild()">Close <kbd>Esc</kbd></button></div>
+            </div>
+        </div>
+
         <div id="dev-screen" class="modal-overlay hidden">
             <div class="panel">
                 <div class="dev-title">DEV CONSOLE</div>
@@ -302,7 +388,8 @@
                     <div class="dev-row"><input type="number" id="dev-wave-input" class="dev-input" value="1" min="1"><button class="btn btn-dev" onclick="devJumpWave()">Warp to wave</button></div>
                 </div>
                 <div class="dev-section"><span class="ui-label">Player</span>
-                    <div class="dev-grid"><button class="btn btn-dev" onclick="devLevelUp()">Level up</button><button class="btn btn-dev" onclick="devAddGold()">+1000 gold</button></div>
+                    <div class="dev-grid"><button class="btn btn-dev" onclick="devLevelUp()">Level up</button><button class="btn btn-dev" onclick="devAddGold()">+1000 gold</button><button class="btn btn-dev" onclick="devAddGold(500)">+500 gold</button><button class="btn btn-dev" onclick="devUnlockDungeons()">Unlock all dungeons</button></div>
+                    <div class="dev-row" style="margin-top: 6px;"><input type="number" id="dev-level-input" class="dev-input" value="10" min="1"><button class="btn btn-dev" onclick="devSetLevel()">Set level</button></div>
                 </div>
                 <div class="dev-section"><span class="ui-label">Combat</span>
                     <div class="dev-grid"><button class="btn btn-dev" onclick="devKillAll()">Kill all enemies</button><button class="btn btn-dev" id="btn-dev-cd" onclick="devToggleCooldowns()">No cooldowns: OFF</button></div>
@@ -310,9 +397,28 @@
                 <div class="dev-section"><span class="ui-label">Merchant</span>
                     <div class="dev-grid"><button class="btn btn-dev" onclick="devOpenShop()">Open shop</button></div>
                 </div>
+                <div class="dev-section"><span class="ui-label">Expeditions</span>
+                    <div class="dev-grid"><button class="btn btn-dev" onclick="devExpedition('fallen_bastion')">Fallen Bastion</button><button class="btn btn-dev" onclick="devExpedition('raiders_camp')">Raiders' Camp</button><button class="btn btn-dev" onclick="devExpedition('silent_hive')">Silent Hive</button></div>
+                </div>
+                <div class="dev-section"><span class="ui-label">Cinderholt's friends</span>
+                    <div class="dev-grid"><button class="btn btn-dev" onclick="devTalk('smith')">Smith</button><button class="btn btn-dev" onclick="devTalk('apothecary')">Apothecary</button><button class="btn btn-dev" onclick="devTalk('merchant')">Merchant</button><button class="btn btn-dev" onclick="devFriendsWalk()">Walk here</button><button class="btn btn-dev" onclick="devVisitBase()">Visit freed Cinderholt</button><button class="btn btn-dev" onclick="devVisitSmithy()">The smithy</button><button class="btn btn-dev" onclick="devAddMats()">+50 materials</button><button class="btn btn-dev" onclick="devResetBase()">Reset Cinderholt</button><button class="btn btn-dev" onclick="devQuestsComplete()">Quests: complete active</button><button class="btn btn-dev" onclick="devQuestsReset()">Quests: reset</button></div>
+                </div>
                 <div class="dev-section"><span class="ui-label">State</span><div class="dev-readout" id="dev-readout"></div></div>
                 <button class="btn btn-dev" style="width: 100%; margin-top: 24px; padding: 11px;" onclick="closeDevMenu()">Close console</button>
             </div>
+        </div>
+
+        <div id="board-screen" class="modal-overlay hidden"> <!-- expeditions.js: the noticeboard at Cinderholt's gate -->
+            <div class="bd-board" id="board-panel"></div>
+        </div>
+
+        <div id="memory-card" class="modal-overlay hidden" onclick="memoryCardDone()"> <!-- expeditions.js: shown before a replayed dungeon -->
+            <div class="memory-dust" id="memory-dust"></div>
+            <div class="memory-inner"><div class="memory-kicker" id="memory-kicker"></div><div class="memory-title" id="memory-title"></div><div class="memory-rule"><span></span></div><div class="memory-line" id="memory-line"></div><div class="memory-hint">Press any key</div></div>
+        </div>
+
+        <div id="expedition-end" class="modal-overlay hidden"> <!-- expeditions.js: the road home reached -->
+            <div class="panel" id="expedition-panel"></div>
         </div>
 
         <div id="death-screen" class="modal-overlay hidden">
@@ -320,7 +426,7 @@
                 <h1 class="ui-title">You Died</h1>
                 <div class="ui-divider"><span></span></div>
                 <div class="ui-sub" style="font-size: 18px;">You fell on wave <span id="death-wave"></span></div>
-                <div class="ui-row" style="margin-top: 22px;"><button class="btn btn-danger" onclick="location.reload()">Return to Menu</button></div>
+                <div class="ui-row" id="death-btns" style="margin-top: 22px;"><button class="btn btn-danger" onclick="location.reload()">Return to Menu</button></div>
             </div>
         </div>
     </div>
@@ -341,7 +447,14 @@
     <script src="js/machinist.js"></script>
     <script src="js/cleric.js"></script>
     <script src="js/kensei.js"></script>
+    <script src="js/monk.js"></script>
+    <script src="js/monk_fx.js"></script>
+    <script src="js/witch.js"></script>
+    <script src="js/witch_fx.js"></script>
+    <script src="js/swordsaint.js"></script>
+    <script src="js/swordsaint_fx.js"></script>
     <script src="js/items.js"></script>
+    <script src="js/potions.js"></script>
     <script src="js/sprites.js"></script>
     <script src="js/portraits.js"></script>
     <script src="js/icons.js"></script>
@@ -351,6 +464,8 @@
     <script src="js/map_cavern.js"></script>
     <script src="js/map_hive.js"></script>
     <script src="js/map_village.js"></script>
+    <script src="js/map_base.js"></script>
+    <script src="js/interiors.js"></script>
     <script src="js/map_trail.js"></script>
     <script src="js/map_bridge.js"></script>
     <script src="js/map_castle.js"></script>
@@ -367,6 +482,15 @@
     <script src="js/combos.js"></script>
     <script src="js/training.js"></script>
     <script src="js/dialogue.js"></script>
+    <script src="js/npcs.js"></script>
+    <script src="js/caches.js"></script>
+    <script src="js/rebuild.js"></script>
+    <script src="js/quests.js"></script>
+    <script src="js/expeditions.js"></script>
+    <script src="js/expeditions_fx.js"></script>
+    <script src="js/sidequests.js"></script>
+    <script src="js/sidequests_fx.js"></script>
+    <script src="js/save.js"></script>
     <script src="js/main.js"></script>
 </body>
 </html>

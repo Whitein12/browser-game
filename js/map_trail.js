@@ -71,6 +71,7 @@ function resetTrail() {
     for (const i of trl.gateCells) trl.grid.data[i] = T_SEAL;
     for (const J of trl.jam) J.k = 0;
     trl.open = 0; trl.gateOpen = false; trl.gateK = 0; trl.promptAt = 0; trl.lastSpawn = null; trl.guard = null;
+    if (activeExpedition) expOpenMap('trail'); // expeditions.js: both logjams and the gate open, nobody at the bridgehead
 }
 
 // Calls fn(i) for every cell whose centre lies within r of (x, y)
@@ -678,7 +679,7 @@ function drawTrailGround() {
         ctx.save(); ctx.globalCompositeOperation = 'lighter'; glow(ctx, F.x, F.y, 140, '#ff8f00', 0.32 + 0.08 * Math.sin(t * 9) + 0.04 * Math.sin(t * 23)); ctx.restore();
         drawFlame(ctx, F.x, F.y, 30, t, 4.2, 1); // bandits.js: the cached flame sprite
     }
-    if (currentMap.caveOpen) { // chevrons and a ring marking the way on
+    if (currentMap.caveOpen && !activeExpedition) { // chevrons and a ring marking the way on (an expedition's road home is at the start: expeditions_fx.js)
         const E = STAGE_MAPS.trail.exit, p = 0.5 + 0.5 * Math.sin(t * 3);
         ctx.save(); ctx.strokeStyle = '#ffd180'; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.shadowBlur = 12; ctx.shadowColor = '#ff9100';
         for (let i = 0; i < 3; i++) {

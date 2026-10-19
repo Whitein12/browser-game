@@ -6,6 +6,7 @@
 
 const PT_W = 300, PT_H = 230, PT_LINE = 'rgba(12, 10, 18, 0.92)', PT_SKIN = '#e2b48a';
 const ptLayer = document.createElement('canvas'), ptLayerCtx = ptLayer.getContext('2d');
+const ptHeroLayer = document.createElement('canvas'), ptHeroCtx = ptHeroLayer.getContext('2d'); // the dialogue's hero, painted each frame beside a big portrait: its own layer, so neither resizes the other's
 const ptRand = i => { const x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
 const ptRgba = (hex, a) => { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16}, ${(n >> 8) & 255}, ${n & 255}, ${a})`; };
 
@@ -112,6 +113,169 @@ function ptEyes(c, y, color, glow, rx = 3, ry = 1.7, gap = 7) {
 // ---------- the nine portraits ----------
 
 const PORTRAITS = {
+    // ---- the new classes (designed 2026-10-14; kits still to come) ----
+    witch: {
+        color: '#6a1b9a',
+        bg(c, t) {
+            ptGlow(c, 238, 50, 70, '#b2ff59', 0.16); // a sickly crescent moon
+            ptEll(c, 238, 50, 21, 21, 'rgba(220, 237, 200, 0.85)', 0); ptEll(c, 229, 45, 19, 19, '#1c0e24', 0);
+            for (let i = 0; i < 6; i++) { // gravestones along the bottom
+                const x = 20 + i * 52 + ptRand(i) * 14, h = 26 + ptRand(i + 3) * 22, w = 13 + ptRand(i + 6) * 6;
+                c.beginPath(); c.moveTo(x - w, PT_H); c.lineTo(x - w, PT_H - h); c.quadraticCurveTo(x, PT_H - h - w * 1.2, x + w, PT_H - h); c.lineTo(x + w, PT_H); c.closePath(); ptFill(c, '#160b1d', 1.6);
+            }
+            for (let i = 0; i < 9; i++) { // souls rising from the graves
+                const x = ptRand(i) * PT_W + Math.sin(t * 1.5 + i) * 10, y = PT_H - ((t * (16 + ptRand(i + 2) * 14) + ptRand(i + 4) * 260) % 260);
+                ptGlow(c, x, y, 12, '#69f0ae', 0.45); ptEll(c, x, y, 2.4, 3.4, 'rgba(185, 246, 202, 0.8)', 0);
+            }
+        },
+        draw(c, t, a) {
+            const sway = Math.sin(t * 1.4) * (2 + 3 * a), PALE = '#e8dcd6', GOWN = '#2a1636';
+            c.beginPath(); c.moveTo(120, 72); c.quadraticCurveTo(94 - sway, 150, 100 - sway, 236); c.lineTo(200 + sway, 236); c.quadraticCurveTo(206 + sway, 150, 180, 72); c.closePath(); ptFill(c, '#141018'); // her hair falls behind
+            ptLine(c, '#3e2723', 7, [[222, 236], [228, 120], [236, 62], [226, 44]]); // a crooked staff
+            ptEll(c, 228, 42, 8, 5, '#d7ccc8', 2); ptEll(c, 228, 34, 13, 12, '#e8e0cc'); // its skull
+            ptEll(c, 223, 33, 3.6, 4, '#1a1020', 0); ptEll(c, 233, 33, 3.6, 4, '#1a1020', 0); ptPoly(c, [[226, 39], [230, 39], [228, 42]], '#1a1020', 0);
+            c.strokeStyle = '#8d8270'; c.lineWidth = 1; c.beginPath(); for (let x = 224; x <= 232; x += 2.7) { c.moveTo(x, 43); c.lineTo(x, 46); } c.moveTo(231, 23); c.lineTo(234, 29); c.stroke(); // teeth, a crack
+            ptTorso(c, GOWN, 44, 40);
+            ptPoly(c, [[126, 130], [174, 130], [162, 200], [150, 212], [138, 200]], '#3d1f4f', 2); // the bodice
+            c.strokeStyle = '#d7ccc8'; c.lineWidth = 1.4; c.beginPath(); // bone lacing
+            for (let y = 140; y < 196; y += 9) { c.moveTo(142 + (y - 140) * 0.1, y); c.lineTo(158 - (y - 140) * 0.1, y + 5); c.moveTo(158 - (y - 140) * 0.1, y); c.lineTo(142 + (y - 140) * 0.1, y + 5); }
+            c.stroke();
+            ptArm(c, GOWN, [190, 126], [214, 168], [224, 148], 16, 12); ptEll(c, 224, 146, 7, 8, PALE); // the hand on the staff
+            ptArm(c, GOWN, [110, 126], [86, 120], [76, 88], 16, 12); ptEll(c, 76, 86, 7, 8, PALE); // the hand raised, cupping soulfire
+            for (const s of [-1, 1]) for (let i = 0; i < 6; i++) { // the feather collar fans out from her shoulders
+                c.save(); c.translate(150 + s * (20 + i * 6), 116 + i * 2); c.scale(2.3, 2.3);
+                sprLeaf(c, 0, 0, -Math.PI / 2 + s * (0.5 + i * 0.22), 10, i % 2 ? '#24182e' : '#140c1c'); c.restore();
+            }
+            ptPoly(c, [[140, 104], [160, 104], [158, 120], [142, 120]], PALE, 2); // neck
+            ptEll(c, 150, 90, 15, 18, PALE);
+            for (const s of [-1, 1]) ptPoly(c, [[150 + s * 12, 74], [150 + s * 18, 86], [150 + s * 17, 120], [150 + s * 12, 112], [150 + s * 13, 92]], '#141018', 1.6); // locks down her face
+            c.beginPath(); c.moveTo(133, 82); c.quadraticCurveTo(140, 66, 150, 76); c.quadraticCurveTo(160, 66, 167, 82); c.quadraticCurveTo(162, 64, 150, 64); c.quadraticCurveTo(138, 64, 133, 82); c.closePath(); ptFill(c, '#141018', 1.6); // parted fringe
+            ptEll(c, 150, 102, 4.5, 1.8, '#5e1d4f', 0); // dark lips
+            c.strokeStyle = '#d7ccc8'; c.lineWidth = 2.2; c.beginPath(); c.moveTo(134, 72); c.quadraticCurveTo(150, 64, 166, 72); c.stroke(); // bone crown
+            for (const s of [-1, 1]) { // antlers
+                ptLine(c, '#e8e0cc', 3.2, [[150 + s * 13, 70], [150 + s * 24, 52], [150 + s * 22, 34]]);
+                ptLine(c, '#e8e0cc', 2.6, [[150 + s * 23, 50], [150 + s * 34, 42]]);
+                ptLine(c, '#e8e0cc', 2.4, [[150 + s * 22, 40], [150 + s * 14, 30]]);
+            }
+        },
+        fx(c, t) {
+            ptEyes(c, 89, '#ccff90', '#76ff03', 2.8, 1.3, 6.5);
+            const f = Math.sin(t * 9) * 2, g = Math.sin(t * 6.3) * 1.5; // soulfire in her hand
+            ptGlow(c, 76, 70, 34, '#69f0ae', 0.55);
+            c.beginPath(); c.moveTo(76 + g, 44 + f); c.quadraticCurveTo(90, 66, 82, 80); c.quadraticCurveTo(76, 86, 70, 80); c.quadraticCurveTo(62, 66, 76 + g, 44 + f); c.fillStyle = 'rgba(185, 246, 202, 0.9)'; c.fill();
+            c.beginPath(); c.moveTo(76 - g, 58 - f); c.quadraticCurveTo(84, 70, 79, 78); c.quadraticCurveTo(76, 81, 73, 78); c.quadraticCurveTo(68, 70, 76 - g, 58 - f); c.fillStyle = '#00e676'; c.fill();
+            for (const x of [223, 233]) { ptGlow(c, x, 33, 7, '#76ff03', 0.5); ptEll(c, x, 33, 1.3, 1.3, '#ccff90', 0); } // sparks in the skull's sockets
+        },
+    },
+
+    monk: {
+        color: '#ef6c00',
+        bg(c, t) {
+            ptGlow(c, 150, 74, 130, '#ffb74d', 0.22); // the temple's sun disc
+            c.strokeStyle = 'rgba(255, 204, 128, 0.35)'; c.lineWidth = 3; c.beginPath(); c.arc(150, 78, 80, 0, Math.PI * 2); c.stroke();
+            c.lineWidth = 1.5; c.beginPath(); c.arc(150, 78, 92, 0, Math.PI * 2); c.stroke();
+            for (let i = 0; i < 9; i++) { // speed streaks rushing past
+                const y = 18 + i * 25, x = ((t * 140 * (0.5 + ptRand(i)) + ptRand(i + 5) * 420) % 440) - 70;
+                c.strokeStyle = 'rgba(255, 224, 178, ' + (0.12 + 0.1 * ptRand(i + 2)) + ')'; c.lineWidth = 2; c.beginPath(); c.moveTo(x, y); c.lineTo(x + 50 + ptRand(i + 1) * 40, y); c.stroke();
+            }
+        },
+        draw(c, t, a) {
+            const b = Math.sin(t * 3.2) * (1.5 + 2.5 * a), SKIN = '#d9a066';
+            ptRibbon(c, '#c62828', 12, [168, 198], [204, 206 + b], [232, 222 - b], [266, 214 + b]); ptRibbon(c, '#b71c1c', 11, [166, 204], [196, 220 - b], [216, 230 + b], [246, 236 - b]); // sash ends
+            ptTorso(c, SKIN, 50, 40);
+            c.strokeStyle = 'rgba(120, 72, 30, 0.45)'; c.lineWidth = 2; c.beginPath(); c.moveTo(118, 150); c.quadraticCurveTo(132, 160, 148, 152); c.moveTo(130, 176); c.lineTo(132, 196); c.stroke(); // the bare side's muscle
+            ptPoly(c, [[172, 112], [198, 126], [196, 160], [190, 236], [112, 236], [120, 204], [150, 170]], '#ef6c00'); // the robe, over his left shoulder
+            c.strokeStyle = '#e65100'; c.lineWidth = 1.6; c.beginPath(); c.moveTo(170, 132); c.quadraticCurveTo(160, 176, 132, 212); c.moveTo(186, 150); c.quadraticCurveTo(176, 196, 160, 236); c.stroke();
+            ptPoly(c, [[110, 196], [192, 186], [194, 200], [112, 212]], '#c62828'); // the sash
+            for (let i = 0; i <= 14; i++) { const u = i / 14, x = 126 + 48 * u, y = 116 + Math.sin(u * Math.PI) * 30; ptEll(c, x, y, 3.6, 3.6, i === 7 ? '#ffb300' : '#5d2a1a', 1.2); } // prayer beads
+            ptArm(c, SKIN, [106, 126], [90, 170], [124, 156], 21, 17); // lead fist forward
+            ptEll(c, 124, 152, 12.5, 11, '#eceff1');
+            c.strokeStyle = '#b0bec5'; c.lineWidth = 1.4; c.beginPath(); for (const dx of [-5, 0, 5]) { c.moveTo(124 + dx, 142); c.lineTo(124 + dx, 162); } c.stroke();
+            ptArm(c, SKIN, [194, 126], [218, 156], [186, 110], 21, 17); // rear fist by the chin
+            ptEll(c, 186, 108, 11, 10, '#eceff1');
+            c.strokeStyle = '#b0bec5'; c.lineWidth = 1.4; c.beginPath(); for (const dy of [-4, 1, 6]) { c.moveTo(177, 108 + dy); c.lineTo(195, 108 + dy); } c.stroke();
+            ptPoly(c, [[138, 104], [162, 104], [164, 122], [136, 122]], SKIN, 2); // a thick neck
+            for (const s of [-1, 1]) ptEll(c, 150 + s * 17, 90, 4, 7, SKIN, 2); // ears
+            ptEll(c, 150, 84, 17, 21, SKIN); // bald head
+            ptEll(c, 143, 70, 7, 4, 'rgba(255, 255, 255, 0.35)', 0);
+            for (const s of [-1, 1]) ptLine(c, '#4e342e', 2.4, [[150 + s * 4, 84], [150 + s * 12, 81]]); // brows, set
+            c.strokeStyle = '#8d5a35'; c.lineWidth = 1.6; c.beginPath(); c.moveTo(146, 99); c.quadraticCurveTo(150, 101, 154, 99); c.stroke();
+            for (let i = 0; i < 3; i++) ptEll(c, 144 + i * 6, 64, 1.4, 1.4, '#8d5a35', 0); // ordination marks
+        },
+        fx(c, t) {
+            ptEyes(c, 89, '#3e2723', '#3e2723', 2.4, 1.6, 6.5);
+            const k = 0.5 + 0.5 * Math.sin(t * 4); // chi gathering in the lead fist
+            ptGlow(c, 124, 152, 30 + 8 * k, '#ffd54f', 0.5);
+            for (let i = 0; i < 3; i++) { const a = t * 3 + i * 2.1; sprStar(c, 124 + Math.cos(a) * 20, 152 + Math.sin(a) * 16, 3 + k, 'rgba(255, 241, 118, 0.9)'); }
+        },
+    },
+
+    swordsaint: { // after the user's reference (2026-10-14): a blonde knight in royal blue and gold, sword planted, golden sword-light
+        color: '#1f4aa8',
+        bg(c, t) {
+            ptGlow(c, 268, 36, 130, '#fff8e1', 0.2); // a shaft of light from above
+            for (let i = 0; i < 3; i++) { // golden sword-light sweeping round her
+                const k = (t * 0.3 + i / 3) % 1, a0 = -2.7 + k * 1.3;
+                c.save(); c.globalAlpha = 0.55 * Math.sin(k * Math.PI); c.strokeStyle = '#ffd54f'; c.lineWidth = 9 - i * 2; c.lineCap = 'round';
+                c.beginPath(); c.arc(150, 290, 210 + i * 34, a0, a0 + 0.8); c.stroke(); c.restore();
+            }
+            for (let i = 0; i < 14; i++) { // motes of gold drifting up
+                const x = ptRand(i) * PT_W + Math.sin(t + i) * 8, y = PT_H - ((t * (14 + ptRand(i + 3) * 16) + ptRand(i + 6) * 260) % 260);
+                ptGlow(c, x, y, 7, '#ffd54f', 0.5); ptEll(c, x, y, 1.6, 2.2, '#fff3c4', 0);
+            }
+        },
+        draw(c, t, a) {
+            const w = Math.sin(t * 2) * (3 + 4 * a), BLUE = '#2552b8', DEEP = '#16357a', GOLD = '#e8b931', WHITE = '#f2f2f5', HAIR = '#f0cf6a', SKIN = '#f1d0b0';
+            ptRibbon(c, '#1a1a22', 18, [170, 108], [208, 92 + w], [240, 122 - w], [280, 98 + w * 1.4]); // the scarf, streaming behind
+            ptRibbon(c, '#1a1a22', 14, [168, 116], [202, 132 - w], [228, 148 + w], [266, 142 - w * 1.2]);
+            c.strokeStyle = GOLD; c.lineWidth = 1.6; c.beginPath(); c.moveTo(176, 106); c.bezierCurveTo(208, 92 + w, 240, 122 - w, 272, 100 + w * 1.3); c.stroke();
+            ptEll(c, 162, 72, 15, 13, '#d9b24e'); // the braided bun
+            c.strokeStyle = '#b8902e'; c.lineWidth = 1.5; c.beginPath(); for (let i = 0; i < 4; i++) { c.moveTo(150 + i * 6, 62); c.quadraticCurveTo(156 + i * 6, 72, 152 + i * 6, 84); } c.stroke();
+            ptEll(c, 172, 66, 6, 4, BLUE, 1.6, 0.5); // a blue ribbon in it
+            const sk = Math.sin(t * 1.6) * (1.5 + 2 * a); // the skirt flares from a narrow waist, frills at the hem
+            c.beginPath(); c.moveTo(126, 196); c.quadraticCurveTo(108, 214, 92 - sk, 240); c.lineTo(208 + sk, 240); c.quadraticCurveTo(192, 214, 174, 196); c.closePath(); ptFill(c, WHITE);
+            c.beginPath(); c.moveTo(127, 194); c.quadraticCurveTo(112, 212, 100 - sk, 236); c.lineTo(200 + sk, 236); c.quadraticCurveTo(188, 212, 173, 194); c.closePath(); ptFill(c, BLUE);
+            for (const x of [138, 162]) ptLine(c, GOLD, 2, [[x, 200], [x + (x - 150) * 0.9, 236]]); // gold pleats
+            c.beginPath(); c.moveTo(118, 116); c.quadraticCurveTo(104, 120, 110, 146); c.quadraticCurveTo(122, 168, 126, 198); c.lineTo(174, 198); c.quadraticCurveTo(178, 168, 190, 146); c.quadraticCurveTo(196, 120, 182, 116); c.closePath(); ptFill(c, BLUE); // shoulders to a slim waist
+            ptPoly(c, [[136, 116], [164, 116], [159, 168], [141, 168]], WHITE, 2); // the white bodice
+            for (const s of [-1, 1]) ptLine(c, GOLD, 2.2, [[150 + s * 15, 120], [150 + s * 10, 168]]); // gold trim
+            ptPoly(c, [[143, 128], [157, 128], [150, 140], [150, 140]], BLUE, 1.4); ptPoly(c, [[143, 144], [157, 144], [150, 156], [150, 156]], BLUE, 1.4); // the crest's chevrons
+            ptPoly(c, [[128, 168], [172, 168], [170, 198], [130, 198]], DEEP); // the corset
+            for (const s of [-1, 1]) for (let i = 0; i < 3; i++) ptEll(c, 150 + s * 8, 174 + i * 9, 2.4, 2.4, GOLD, 1.2); // buttons
+            ptEll(c, 190, 120, 20, 12, '#cfd8dc', 2.4, 0.25); // the silver shoulder guard
+            c.strokeStyle = GOLD; c.lineWidth = 1.6; c.beginPath(); c.ellipse(190, 120, 14, 7, 0.25, 0, Math.PI * 2); c.stroke();
+            // the sword, held upright in front of her, point down, both hands on the grip
+            const G = [150, 184];
+            ptBlade(c, G, [150, 300], 8, '#e3e9ee');
+            c.strokeStyle = 'rgba(37, 82, 184, 0.55)'; c.lineWidth = 2; c.beginPath(); c.moveTo(150, 194); c.lineTo(150, 236); c.stroke(); // an inlay down the fuller
+            ptLine(c, '#1f3a93', 8, [G, [150, 140]]); // the blue grip
+            ptPoly(c, [[124, 181], [176, 181], [172, 189], [128, 189]], GOLD); // the crossguard
+            ptPoly(c, [[150, 177], [156, 185], [150, 195], [144, 185]], '#1f4aa8', 1.6);
+            ptEll(c, 150, 136, 6, 6, GOLD); // the pommel
+            ptArm(c, BLUE, [114, 126], [106, 162], [146, 150], 15, 12); ptEll(c, 132, 154, 6.5, 5, WHITE, 1.6, 0.2); // frilled cuffs
+            ptArm(c, BLUE, [186, 126], [194, 164], [154, 162], 15, 12); ptEll(c, 168, 164, 6.5, 5, WHITE, 1.6, -0.2);
+            ptEll(c, 150, 148, 8, 6.5, SKIN); ptEll(c, 150, 160, 8, 6.5, SKIN); // both hands on the grip
+            ptPoly(c, [[143, 104], [157, 104], [157, 118], [143, 118]], SKIN, 2);
+            for (const s of [-1, 1]) ptPoly(c, [[150 + s * 4, 112], [150 + s * 14, 108], [150 + s * 13, 118], [150 + s * 3, 120]], WHITE, 1.6); // the high collar
+            ptEll(c, 150, 90, 14, 17, SKIN);
+            c.beginPath(); c.moveTo(134, 94); c.quadraticCurveTo(128, 62, 150, 60); c.quadraticCurveTo(172, 62, 166, 94); // fringe falling in points
+            c.lineTo(162, 80); c.lineTo(157, 88); c.lineTo(152, 77); c.lineTo(146, 87); c.lineTo(141, 79); c.lineTo(137, 90); c.closePath(); ptFill(c, HAIR, 1.8);
+            for (const s of [-1, 1]) ptPoly(c, [[150 + s * 14, 76], [150 + s * 18, 92], [150 + s * 15, 112], [150 + s * 12, 98]], HAIR, 1.6); // side locks
+            c.strokeStyle = '#c9a23e'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(146, 63); c.quadraticCurveTo(141, 70, 140, 79); c.moveTo(155, 63); c.quadraticCurveTo(160, 70, 161, 80); c.stroke();
+            for (const s of [-1, 1]) ptLine(c, '#c9a23e', 1.3, [[150 + s * 3, 84], [150 + s * 10, 83]]); // brows, level
+            c.strokeStyle = '#b07a64'; c.lineWidth = 1.4; c.beginPath(); c.moveTo(147, 98.5); c.lineTo(153, 98.5); c.stroke(); // a firm mouth
+        },
+        fx(c, t) {
+            ptEyes(c, 90, '#a7ffeb', '#1de9b6', 2.6, 1.7, 6.5);
+            const g = (t * 0.5) % 1; // a glint running down the blade
+            if (g < 0.4) sprStar(c, 150, 198 + 40 * g / 0.4, 4, 'rgba(255, 255, 255, 0.95)');
+            ptGlow(c, 150, 186, 10, '#448aff', 0.6); // the gem in the guard
+            const k = (t * 0.45) % 1; // a stroke of sword-light passing in front of her
+            c.save(); c.globalAlpha = 0.6 * Math.sin(k * Math.PI); c.strokeStyle = '#ffe082'; c.lineWidth = 6; c.lineCap = 'round';
+            c.beginPath(); c.arc(150, 330, 190, -2.5 + k * 1.1, -2.0 + k * 1.1); c.stroke(); c.restore();
+        },
+    },
+
     dragonknight: {
         color: '#e53935',
         bg(c, t) { // embers rising from below
@@ -541,30 +705,47 @@ const PORTRAITS = {
 // ---------- rendering ----------
 
 // Paint one portrait onto `cv`. t is the clock, a (0..1) how much life the highlighted card gets.
-function drawPortrait(cv, id, t, a) {
+// bare (dialogue.js, the hero answering): no card behind, only a soft aura in the class colour, and the waist fades out to
+// nothing instead of into the card, so the hero stands on the screen like the big portraits.
+function drawPortrait(cv, id, t, a, bare) {
     const P = PORTRAITS[id]; if (!P) return;
-    const c = cv.getContext('2d'), k = cv.width / PT_W;
-    c.setTransform(k, 0, 0, k, 0, 0); c.lineJoin = 'round';
-    let g = c.createLinearGradient(0, 0, 0, PT_H); g.addColorStop(0, sprShade(P.color, -0.8)); g.addColorStop(1, '#201c18');
-    c.fillStyle = g; c.fillRect(0, 0, PT_W, PT_H);
-    ptGlow(c, 150, 110, 160, P.color, 0.28);
-    P.bg(c, t, a);
+    const c = cv.getContext('2d'), k = cv.width / PT_W, lay = bare ? ptHeroLayer : ptLayer;
+    let g;
+    if (bare) {
+        c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, cv.width, cv.height);
+        c.setTransform(k, 0, 0, k, 0, 0); c.lineJoin = 'round';
+        ptGlow(c, 150, 120, 110, P.color, 0.2); // kept inside the frame, so no hard edge
+    } else {
+        c.setTransform(k, 0, 0, k, 0, 0); c.lineJoin = 'round';
+        g = c.createLinearGradient(0, 0, 0, PT_H); g.addColorStop(0, sprShade(P.color, -0.8)); g.addColorStop(1, '#201c18');
+        c.fillStyle = g; c.fillRect(0, 0, PT_W, PT_H);
+        ptGlow(c, 150, 110, 160, P.color, 0.28);
+        P.bg(c, t, a);
+    }
 
     // The hero goes on its own layer so the top-left light tints it as one image
-    if (ptLayer.width !== cv.width || ptLayer.height !== cv.height) { ptLayer.width = cv.width; ptLayer.height = cv.height; }
-    const L = ptLayerCtx, breathe = 1 + Math.sin(t * 2.2) * 0.008;
+    if (lay.width !== cv.width || lay.height !== cv.height) { lay.width = cv.width; lay.height = cv.height; }
+    const L = bare ? ptHeroCtx : ptLayerCtx, breathe = 1 + Math.sin(t * 2.2) * 0.008;
     const body = ctx2 => { ctx2.setTransform(k, 0, 0, k, 0, 0); ctx2.translate(150, PT_H); ctx2.scale(1, breathe); ctx2.translate(-150, -PT_H); ctx2.lineJoin = 'round'; };
-    L.setTransform(1, 0, 0, 1, 0, 0); L.clearRect(0, 0, ptLayer.width, ptLayer.height);
+    L.setTransform(1, 0, 0, 1, 0, 0); L.clearRect(0, 0, lay.width, lay.height);
     body(L); P.draw(L, t, a);
     L.setTransform(1, 0, 0, 1, 0, 0); L.globalCompositeOperation = 'source-atop';
-    g = L.createLinearGradient(0, 0, ptLayer.width, ptLayer.height);
+    g = L.createLinearGradient(0, 0, lay.width, lay.height);
     g.addColorStop(0, 'rgba(255, 244, 220, 0.2)'); g.addColorStop(0.45, 'rgba(255, 255, 255, 0)'); g.addColorStop(1, 'rgba(0, 0, 20, 0.38)');
-    L.fillStyle = g; L.fillRect(0, 0, ptLayer.width, ptLayer.height);
+    L.fillStyle = g; L.fillRect(0, 0, lay.width, lay.height);
     L.globalCompositeOperation = 'source-over';
-    c.setTransform(1, 0, 0, 1, 0, 0); c.drawImage(ptLayer, 0, 0);
+    c.setTransform(1, 0, 0, 1, 0, 0); c.drawImage(lay, 0, 0);
 
     c.save(); body(c); if (P.fx) P.fx(c, t, a); c.restore();
-    c.setTransform(k, 0, 0, k, 0, 0); // melt the waist into the card
+    c.setTransform(k, 0, 0, k, 0, 0);
+    if (bare) { // fade the waist out to transparent
+        c.globalCompositeOperation = 'destination-out';
+        g = c.createLinearGradient(0, PT_H - 70, 0, PT_H); g.addColorStop(0, 'rgba(0, 0, 0, 0)'); g.addColorStop(1, 'rgba(0, 0, 0, 1)');
+        c.fillStyle = g; c.fillRect(0, PT_H - 70, PT_W, 70);
+        c.globalCompositeOperation = 'source-over';
+        return;
+    }
+    // melt the waist into the card
     g = c.createLinearGradient(0, PT_H - 70, 0, PT_H); g.addColorStop(0, 'rgba(32, 28, 24, 0)'); g.addColorStop(1, 'rgba(32, 28, 24, 1)');
     c.fillStyle = g; c.fillRect(0, PT_H - 70, PT_W, 70);
 }
@@ -671,7 +852,290 @@ const BIG_PORTRAITS = {
         draw(c, t) { BIG_PORTRAITS.valerius.draw(c, t, true); },
         fx(c, t) { for (const s of [-1, 1]) ptGlow(c, 200 + s * 17, 110, 26, '#ff5722', 0.32 + 0.1 * Math.sin(t * 3.1)); },
     },
+
+    // ---- Cinderholt's old friends (BASE.md): a calmer rim and aura than his, each in their own colour ----
+
+    // The smith, after the user's description (2026-10-16): an older, bigger man in his sixties. Bald on top with a white
+    // fringe, bushy white brows over small crinkled eyes, a broad nose and ruddy cheeks, a great white beard down his chest
+    // braided through an iron ring at its tip; a linen shirt rolled to the elbows over thick, scarred forearms, a scorched leather apron,
+    // his sledge resting on his shoulder and the other thumb hooked in the apron's band. The forge glows behind him.
+    smith: {
+        w: 400, h: 520, rim: '255, 120, 30', tint: '#ffab5e',
+        bg(c, t) {
+            const g = c.createRadialGradient(200, 290, 20, 200, 290, 196); g.addColorStop(0, 'rgba(225, 105, 25, 0.55)'); g.addColorStop(1, 'rgba(225, 105, 25, 0)');
+            c.fillStyle = g; c.fillRect(0, 0, 400, 520);
+            for (let i = 0; i < 18; i++) { const y = 520 - ((t * (40 + ptRand(i) * 50) + ptRand(i + 9) * 560) % 560), x = ptRand(i + 3) * 400 + Math.sin(t * 2 + i) * 14; c.fillStyle = `rgba(255, ${170 + (i % 3) * 30}, 80, ${0.2 + 0.6 * y / 520})`; c.fillRect(x, y, 2.6, 2.6); } // sparks off the anvil
+        },
+        draw(c, t) {
+            const SKIN = '#c98d6c', SKIN_D = '#9a6248', WHITE = '#dcd7cf', WHITE_D = '#9f978e', SHIRT = '#cfbf9e', SHIRT_D = '#a8977a', APRON = '#6e4528', APRON_D = '#4a2d19', IRON = '#3b3e44', STEEL = '#8e979e', H = 520;
+            // the shirt: a broad, heavy frame, a belly under the apron
+            const body = () => { c.beginPath(); c.moveTo(84, 216); c.quadraticCurveTo(104, 182, 160, 176); c.lineTo(240, 176); c.quadraticCurveTo(296, 182, 316, 216); c.quadraticCurveTo(330, 300, 320, 380); c.quadraticCurveTo(334, 450, 322, H + 10); c.lineTo(78, H + 10); c.quadraticCurveTo(66, 450, 80, 380); c.quadraticCurveTo(70, 300, 84, 216); c.closePath(); };
+            body(); ptFill(c, SHIRT, 3); bigShade(c, body, 0.25);
+            c.strokeStyle = SHIRT_D; c.lineWidth = 2; c.beginPath(); c.moveTo(96, 300); c.quadraticCurveTo(110, 340, 104, 372); c.moveTo(304, 300); c.quadraticCurveTo(292, 340, 298, 372); c.stroke(); // folds
+            // the apron, scorched, a pocket of tools
+            for (const s of [-1, 1]) ptLine(c, APRON_D, 8, [[200 + s * 48, 242], [200 + s * 34, 182]]); // the neck strap
+            const apron = () => { c.beginPath(); c.moveTo(144, 236); c.lineTo(256, 236); c.quadraticCurveTo(262, 322, 292, 372); c.lineTo(306, H + 10); c.lineTo(94, H + 10); c.lineTo(108, 372); c.quadraticCurveTo(138, 322, 144, 236); c.closePath(); };
+            apron(); ptFill(c, APRON, 3); bigShade(c, apron, 0.3);
+            c.fillStyle = 'rgba(20, 10, 4, 0.35)'; for (const [x, y, rx, ry] of [[160, 430, 14, 8], [236, 330, 9, 6], [128, 488, 10, 6], [262, 492, 16, 7]]) { c.beginPath(); c.ellipse(x, y, rx, ry, 0.3, 0, Math.PI * 2); c.fill(); } // scorch marks
+            c.strokeStyle = 'rgba(230, 190, 140, 0.35)'; c.lineWidth = 1.4; c.beginPath(); for (let y = 246; y < 360; y += 9) { c.moveTo(150 + (y - 236) * 0.06 - (y > 300 ? (y - 300) * 0.3 : 0), y); c.lineTo(150 + (y - 236) * 0.06 - (y > 300 ? (y - 300) * 0.3 : 0), y + 4); } c.stroke(); // stitching down the bib
+            ptLine(c, '#2c2f33', 5, [[226, 404], [220, 360]]); ptLine(c, '#2c2f33', 5, [[238, 404], [246, 362]]); ptEll(c, 233, 360, 8, 4, '#2c2f33', 2); // the tongs' handles out of the pocket
+            ptLine(c, '#7a5a3a', 6, [[256, 406], [262, 368]]); // a file
+            c.beginPath(); c.rect(206, 400, 66, 54); ptFill(c, APRON_D, 2.6);
+            c.beginPath(); c.rect(108, 368, 184, 16); ptFill(c, APRON_D, 2.6); // the waistband
+            // his left arm (our right): thick, the sleeve rolled up, the thumb hooked in the band
+            const LS = [298, 218], LE = [338, 316], LH = [294, 378];
+            ptArm(c, SKIN, LS, LE, LH, 46, 38);
+            ptLine(c, SHIRT, 42, [LS, [lerp(LS[0], LE[0], 0.78), lerp(LS[1], LE[1], 0.78)]]);
+            ptEll(c, lerp(LS[0], LE[0], 0.8), lerp(LS[1], LE[1], 0.8), 27, 12, SHIRT_D, 2.6, Math.atan2(LE[1] - LS[1], LE[0] - LS[0]) + Math.PI / 2); // the rolled cuff
+            c.strokeStyle = 'rgba(70, 40, 25, 0.5)'; c.lineWidth = 1.4; c.beginPath(); for (let k = 0; k < 6; k++) { const x = lerp(LE[0], LH[0], 0.3 + k * 0.09), y = lerp(LE[1], LH[1], 0.3 + k * 0.09); c.moveTo(x - 6, y - 3); c.lineTo(x - 3, y - 7); } c.stroke(); // grey hair on the forearm
+            ptEll(c, LH[0], LH[1], 21, 19, SKIN, 2.8);
+            c.strokeStyle = SKIN_D; c.lineWidth = 1.6; c.beginPath(); for (let k = 0; k < 3; k++) { c.moveTo(LH[0] - 12 + k * 8, LH[1] + 6); c.lineTo(LH[0] - 10 + k * 8, LH[1] + 16); } c.stroke(); // knuckles
+            // his right arm (our left): the sledge on his shoulder, the haft in his fist
+            const RS = [102, 218], RE = [64, 320], E0 = [152, 330], T0 = [102, 168];
+            ptArm(c, SKIN, RS, RE, [140, 284], 46, 38);
+            ptLine(c, SHIRT, 42, [RS, [lerp(RS[0], RE[0], 0.78), lerp(RS[1], RE[1], 0.78)]]);
+            ptEll(c, lerp(RS[0], RE[0], 0.8), lerp(RS[1], RE[1], 0.8), 27, 12, SHIRT_D, 2.6, Math.atan2(RE[1] - RS[1], RE[0] - RS[0]) + Math.PI / 2);
+            c.fillStyle = 'rgba(190, 90, 80, 0.5)'; c.beginPath(); c.ellipse(96, 300, 9, 14, -0.9, 0, Math.PI * 2); c.fill(); // an old burn on the forearm
+            c.strokeStyle = 'rgba(240, 170, 150, 0.6)'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(90, 294); c.quadraticCurveTo(98, 298, 102, 308); c.stroke();
+            const hl = Math.hypot(T0[0] - E0[0], T0[1] - E0[1]), ux = (T0[0] - E0[0]) / hl, uy = (T0[1] - E0[1]) / hl, nx = -uy, ny = ux, at = (u, o) => [T0[0] + ux * u + nx * o, T0[1] + uy * u + ny * o];
+            ptLine(c, '#6d4c33', 12, [E0, T0]); // the haft
+            c.strokeStyle = 'rgba(0, 0, 0, 0.2)'; c.lineWidth = 4; c.beginPath(); c.moveTo(E0[0] + 3, E0[1]); c.lineTo(T0[0] + 3, T0[1]); c.stroke();
+            ptPoly(c, [at(-20, -44), at(18, -44), at(18, 40), at(-20, 40)], IRON, 3); // the sledge's head, across his shoulder
+            ptPoly(c, [at(-22, -44), at(20, -44), at(16, -54), at(-18, -54)], STEEL, 2.6); ptPoly(c, [at(-22, 40), at(20, 40), at(16, 50), at(-18, 50)], STEEL, 2.6); // its two faces, worn bright
+            c.strokeStyle = 'rgba(255, 255, 255, 0.3)'; c.lineWidth = 2.4; c.beginPath(); c.moveTo(...at(14, -38)); c.lineTo(...at(14, 34)); c.stroke();
+            ptEll(c, 140, 284, 23, 20, SKIN, 2.8); // the fist round the haft
+            c.strokeStyle = SKIN_D; c.lineWidth = 1.6; c.beginPath(); for (let k = 0; k < 3; k++) { c.moveTo(130 + k * 9, 272); c.lineTo(128 + k * 9, 284); } c.stroke();
+            // a thick neck, then the head
+            ptPoly(c, [[168, 146], [232, 146], [240, 192], [160, 192]], SKIN_D, 2.6);
+            for (const s of [-1, 1]) ptEll(c, 200 + s * 49, 124, 9, 15, SKIN_D, 2.6); // ears
+            const head = () => { c.beginPath(); c.moveTo(154, 112); c.bezierCurveTo(150, 54, 250, 54, 246, 112); c.quadraticCurveTo(248, 150, 236, 168); c.quadraticCurveTo(200, 190, 164, 168); c.quadraticCurveTo(152, 150, 154, 112); c.closePath(); };
+            head(); ptFill(c, SKIN, 3);
+            c.save(); head(); c.clip();
+            let g = c.createLinearGradient(176, 0, 250, 0); g.addColorStop(0, 'rgba(60, 24, 12, 0)'); g.addColorStop(1, 'rgba(60, 24, 12, 0.35)'); c.fillStyle = g; c.fillRect(150, 50, 100, 140);
+            ptEll(c, 182, 72, 16, 7, 'rgba(255, 240, 225, 0.35)', 0, -0.3); // the shine on his pate
+            c.fillStyle = 'rgba(40, 28, 22, 0.32)'; c.beginPath(); c.ellipse(222, 84, 13, 5, -0.2, 0, Math.PI * 2); c.fill(); // soot on his brow
+            c.restore();
+            c.strokeStyle = 'rgba(110, 60, 40, 0.45)'; c.lineWidth = 1.6; c.beginPath(); for (const y of [84, 92]) { c.moveTo(178, y); c.quadraticCurveTo(200, y - 4, 222, y); } c.stroke(); // lines across the brow
+            for (const s of [-1, 1]) { c.beginPath(); c.moveTo(200 + s * 40, 84); c.quadraticCurveTo(200 + s * 56, 96, 200 + s * 52, 120); c.quadraticCurveTo(200 + s * 50, 132, 200 + s * 44, 136); c.quadraticCurveTo(200 + s * 46, 112, 200 + s * 38, 96); c.closePath(); ptFill(c, WHITE, 2.4); } // the white fringe over his ears
+            c.fillStyle = 'rgba(205, 85, 65, 0.3)'; for (const s of [-1, 1]) { c.beginPath(); c.ellipse(200 + s * 27, 132, 13, 9, 0, 0, Math.PI * 2); c.fill(); } // ruddy cheeks
+            // small eyes, crinkled with laughing
+            for (const s of [-1, 1]) {
+                const x = 200 + s * 19;
+                c.fillStyle = '#2a1a12'; c.beginPath(); c.ellipse(x, 113, 4.2, 3, 0, 0, Math.PI * 2); c.fill();
+                ptEll(c, x - 1.2, 112, 1.2, 1.2, 'rgba(255, 255, 255, 0.85)', 0);
+                c.strokeStyle = '#5c3524'; c.lineWidth = 2.2; c.beginPath(); c.moveTo(x - 8, 112); c.quadraticCurveTo(x, 106, x + 8, 112); c.stroke(); // the lid
+                c.lineWidth = 1.4; c.beginPath(); c.moveTo(x - 6, 118); c.quadraticCurveTo(x, 121, x + 6, 118); c.stroke();
+                c.strokeStyle = 'rgba(110, 60, 40, 0.55)'; c.beginPath(); for (let k = -1; k <= 1; k++) { c.moveTo(x + s * 11, 113 + k * 3); c.lineTo(x + s * 17, 112 + k * 6); } c.stroke(); // crow's feet
+            }
+            for (const s of [-1, 1]) { ptLine(c, WHITE, 6, [[200 + s * 6, 98], [200 + s * 18, 95], [200 + s * 31, 99], [200 + s * 39, 108]]); c.strokeStyle = WHITE; c.lineWidth = 2; c.beginPath(); c.moveTo(200 + s * 34, 102); c.lineTo(200 + s * 42, 100); c.moveTo(200 + s * 26, 98); c.lineTo(200 + s * 30, 92); c.stroke(); } // bushy brows
+            ptEll(c, 200, 133, 12, 10, '#c27e5e', 2.4); // a broad nose
+            ptEll(c, 196, 129, 4, 3, 'rgba(255, 230, 210, 0.4)', 0);
+            c.fillStyle = '#6e3a28'; for (const s of [-1, 1]) { c.beginPath(); c.ellipse(200 + s * 5, 139, 2.6, 1.6, 0, 0, Math.PI * 2); c.fill(); }
+            // the beard: from the sideburns down over his chest, its tip braided through an iron ring
+            const beard = () => { c.beginPath(); c.moveTo(152, 116); c.quadraticCurveTo(142, 178, 160, 216); c.quadraticCurveTo(178, 254, 200, 260); c.quadraticCurveTo(222, 254, 240, 216); c.quadraticCurveTo(258, 178, 248, 116); c.quadraticCurveTo(246, 140, 228, 150); c.quadraticCurveTo(214, 156, 200, 156); c.quadraticCurveTo(186, 156, 172, 150); c.quadraticCurveTo(154, 140, 152, 116); c.closePath(); };
+            ptLine(c, WHITE, 20, [[200, 240], [201, 270], [198, 292]]); c.strokeStyle = WHITE_D; c.lineWidth = 1.4; c.beginPath(); for (let y = 262; y < 292; y += 7) { c.moveTo(192, y); c.lineTo(206, y + 4); } c.stroke(); ptEll(c, 200, 266, 13, 6, IRON, 2.4); // the beard's tip, braided through an iron ring
+            beard(); ptFill(c, WHITE, 3); bigShade(c, beard, 0.2);
+            c.strokeStyle = WHITE_D; c.lineWidth = 1.6; c.beginPath(); for (let k = 0; k < 7; k++) { const x = 164 + k * 12; c.moveTo(x, 170 + Math.abs(k - 3) * 4); c.quadraticCurveTo(x + (k - 3) * 1.5, 210, 200 + (x - 200) * 0.6, 244 - Math.abs(k - 3) * 6); } c.stroke(); // strands
+            c.strokeStyle = '#6e3626'; c.lineWidth = 2.4; c.lineCap = 'round'; c.beginPath(); c.moveTo(191, 164); c.quadraticCurveTo(200, 171, 209, 164); c.stroke(); // a smile under it
+            c.beginPath(); c.moveTo(200, 142); c.quadraticCurveTo(184, 140, 168, 152); c.quadraticCurveTo(158, 160, 160, 172); c.quadraticCurveTo(176, 160, 200, 158); c.quadraticCurveTo(224, 160, 240, 172); c.quadraticCurveTo(242, 160, 232, 152); c.quadraticCurveTo(216, 140, 200, 142); c.closePath(); ptFill(c, WHITE, 2.6); // the moustache
+            c.strokeStyle = WHITE_D; c.lineWidth = 1.2; c.beginPath(); for (const s of [-1, 1]) for (let k = 0; k < 3; k++) { c.moveTo(200 + s * (6 + k * 8), 147); c.quadraticCurveTo(200 + s * (12 + k * 9), 152, 200 + s * (16 + k * 10), 162); } c.stroke();
+        },
+        fx(c, t) { const k = (t * 0.4) % 1; if (k < 0.25) sprStar(c, 80 + k * 40, 150 + k * 20, 4, 'rgba(255, 236, 200, 0.9)'); }, // a glint along the sledge's face
+    },
+
+    // The apothecary, after the user's reference (referencess/apothecar.png): a young herbalist in a green wrap jacket with a
+    // dark collar band, wide sleeves lined in lime, a wine-red skirt; dark green hair in blunt bangs, tied up in a bun with
+    // a blue ribbon, two thin braids beaded at the ends; blue-violet eyes under heavy lids, freckles, a knowing half-smile.
+    // A sprig of herbs in her clasped hands; leaves drift through a jade glow.
+    apothecary: {
+        w: 400, h: 520, rim: '60, 200, 140', tint: '#8fe0b0',
+        bg(c, t) {
+            const g = c.createRadialGradient(200, 280, 20, 200, 280, 196); g.addColorStop(0, 'rgba(50, 160, 110, 0.5)'); g.addColorStop(1, 'rgba(50, 160, 110, 0)');
+            c.fillStyle = g; c.fillRect(0, 0, 400, 520);
+            for (let i = 0; i < 12; i++) { // leaves and petals drifting down
+                const x = ptRand(i) * 400 + Math.sin(t * 0.8 + i) * 18, y = (t * (14 + ptRand(i + 20) * 14) + ptRand(i + 40) * 560) % 560 - 20;
+                c.save(); c.globalAlpha = 0.25 + 0.4 * (1 - y / 540); c.translate(x, y); c.scale(2, 2);
+                if (i % 3) sprLeaf(c, 0, 0, t * (0.4 + ptRand(i + 7)) + i, 7, i % 2 ? '#81c784' : '#4caf50'); else ptEll(c, 0, 0, 2.6, 1.8, '#f1f8e9', 0, t + i);
+                c.restore();
+            }
+        },
+        draw(c, t) {
+            const SKIN = '#f3d8c2', SKIN_D = '#d6a88c', HAIR = '#1c3a34', HAIR_L = '#33665a', GREEN = '#6cae60', GREEN_D = '#4e8c47', COLLAR = '#2d6a3b', MINT = '#a8dba4', LIME = '#cdd95e', SKIRT = '#7a3350', RIBBON = '#5b73c9', H = 520;
+            // the bun on the top of her head, a blue ribbon round it
+            ptEll(c, 226, 54, 23, 20, HAIR, 3);
+            c.strokeStyle = HAIR_L; c.lineWidth = 2; c.beginPath(); c.arc(226, 54, 12, -2.6, 0.8); c.stroke();
+            for (const s of [-1, 1]) ptEll(c, 236 + s * 11, 34 - s * 2, 11, 6, RIBBON, 2.4, s * 0.5); ptEll(c, 236, 35, 5, 5, RIBBON, 2.2);
+            ptRibbon(c, RIBBON, 6, [238, 38], [250, 46], [254, 58], [262, 66]);
+            // the skirt below the jacket's hem
+            c.beginPath(); c.moveTo(118, 440); c.lineTo(282, 440); c.quadraticCurveTo(300, 480, 312, H + 10); c.lineTo(88, H + 10); c.quadraticCurveTo(100, 480, 118, 440); c.closePath(); ptFill(c, SKIRT, 3);
+            c.strokeStyle = '#4f1d33'; c.lineWidth = 2; c.beginPath(); c.moveTo(150, 494); c.lineTo(144, H); c.moveTo(250, 492); c.lineTo(258, H); c.stroke();
+            // the jacket: loose, boxy, to the hips
+            const jacket = () => { c.beginPath(); c.moveTo(172, 186); c.quadraticCurveTo(132, 190, 124, 214); c.lineTo(116, 488); c.quadraticCurveTo(200, 498, 284, 488); c.lineTo(276, 214); c.quadraticCurveTo(268, 190, 228, 186); c.closePath(); };
+            jacket(); ptFill(c, GREEN, 3); bigShade(c, jacket, 0.22);
+            c.strokeStyle = GREEN_D; c.lineWidth = 2; c.beginPath(); c.moveTo(270, 430); c.lineTo(276, 486); c.stroke(); // the side slit
+            // the crossed collar: a white under-collar, the dark band of the right lapel under the left
+            ptPoly(c, [[178, 182], [222, 182], [204, 240]], '#f3f0e8', 2.4);
+            ptPoly(c, [[172, 184], [184, 182], [206, 230], [196, 238]], COLLAR, 2.4);
+            ptPoly(c, [[214, 180], [230, 184], [170, 356], [152, 348]], COLLAR, 2.6);
+            ptLine(c, MINT, 3, [[218, 186], [160, 346]]);
+            // the wide sleeves, the forearms meeting at her waist
+            for (const s of [-1, 1]) {
+                const X = x => 200 + s * (x - 200);
+                const sleeve = () => { c.beginPath(); c.moveTo(X(124), 208); c.lineTo(X(154), 212); c.lineTo(X(162), 300); c.lineTo(X(188), 356); c.lineTo(X(190), 410); c.quadraticCurveTo(X(150), 440, X(104), 424); c.quadraticCurveTo(X(92), 330, X(124), 208); c.closePath(); };
+                sleeve(); ptFill(c, GREEN, 3); if (s > 0) bigShade(c, sleeve, 0.22);
+                c.strokeStyle = GREEN_D; c.lineWidth = 2; c.beginPath(); c.moveTo(X(130), 300); c.quadraticCurveTo(X(140), 360, X(126), 414); c.moveTo(X(160), 330); c.quadraticCurveTo(X(170), 380, X(160), 420); c.stroke(); // folds
+                ptEll(c, X(186), 384, 8, 26, LIME, 2.6); // the cuff, lined in lime
+                ptEll(c, X(189), 384, 4, 19, '#7d6a4a', 0);
+            }
+            // a sprig of herbs, little white flowers, held in her clasped hands
+            ptLine(c, '#5a7d3a', 3, [[200, 392], [206, 352], [214, 318]]);
+            for (const [x, y, a] of [[206, 360, -0.6], [210, 344, 0.9], [212, 330, -0.8], [204, 372, 0.7]]) { c.save(); c.translate(x, y); c.scale(1.6, 1.6); sprLeaf(c, 0, 0, a - 1.4, 8, '#66bb6a'); c.restore(); }
+            for (let k = 0; k < 5; k++) ptEll(c, 214 + Math.cos(k * 1.26) * 5, 314 + Math.sin(k * 1.26) * 5, 3.2, 3.2, '#fafafa', 1.4);
+            ptEll(c, 214, 314, 2, 2, '#fdd835', 0);
+            ptEll(c, 193, 387, 17, 13, SKIN, 2.4, 0.2); ptEll(c, 208, 393, 17, 13, SKIN, 2.4, -0.2); // her hands, one over the other
+            c.strokeStyle = SKIN_D; c.lineWidth = 1.3; c.beginPath(); for (let k = 0; k < 3; k++) { c.moveTo(198 + k * 6, 388); c.lineTo(202 + k * 6, 400); } c.stroke();
+            // the neck and the head
+            ptPoly(c, [[189, 160], [211, 160], [213, 188], [187, 188]], SKIN_D, 2.4);
+            ptEll(c, 200, 104, 46, 50, HAIR, 3); // the hair behind her face
+            const face = () => { c.beginPath(); c.moveTo(162, 108); c.quadraticCurveTo(160, 146, 178, 164); c.quadraticCurveTo(192, 178, 200, 178); c.quadraticCurveTo(208, 178, 222, 164); c.quadraticCurveTo(240, 146, 238, 108); c.closePath(); };
+            face(); ptFill(c, SKIN, 3);
+            c.save(); face(); c.clip(); const g = c.createLinearGradient(184, 0, 240, 0); g.addColorStop(0, 'rgba(120, 60, 40, 0)'); g.addColorStop(1, 'rgba(120, 60, 40, 0.22)'); c.fillStyle = g; c.fillRect(160, 100, 80, 80); c.restore();
+            c.fillStyle = 'rgba(235, 120, 120, 0.25)'; for (const s of [-1, 1]) { c.beginPath(); c.ellipse(200 + s * 22, 142, 9, 5, 0, 0, Math.PI * 2); c.fill(); } // a faint blush
+            c.fillStyle = 'rgba(150, 90, 60, 0.6)'; for (const s of [-1, 1]) for (const [dx, dy] of [[8, 134], [13, 137], [18, 134], [22, 139], [11, 141], [17, 142]]) { c.beginPath(); c.arc(200 + s * dx, dy, 1, 0, Math.PI * 2); c.fill(); } // freckles over her nose and cheeks
+            // eyes: blue-violet, heavy-lidded, unimpressed
+            for (const s of [-1, 1]) {
+                const x = 200 + s * 17, y = 124;
+                const eye = () => { c.beginPath(); c.moveTo(x - s * 11, y + 1); c.quadraticCurveTo(x, y - 5, x + s * 11, y - 2); c.quadraticCurveTo(x + s * 2, y + 9, x - s * 11, y + 1); c.closePath(); };
+                eye(); c.fillStyle = '#fbf8f4'; c.fill();
+                c.save(); eye(); c.clip();
+                ptEll(c, x + s * 1, y + 2, 6, 7.5, '#6a66c9', 0); ptEll(c, x + s * 1, y + 4, 4, 4, '#3d3a8a', 0); ptEll(c, x + s * 1, y + 3, 2.4, 3, '#1b1a33', 0);
+                c.fillStyle = 'rgba(20, 16, 40, 0.35)'; c.fillRect(x - 12, y - 6, 24, 5); // the lid's shadow
+                c.restore();
+                ptEll(c, x + s * 3, y, 1.6, 1.6, '#ffffff', 0);
+                c.strokeStyle = '#1b1a22'; c.lineWidth = 2.8; c.lineCap = 'round'; c.beginPath(); c.moveTo(x - s * 11, y + 1); c.quadraticCurveTo(x, y - 5, x + s * 12, y - 3); c.stroke(); // the lash line, flat and heavy
+                c.lineWidth = 1.2; c.strokeStyle = 'rgba(60, 40, 40, 0.6)'; c.beginPath(); c.moveTo(x - s * 6, y + 7); c.quadraticCurveTo(x + s * 2, y + 8, x + s * 9, y + 4); c.stroke();
+            }
+            c.strokeStyle = SKIN_D; c.lineWidth = 1.4; c.beginPath(); c.moveTo(201, 136); c.lineTo(199, 141); c.stroke(); // a small nose
+            c.strokeStyle = '#a35a50'; c.lineWidth = 1.8; c.beginPath(); c.moveTo(193, 155); c.quadraticCurveTo(200, 157, 207, 153); c.stroke(); // a half-smile, one corner up
+            // the blunt bangs, the locks down past her cheeks, beaded braids
+            c.beginPath(); c.moveTo(156, 120); c.quadraticCurveTo(148, 58, 200, 54); c.quadraticCurveTo(252, 58, 244, 120); c.lineTo(238, 112); c.lineTo(162, 112); c.closePath(); ptFill(c, HAIR, 3);
+            c.strokeStyle = HAIR_L; c.lineWidth = 2; c.beginPath(); for (const x of [176, 192, 208, 224]) { c.moveTo(x - 2, 66); c.quadraticCurveTo(x + (x - 200) * 0.1, 90, x, 110); } c.stroke();
+            c.strokeStyle = 'rgba(120, 200, 180, 0.4)'; c.lineWidth = 3; c.beginPath(); c.arc(200, 100, 38, -2.5, -1.1); c.stroke(); // the shine
+            for (const s of [-1, 1]) {
+                ptPoly(c, [[200 + s * 38, 104], [200 + s * 46, 134], [200 + s * 42, 172], [200 + s * 36, 178], [200 + s * 36, 136], [200 + s * 33, 112]], HAIR, 2.4);
+                ptLine(c, HAIR, 7, [[200 + s * 39, 172], [200 + s * 42, 206], [200 + s * 42, 236]]);
+                c.strokeStyle = HAIR_L; c.lineWidth = 1.2; c.beginPath(); for (let y = 180; y < 234; y += 6) { c.moveTo(200 + s * 38, y); c.lineTo(200 + s * 45, y + 3); } c.stroke();
+                ptEll(c, 200 + s * 42, 244, 4.5, 5.5, s < 0 ? '#5c8fd6' : '#d9824a', 2);
+            }
+        },
+    },
+
+    // The merchant, after the user's reference (referencess/merchant.webp): a cheerful young trader with wavy silver hair,
+    // a green cap with a gold spiral and a white feather, a mint tunic, a dark green hooded capelet trimmed in gold and green
+    // triangles, a red bow at his collar, a long cape behind, a belt with pouches. One hand rubs the back of his head under
+    // the cap, the other flips a coin. Coins glint in a gold glow behind him.
+    merchant: {
+        w: 400, h: 520, rim: '255, 200, 70', tint: '#ffd36b',
+        bg(c, t) {
+            const g = c.createRadialGradient(200, 280, 20, 200, 280, 196); g.addColorStop(0, 'rgba(210, 160, 40, 0.5)'); g.addColorStop(1, 'rgba(210, 160, 40, 0)');
+            c.fillStyle = g; c.fillRect(0, 0, 400, 520);
+            for (let i = 0; i < 10; i++) { // coins drifting up, turning
+                const x = ptRand(i) * 400 + Math.sin(t + i) * 10, y = 520 - ((t * (16 + ptRand(i + 3) * 14) + ptRand(i + 6) * 560) % 560), w = 6 * Math.abs(Math.cos(t * 2 + i)) + 1;
+                c.save(); c.globalAlpha = 0.2 + 0.5 * y / 520; ptEll(c, x, y, w, 6, '#e6b830', 1.4); c.restore();
+            }
+        },
+        draw(c, t) {
+            const SKIN = '#f3dac6', SKIN_D = '#d6ae94', HAIR = '#cdc6c2', HAIR_D = '#968e8a', MINT = '#62c08e', MINT_D = '#46996c', CAPE = '#2f7d42', CAPE_D = '#21592f', TEAL = '#2c5566', YEL = '#f2e27a', LEAF = '#7cc96a', RED = '#d63a3a', BROWN = '#5c3b29', H = 520;
+            const fl = Math.sin(t * 1.3) * 6, fl2 = Math.sin(t * 1.7 + 1) * 5;
+            // the long cape behind him: green without, deep teal within, a border of gold and green triangles
+            const cape = () => { c.beginPath(); c.moveTo(122, 200); c.quadraticCurveTo(60, 300, 30 - fl, H + 10); c.lineTo(370 + fl2, H + 10); c.quadraticCurveTo(340, 300, 278, 200); c.closePath(); };
+            cape(); ptFill(c, TEAL, 3);
+            for (const s of [-1, 1]) { // the trimmed edges
+                const sw = s < 0 ? fl : -fl2, q = u => { const v = 1 - u, x0 = 200 + s * 78, x1 = 200 + s * 140, x2 = 200 + s * 170 - sw; return [v * v * x0 + 2 * v * u * x1 + u * u * x2, v * v * 200 + 2 * v * u * 300 + u * u * (H + 10)]; };
+                const N = 10, pts = [], inner = [];
+                for (let i = 0; i <= N; i++) { const [x, y] = q(i / N); pts.push([x, y]); inner.push([x - s * 22, y]); }
+                ptPoly(c, pts.concat(inner.slice().reverse()), LEAF, 2.4);
+                for (let i = 0; i < N; i++) { const a = pts[i], b = pts[i + 1]; ptPoly(c, [a, b, [(inner[i][0] + inner[i + 1][0]) / 2, (a[1] + b[1]) / 2]], YEL, 1.2); }
+            }
+            // the tunic, belted, flaring below the belt
+            const tunic = () => { c.beginPath(); c.moveTo(170, 186); c.quadraticCurveTo(134, 190, 128, 214); c.lineTo(134, 430); c.lineTo(122, H + 10); c.lineTo(278, H + 10); c.lineTo(266, 430); c.lineTo(272, 214); c.quadraticCurveTo(266, 190, 230, 186); c.closePath(); };
+            tunic(); ptFill(c, MINT, 3); bigShade(c, tunic, 0.22);
+            c.strokeStyle = MINT_D; c.lineWidth = 2.2; c.beginPath(); c.moveTo(200, 300); c.lineTo(200, H); c.moveTo(150, 456); c.lineTo(144, H); c.moveTo(252, 456); c.lineTo(258, H); c.stroke(); // the front seam, folds
+            ptPoly(c, [[182, 190], [218, 190], [200, 272]], '#1e1e26', 2.4); // the black shirt under it
+            c.beginPath(); c.rect(132, 428, 136, 16); ptFill(c, BROWN, 2.6); // the belt
+            c.beginPath(); c.rect(190, 425, 20, 22); ptFill(c, '#d4a73a', 2.4); c.fillStyle = BROWN; c.fillRect(196, 431, 8, 10);
+            for (const x of [150, 252]) { c.beginPath(); c.moveTo(x - 17, 440); c.lineTo(x + 17, 440); c.lineTo(x + 15, 478); c.quadraticCurveTo(x, 486, x - 15, 478); c.closePath(); ptFill(c, '#6d4630', 2.6); c.beginPath(); c.moveTo(x - 18, 438); c.lineTo(x + 18, 438); c.lineTo(x + 16, 454); c.quadraticCurveTo(x, 460, x - 16, 454); c.closePath(); ptFill(c, BROWN, 2.4); } // pouches on his hips
+            // his arms, under the capelet: the right one raised to the back of his head, the left out to flip a coin
+            const cuff = (w, a) => { c.save(); c.translate(w[0], w[1]); c.rotate(a); ptEll(c, 0, 0, 9, 15, YEL, 2.4); ptEll(c, 0, 0, 5, 10, LEAF, 0); c.restore(); };
+            const RS = [126, 222], RE = [86, 120], RW = [138, 94], LS = [274, 222], LE = [310, 332], LW = [282, 380];
+            ptArm(c, MINT, RS, RE, RW, 32, 26); cuff(RW, Math.atan2(RW[1] - RE[1], RW[0] - RE[0]));
+            ptEll(c, 102, 172, 10, 7, LEAF, 2, -1.2); c.strokeStyle = YEL; c.lineWidth = 2; c.beginPath(); c.ellipse(102, 172, 10, 7, -1.2, 0, Math.PI * 2); c.stroke(); // a leaf crest on the sleeve
+            ptArm(c, MINT, LS, LE, LW, 30, 24);
+            // the hooded capelet over his shoulders, its front edges trimmed in triangles
+            ptEll(c, 200, 188, 54, 18, CAPE_D, 2.6); // the hood, bunched behind his neck
+            for (const s of [-1, 1]) {
+                const X = x => 200 + s * (x - 200), low = s < 0 ? 300 : 330;
+                const half = () => { c.beginPath(); c.moveTo(X(186), 188); c.quadraticCurveTo(X(140), 188, X(112), 216); c.lineTo(X(100), 300); c.quadraticCurveTo(X(130), 318, X(158), low); c.lineTo(X(188), 210); c.closePath(); };
+                half(); ptFill(c, CAPE, 3); if (s > 0) bigShade(c, half, 0.2);
+                const A = [X(188), 210], B = [X(158), low], n = 8;
+                for (let i = 0; i < n; i++) { const u0 = i / n, u1 = (i + 1) / n, p0 = [lerp(A[0], B[0], u0), lerp(A[1], B[1], u0)], p1 = [lerp(A[0], B[0], u1), lerp(A[1], B[1], u1)]; ptPoly(c, [p0, p1, [p1[0] - s * 14, p1[1]], [p0[0] - s * 14, p0[1]]], LEAF, 1.2); ptPoly(c, [p0, p1, [(p0[0] + p1[0]) / 2 - s * 14, (p0[1] + p1[1]) / 2]], YEL, 1.2); }
+            }
+            ptLine(c, MINT, 24, [LE, LW]); cuff(LW, Math.atan2(LW[1] - LE[1], LW[0] - LE[0])); // the forearm, in front of the capelet
+            ptEll(c, 276, 386, 15, 11, SKIN, 2.4, -0.3); // his open palm, waiting for the coin
+            c.strokeStyle = SKIN_D; c.lineWidth = 1.3; c.beginPath(); c.moveTo(266, 384); c.quadraticCurveTo(276, 380, 288, 384); c.stroke();
+            // the red bow at his collar
+            for (const s of [-1, 1]) ptPoly(c, [[200, 200], [200 + s * 22, 188], [200 + s * 24, 212]], RED, 2.4);
+            ptPoly(c, [[198, 202], [190, 232], [196, 230]], RED, 2); ptPoly(c, [[202, 202], [212, 230], [206, 232]], RED, 2);
+            ptEll(c, 200, 200, 6, 6, '#b52a2a', 2.2);
+            // the neck, his hair behind, the face
+            ptPoly(c, [[189, 164], [211, 164], [213, 192], [187, 192]], SKIN_D, 2.4);
+            c.beginPath(); c.moveTo(152, 100); c.quadraticCurveTo(140, 140, 150, 168); c.quadraticCurveTo(146, 178, 158, 182); c.lineTo(242, 182); c.quadraticCurveTo(254, 178, 250, 168); c.quadraticCurveTo(260, 140, 248, 100); c.closePath(); ptFill(c, HAIR, 3); // the wavy hair, chin-length
+            const face = () => { c.beginPath(); c.moveTo(162, 104); c.quadraticCurveTo(160, 148, 178, 166); c.quadraticCurveTo(192, 180, 200, 180); c.quadraticCurveTo(208, 180, 222, 166); c.quadraticCurveTo(240, 148, 238, 104); c.closePath(); };
+            face(); ptFill(c, SKIN, 3);
+            c.save(); face(); c.clip(); const g = c.createLinearGradient(184, 0, 240, 0); g.addColorStop(0, 'rgba(120, 60, 40, 0)'); g.addColorStop(1, 'rgba(120, 60, 40, 0.22)'); c.fillStyle = g; c.fillRect(160, 100, 80, 82); c.restore();
+            // happy eyes, soft and narrowed by the grin; brows tilted up, a little sheepish
+            for (const s of [-1, 1]) {
+                const x = 200 + s * 17, y = 124;
+                const eye = () => { c.beginPath(); c.moveTo(x - s * 10, y + 1); c.quadraticCurveTo(x, y - 5, x + s * 10, y - 1); c.quadraticCurveTo(x, y + 5, x - s * 10, y + 1); c.closePath(); };
+                eye(); c.fillStyle = '#fbf8f4'; c.fill();
+                c.save(); eye(); c.clip(); ptEll(c, x, y + 1, 5, 6, '#6f80b0', 0); ptEll(c, x, y + 1, 2.4, 3, '#22283c', 0); c.restore();
+                ptEll(c, x + s * 2, y - 1, 1.4, 1.4, '#ffffff', 0);
+                c.strokeStyle = '#3a3438'; c.lineWidth = 2.4; c.lineCap = 'round'; c.beginPath(); c.moveTo(x - s * 10, y + 1); c.quadraticCurveTo(x, y - 6, x + s * 11, y - 1); c.stroke();
+                c.strokeStyle = 'rgba(80, 50, 40, 0.5)'; c.lineWidth = 1.3; c.beginPath(); c.moveTo(x - s * 7, y + 6); c.quadraticCurveTo(x, y + 8, x + s * 8, y + 5); c.stroke(); // the cheeks pushed up
+                ptLine(c, HAIR_D, 2.6, [[200 + s * 7, 108], [200 + s * 18, 108], [200 + s * 27, 112]]);
+            }
+            c.strokeStyle = SKIN_D; c.lineWidth = 1.4; c.beginPath(); c.moveTo(201, 134); c.lineTo(198, 141); c.lineTo(202, 142); c.stroke();
+            c.beginPath(); c.moveTo(186, 152); c.quadraticCurveTo(200, 166, 214, 151); c.quadraticCurveTo(200, 157, 186, 152); c.closePath(); ptFill(c, '#8a3a3a', 1.8); // a wide grin
+            // the fringe, falling in soft waves; locks curling out at his jaw
+            c.beginPath(); c.moveTo(154, 112); c.quadraticCurveTo(150, 62, 200, 60); c.quadraticCurveTo(250, 62, 246, 112);
+            c.quadraticCurveTo(238, 104, 232, 116); c.quadraticCurveTo(226, 100, 214, 110); c.quadraticCurveTo(206, 96, 194, 108); c.quadraticCurveTo(184, 98, 176, 114); c.quadraticCurveTo(168, 102, 154, 112); c.closePath(); ptFill(c, HAIR, 2.6);
+            c.strokeStyle = HAIR_D; c.lineWidth = 1.6; c.beginPath(); for (const x of [176, 196, 216, 232]) { c.moveTo(x - 4, 74); c.quadraticCurveTo(x + 4, 90, x - 2, 104); } c.stroke();
+            for (const s of [-1, 1]) { c.beginPath(); c.moveTo(200 + s * 38, 104); c.quadraticCurveTo(200 + s * 46, 130, 200 + s * 40, 156); c.quadraticCurveTo(200 + s * 48, 168, 200 + s * 54, 162); c.quadraticCurveTo(200 + s * 50, 176, 200 + s * 38, 174); c.quadraticCurveTo(200 + s * 32, 140, 200 + s * 34, 112); c.closePath(); ptFill(c, HAIR, 2.4); }
+            // the cap: green panels edged in gold, a gold spiral on the front, a white feather and a pompom on the right
+            c.save(); c.translate(200, 74); c.rotate(-0.07); c.translate(-200, -74);
+            c.beginPath(); c.moveTo(154, 92); c.lineTo(156, 46); c.quadraticCurveTo(200, 30, 244, 44); c.lineTo(248, 90); c.quadraticCurveTo(200, 80, 154, 92); c.closePath(); ptFill(c, CAPE_D, 3);
+            for (const s of [-1, 1]) { const X = x => 200 + s * (x - 200); ptPoly(c, [[X(158), 48], [X(178), 50], [X(178), 84], [X(156), 88]], LEAF, 2.2); c.strokeStyle = YEL; c.lineWidth = 2; c.beginPath(); c.moveTo(X(162), 54); c.lineTo(X(174), 55); c.lineTo(X(174), 80); c.lineTo(X(160), 83); c.stroke(); }
+            ptPoly(c, [[178, 84], [178, 50], [200, 38], [222, 50], [222, 84]], CAPE, 2.6);
+            c.strokeStyle = YEL; c.lineWidth = 2.4; c.beginPath(); c.moveTo(182, 80); c.lineTo(182, 53); c.lineTo(200, 43); c.lineTo(218, 53); c.lineTo(218, 80); c.stroke();
+            c.lineWidth = 2.6; c.beginPath(); for (let k = 0; k <= 24; k++) { const a = k * 0.42, r = 1 + k * 0.33; k ? c.lineTo(200 + Math.cos(a) * r, 65 + Math.sin(a) * r) : c.moveTo(200, 65); } c.stroke(); // the spiral
+            ptRibbon(c, '#f7f5f0', 14, [244, 76], [262, 58], [278, 44], [300, 38]); // the feather, swept back
+            c.strokeStyle = '#c9c2b8'; c.lineWidth = 1; c.beginPath(); c.moveTo(246, 74); c.bezierCurveTo(262, 60, 278, 46, 298, 40); c.stroke();
+            ptEll(c, 246, 82, 8, 8, '#f7f5f0', 2.2);
+            c.restore();
+            // the hand at the back of his head, fingers in his hair under the cap's edge
+            ptEll(c, 152, 92, 13, 17, SKIN, 2.4, 0.4);
+            c.strokeStyle = SKIN_D; c.lineWidth = 1.3; c.beginPath(); for (let k = 0; k < 3; k++) { c.moveTo(150 + k * 4, 78 + k * 2); c.lineTo(160 + k * 3, 92 + k * 3); } c.stroke();
+        },
+        fx(c, t) { // the coin, flipped and caught
+            const k = (t * 0.9) % 1, h = Math.sin(k * Math.PI) * 70, x = 276, y = 370 - h, w = 8 * Math.abs(Math.cos(t * 11)) + 1;
+            ptGlow(c, x, y, 18, '#ffd54f', 0.45); ptEll(c, x, y, w, 8, '#e8b931', 1.6);
+            if (w > 6) ptEll(c, x - 2, y - 2, 2, 2, 'rgba(255, 255, 255, 0.8)', 0);
+        },
+    },
 };
+
+// Cel shading for the big portraits: darken the part of a shape on the side away from the light
+function bigShade(c, path, a = 0.3) { c.save(); path(); c.clip(); c.fillStyle = `rgba(0, 0, 0, ${a})`; c.fillRect(200, 0, 200, 540); c.restore(); }
 
 // His face, bare (valerius_bare): close-cropped black hair gone grey at the temples, a burn scar seared down the left side
 // of his face from brow to jaw, an old sword cut across the right cheek, a short dark beard, heavy brows pulled down, and
@@ -727,7 +1191,8 @@ function drawBigPortrait(cv, id, t) {
     let g = L.createLinearGradient(0, 0, ptLayer.width, ptLayer.height); // warm light from the top-left, shadow toward the bottom-right
     g.addColorStop(0, 'rgba(255, 230, 200, 0.18)'); g.addColorStop(0.5, 'rgba(255, 255, 255, 0)'); g.addColorStop(1, 'rgba(0, 0, 20, 0.42)');
     L.fillStyle = g; L.fillRect(0, 0, ptLayer.width, ptLayer.height);
-    g = L.createLinearGradient(ptLayer.width * 0.62, 0, ptLayer.width, 0); g.addColorStop(0, 'rgba(255, 40, 20, 0)'); g.addColorStop(1, 'rgba(255, 40, 20, 0.22)'); // a red rim from the fires behind
+    const rim = P.rim || '255, 40, 20'; // a red rim from the fires behind; a friend's own colour
+    g = L.createLinearGradient(ptLayer.width * 0.62, 0, ptLayer.width, 0); g.addColorStop(0, `rgba(${rim}, 0)`); g.addColorStop(1, `rgba(${rim}, 0.22)`);
     L.fillStyle = g; L.fillRect(0, 0, ptLayer.width, ptLayer.height);
     L.globalCompositeOperation = 'source-over';
     c.setTransform(1, 0, 0, 1, 0, 0); c.drawImage(ptLayer, 0, 0);

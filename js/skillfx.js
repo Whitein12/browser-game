@@ -19,6 +19,8 @@ function withAlpha(hex, a) {
 
 function drawSkillProjectile(p) {
     if (drawSpaceProjectile(p) || drawUltProjectile(p) || drawRmbProjectile(p) || drawSpellProjectile(p)) return true; // skillfx_space.js, skillfx_ult.js, skillfx_rmb.js
+    if (p.mkWave && typeof drawMonkProjectile === 'function' && drawMonkProjectile(ctx, p)) return true; // monk_fx.js: the chi wave
+    if (p.ssWave && drawSwordsaintProjectile(ctx, p)) return true; // swordsaint_fx.js: the Lionheart Gauntlets' wave
     if (p.type === 'hallowed_ground') return true; // drawn on the ground layer (drawGroundProjectiles)
     if (p.type === 'tesla_coil_trap') { drawTeslaCoil(p); return true; }
     if (p.isRetribution) { drawRetributionBolt(p); return true; }
@@ -278,6 +280,10 @@ function drawSkillGround(ef) {
 function drawSkillEffect(ef) {
     const k = clamp01(ef.life / ef.maxLife), p = 1 - k;
     if (drawESkillEffect(ef, p, k) || drawSpaceEffect(ef, p, k) || drawUltEffect(ef, p, k) || drawRmbEffect(ef, p, k) || drawSpellEffect(ef, p, k)) return true;
+    if (typeof drawMonkEffect === 'function' && drawMonkEffect(ctx, ef)) return true; // monk_fx.js: every mk_* effect
+    if (drawWitchEffect(ctx, ef)) return true; // witch_fx.js: every wt_* effect
+    if (drawSwordsaintEffect(ctx, ef)) return true; // swordsaint_fx.js: every ss_* effect
+    if (drawExpEffect(ctx, ef)) return true; // expeditions_fx.js: a chief's wind-up, his entrance, his fall
     switch (ef.type) {
         case 'heavy_slam': { // Dragonknight full overhead slam: the blade bites in, dust and a shockwave roll out (skills.js 'sword')
             const R = ef.radius, col = ef.fire ? '#ff7043' : '#ffe0b2';

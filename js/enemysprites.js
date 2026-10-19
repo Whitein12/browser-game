@@ -14,7 +14,7 @@ function animMotion(e) {
     if (e.ax === undefined) { e.ax = e.x; e.ay = e.y; e.hop = Math.random() * 6; e.mv = 0; e.face = 0; e.seed = Math.random() * 100; }
     const dx = e.x - e.ax, dy = e.y - e.ay, d = Math.hypot(dx, dy);
     e.ax = e.x; e.ay = e.y;
-    if (d > 0.05 && d < 80) { e.hop += d * (e.type.startsWith('boss') ? 0.045 : 0.1); e.face = Math.atan2(dy, dx); }
+    if (d > 0.05 && d < 80) { e.hop += d * (isBossE(e) ? 0.045 : 0.1); e.face = Math.atan2(dy, dx); }
     e.mv += ((d > 0.2 ? 1 : 0) - e.mv) * 0.15;
 }
 
@@ -132,6 +132,8 @@ function drawCrown(c, x, y, r, tilt) {
 }
 
 function drawEnemySprite(e) {
+    if (e.type === 'supply_cache') { drawCache(e); return true; } // caches.js
+    if (e.toadT > 0) return drawWitchToad(e); // witch_fx.js: Hex of the Toad
     if (e.dummy) return drawTrainingDummy(e); // training.js
     if (BANDIT_TYPES[e.type]) return drawBandit(e); // bandits.js
     if (!SLIME_TYPES[e.type]) return false;
@@ -246,6 +248,8 @@ function drawEnemySprite(e) {
                 c.fillStyle = '#fff8e1'; for (let k = 0; k < 5; k++) { const a = k * 1.3 + e.seed, d = cr * (0.25 + (k % 3) * 0.2); c.beginPath(); c.arc(cx + Math.cos(a) * d, cy + Math.sin(a) * d, cr * (0.1 + (k % 2) * 0.05), 0, Math.PI * 2); c.fill(); }
             },
         });
+    } else if (e.type === 'crystal_slime' && (e.chief || e.splitKid)) {
+        drawPrism(e); // expeditions_fx.js: the Prism and its splinters
     } else if (e.type === 'crystal_slime') {
         const refl = !!e.reflective;
         drawSlime(e, {
@@ -309,7 +313,7 @@ function drawEnemySprite(e) {
         drawQueen(e);
     }
     // A small health bar that only shows once the slime is hurt
-    if (!e.type.startsWith('boss') && e.hp < e.maxHp && !(e.spawnT > 0)) {
+    if (!isBossE(e) && e.hp < e.maxHp && !(e.spawnT > 0)) {
         const w = e.size, x = e.x - w / 2, y = e.y - e.size / 2 - 14;
         ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; ctx.fillRect(x - 1, y - 1, w + 2, 5);
         ctx.fillStyle = '#8bc34a'; ctx.fillRect(x, y, w * Math.max(0, e.hp / e.maxHp), 3);
@@ -615,7 +619,7 @@ function enemyDeathFx(e) {
     if (BANDIT_TYPES[e.type]) { banditDeathFx(e); return; } // bandits.js
     if (!SLIME_TYPES[e.type]) return;
     hiveOnKill(e); // map_hive.js: the sleeping Queen stirs
-    const boss = e.type.startsWith('boss'), col = e.type === 'boss_amalgam' ? '#00897b' : e.color;
+    const boss = isBossE(e), col = e.type === 'boss_amalgam' ? '#00897b' : e.chief ? e.tint : e.color; // expeditions.js: the Prism splashes violet
     if (e.type === 'crystal_slime') burst(e.x, e.y, 0, Math.PI * 2, 10, { kind: 'debris', color: '#e1bee7', size: 4, speed: [100, 300], life: 0.5, drag: 3 }); // its crystals shatter
     if (e.type === 'slime_warden' || e.type === 'queen_guard') burst(e.x, e.y, 0, Math.PI * 2, 8, { kind: 'debris', color: e.type === 'slime_warden' ? '#ffca28' : '#b39ddb', size: 3.5, speed: [80, 240], life: 0.5, drag: 3 });
     burst(e.x, e.y, 0, Math.PI * 2, boss ? 30 : 12, { kind: 'goo', color: col, size: boss ? 6 : 4, speed: [80, boss ? 380 : 240], life: 0.6, drag: 3.5 });
@@ -687,6 +691,7 @@ function drawEnemyProjectile(p) {
         c.fillStyle = '#f9fbe7'; c.beginPath(); c.arc(p.x - 1, p.y - 2, 2.5, 0, Math.PI * 2); c.fill();
         return true;
     }
+    if (p.owner && p.owner.chief && p.owner.type === 'crystal_slime') { drawPrismShard(c, p); return true; } // expeditions_fx.js: the Prism's ring of shards
     if (p.owner && p.owner.type === 'crystal_slime') { // shards of its crystal skin
         const a = Math.atan2(p.vy, p.vx);
         c.save(); c.translate(p.x, p.y); c.rotate(a);

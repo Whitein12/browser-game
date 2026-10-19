@@ -76,7 +76,7 @@ function treeSkill(s) { return isSpellbook() && player.spells ? spellBase(s) : c
 const treeNode = id => (treeNodes(), tree.byId[id]);
 const hasTalent = id => !!(player.tree && player.tree[id]);
 const treeFree = () => isTraining(); // training.js: every talent free, no level gates, respec any time
-const treeRespecOk = () => treeFree();
+const treeRespecOk = () => treeFree() || inHub() || isBase(); // save.js: respec is free in the hub (points come back)
 
 // A new run: an empty web
 function treeReset() { player.tree = {}; tree.nodes = null; applyTree(); }
@@ -140,7 +140,7 @@ function takeNode(id) {
     if (!treeFree()) player.skillPoints -= nodeCost(n);
     applyTree(); updateHUD();
     tv.flash = { n, t: performance.now() }; // a bloom on the node just taken
-    if (tree.first) { tree.first = false; closeTree(); startNextWave(); return; } // the first skill: the run begins
+    if (tree.first) { tree.first = false; closeTree(); heroEntered(); startNextWave(); return; } // the first skill: the run begins (save.js: the retry point)
     renderTree();
 }
 
@@ -183,7 +183,9 @@ function closeTree() {
     cancelAnimationFrame(tv.raf); tv.raf = 0;
     el('tree-screen').classList.add('hidden');
     gameState = tree.back; lastTime = performance.now();
+    if (gameState === STATE.MENU && inHub()) { hubReturn(); return; } // save.js: back to Cinderholt
     if (isTraining()) buildTrainingPanel(); // training.js: back on screen, its rank buttons following the web
+    baseSave(); // save.js: in Cinderholt the web is kept on closing (a free respec there)
     updateHUD();
 }
 function treeCancel() { tree.pending = null; renderTree(); }

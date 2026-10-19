@@ -9,6 +9,8 @@ function attackSpeedBonus() {
     if (activeClass.name === 'Dragonknight') bonus += player.frenzyStacks * 0.02; // Frenzy: +2% per stack
     if (buffs.focus > 0 && hasTalent('focus_haste')) bonus += 0.3;
     if (activeClass.name === 'Cleric' && buffs.inSanctuary && hasTalent('cl_sanct_haste')) bonus += 0.2; // cleric.js Blessed Steps // Ranger Hunter's Focus, Steady Rhythm (talents.js)
+    if (buffs.elixirSwift > 0) bonus += ELIXIR_SWIFT; // potions.js: Elixir of Swiftness
+    bonus += ssSpeed(); // swordsaint.js: the Style rank
     return bonus;
 }
 
@@ -18,8 +20,8 @@ function castBasic(heavy = null, combo = takeCombo()) {
     const ANIM_LOCK = 0.15;
     cooldowns.basic = devNoCooldowns ? 0 : heavy !== null ? SLAM_RECOVER : ANIM_LOCK + activeClass.basicAttackCD / (1.0 + attackSpeedBonus()); // attack speed comes from gloves and class stacks; CDR is for skills
     cooldownMax.basic = cooldowns.basic;
-    let dmg = calcDmg(activeClass.basicDmg, 1);
-    
+    let dmg = calcDmg(activeClass.basicDmg, 1) * basicLevelMult(); // combat.js: grows with the hero's level
+
     let isResonance = false;
     if (activeClass.name === 'Spellweaver') {
         const free = spellthreadCharge(); // items.js: every 5th bolt with the Spellthread Gloves
@@ -225,7 +227,7 @@ function gravitySlam(x, y, dmg) {
         if (e.dead || e.pod || e.submerged) continue;
         const d = Math.hypot(e.x - x, e.y - y);
         if (d < 1 || d > R + e.size / 2) continue;
-        const boss = e.type.startsWith('boss'), keep = Math.min(d, boss ? Math.max(e.size / 2 + 30, d - 60) : e.size / 2 + 22 + Math.random() * 24); // never pushed outward
+        const boss = isBossE(e), keep = Math.min(d, boss ? Math.max(e.size / 2 + 30, d - 60) : e.size / 2 + 22 + Math.random() * 24); // never pushed outward
         caught.push({ e, x0: e.x, y0: e.y, x1: x + (e.x - x) / d * keep, y1: y + (e.y - y) / d * keep });
         if (!boss) e.stunTimer = Math.max(e.stunTimer || 0, hasTalent('grav_heavy') ? 1.2 : 0.5);
     }
@@ -240,7 +242,7 @@ function gravitySlam(x, y, dmg) {
     });
     if (hasTalent('grav_singularity')) effects.push({ type: 'gravity_well', x, y, radius: GRAV_WELL_R, life: 3, maxLife: 3, customUpdate: dt => {
         for (const e of enemies) {
-            if (e.dead || e.pod || e.type.startsWith('boss')) continue;
+            if (e.dead || e.pod || isBossE(e)) continue;
             const d = Math.hypot(e.x - x, e.y - y);
             if (d > 12 && d <= GRAV_WELL_R + e.size / 2) { const st = Math.min(d - 12, 150 * dt); e.x += (x - e.x) / d * st; e.y += (y - e.y) / d * st; clampToBounds(e, e.size / 2); }
         }
@@ -296,7 +298,7 @@ function dragonRoar() {
     addShake(4);
     for (const e of enemies) {
         if (e.dead || e.pod || Math.hypot(e.x - player.x, e.y - player.y) > 300 + e.size / 2) continue;
-        if (e.type.startsWith('boss')) { const a = Math.atan2(e.y - player.y, e.x - player.x); e.x += Math.cos(a) * 40; e.y += Math.sin(a) * 40; clampToBounds(e, e.size / 2); }
+        if (isBossE(e)) { const a = Math.atan2(e.y - player.y, e.x - player.x); e.x += Math.cos(a) * 40; e.y += Math.sin(a) * 40; clampToBounds(e, e.size / 2); }
         else { knockFrom(e, player.x, player.y, 120); e.stunTimer = Math.max(e.stunTimer || 0, 1.0); }
     }
 }
@@ -309,7 +311,7 @@ function dragonRoar() {
 const BALLISTA_PUSH = 220, BALLISTA_FAR = 320, BALLISTA_STUN = 1.5, BALLISTA_PIN = 2.5, BALLISTA_TIME = 0.22;
 function ballistaPush(list, ang, hit) {
     const D = hasTalent('ballista_far') ? BALLISTA_FAR : BALLISTA_PUSH, cx = Math.cos(ang), cy = Math.sin(ang);
-    const movers = list.filter(e => !e.dead && !e.pod).map(e => ({ e, x0: e.x, y0: e.y, d: e.type.startsWith('boss') ? 40 : D, t: 0 }));
+    const movers = list.filter(e => !e.dead && !e.pod).map(e => ({ e, x0: e.x, y0: e.y, d: isBossE(e) ? 40 : D, t: 0 }));
     const slam = m => {
         m.done = true; const e = m.e;
         e.stunTimer = Math.max(e.stunTimer || 0, hasTalent('ballista_pin') ? BALLISTA_PIN : BALLISTA_STUN);
@@ -329,7 +331,7 @@ function ballistaPush(list, ang, hit) {
             if (hasTalent('ballista_domino') && m.d > 40) for (const o of enemies) { // Domino
                 if (o === e || o.dead || o.pod || movers.some(n => n.e === o) || Math.hypot(o.x - e.x, o.y - e.y) > (o.size + e.size) / 2) continue;
                 o.stunTimer = Math.max(o.stunTimer || 0, 1.0);
-                movers.push({ e: o, x0: o.x, y0: o.y, d: o.type.startsWith('boss') ? 0 : (m.d - want) * 0.5 + 40, t: 0 });
+                movers.push({ e: o, x0: o.x, y0: o.y, d: isBossE(o) ? 0 : (m.d - want) * 0.5 + 40, t: 0 });
             }
             if (m.t >= 1) m.done = true;
         }
@@ -637,7 +639,7 @@ var SkillRegistry = {
                                     e.slowTimer = 0.6; e.slowAmount = 0.4;
                                 }
                                 // Sanctuary knocks non-boss enemies back out of the circle
-                                if (!e.type.startsWith('boss')) {
+                                if (!isBossE(e)) {
                                     let [kx, ky, kd] = getVector(p.x, p.y, e.x, e.y);
                                     if (kd > 0) { e.x += (kx/kd) * 60; e.y += (ky/kd) * 60; clampToBounds(e, e.size/2); }
                                 }
@@ -860,7 +862,7 @@ var SkillRegistry = {
                     const e = enemies[i];
                     if (Math.hypot(player.x - e.x, player.y - e.y) <= radius + e.size/2) {
                         applyDamage(e, calcDmg(30), 'magic');
-                        if (e.type.startsWith('boss')) continue; // bosses take the hit but aren't pushed or stunned
+                        if (isBossE(e)) continue; // bosses take the hit but aren't pushed or stunned
                         let [dx, dy, dist] = getVector(player.x, player.y, e.x, e.y);
                         // Repulse distance
                         if (dist > 0) {
@@ -1159,9 +1161,9 @@ var SkillRegistry = {
                         const e = enemies[i];
                         if (Math.hypot(player.x-e.x, player.y-e.y) > R + e.size/2) continue;
                         applyDamage(e, dmg * mult, 'melee');
-                        if (!e.type.startsWith('boss')) e.stunTimer = Math.max(e.stunTimer || 0, sky ? SKYFALL_STUN : 0.5); // the thunderclap staggers
+                        if (!isBossE(e)) e.stunTimer = Math.max(e.stunTimer || 0, sky ? SKYFALL_STUN : 0.5); // the thunderclap staggers
                         if (dive && hasTalent('dive_comet') && !e.dead) igniteEnemy(e, dmg * 0.3); // Comet Trail
-                        if (greaves && !e.type.startsWith('boss') && !e.dead) { const ka = Math.atan2(e.y - player.y, e.x - player.x); e.x += Math.cos(ka) * 60; e.y += Math.sin(ka) * 60; clampToBounds(e, e.size / 2); }
+                        if (greaves && !isBossE(e) && !e.dead) { const ka = Math.atan2(e.y - player.y, e.x - player.x); e.x += Math.cos(ka) * 60; e.y += Math.sin(ka) * 60; clampToBounds(e, e.size / 2); }
                     }
                     if (sk.selectedUpg === 'A') gravitySlam(player.x, player.y, dmg); // after the clap: the pack is drawn in for what comes next
                     if (dive && power >= 0.99 && hasTalent('dive_starfall')) starfall(player.x, player.y, dmg);
@@ -1326,7 +1328,7 @@ var SkillRegistry = {
                     got.set(e, f);
                     applyDamage(e, dmg * f * mult, thunder ? 'magic' : 'ranged');
                     if (e.dead) continue;
-                    if (thunder && !e.type.startsWith('boss')) e.stunTimer = Math.max(e.stunTimer || 0, THUNDERSTORM_STUN);
+                    if (thunder && !isBossE(e)) e.stunTimer = Math.max(e.stunTimer || 0, THUNDERSTORM_STUN);
                     if (hasTalent('volley_bleed')) { e.bleedTimer = 3; e.bleedDmg = Math.max(e.bleedDmg || 0, dmg * 0.15); } // Barbed Tips
                     if (focus && e === prey && hasTalent('barrage_pin')) { if (!(e.slowTimer > 0) || e.slowAmount < 0.5) e.slowAmount = 0.5; e.slowTimer = Math.max(e.slowTimer || 0, 0.6); }
                 }
@@ -1504,12 +1506,12 @@ var BasicAttackRegistry = {
             for (const e of enemies) {
                 if (e.dead || Math.hypot(e.x - ix, e.y - iy) > SR + e.size / 2) continue;
                 if (!hitList.includes(e)) { applyDamage(e, dmg * 0.5, 'melee'); hitList.push(e); }
-                if (!e.type.startsWith('boss')) e.stunTimer = Math.max(e.stunTimer || 0, 0.3);
+                if (!isBossE(e)) e.stunTimer = Math.max(e.stunTimer || 0, 0.3);
             }
             if (hitList.length) addFrenzy(1); // a slam stokes an extra stack, so the slower rhythm still builds Frenzy
         }
         if (full) for (const e of hitList) if (e.lodgedShield && e.lodgedShield.lodged) ripShield(e.lodgedShield, e); // Hunting Shield: the slam tears it out
-        if (full && hasTalent('sunder_brittle')) for (const e of hitList) if (!e.dead && e.sunderUntil > fxTime && !e.type.startsWith('boss')) e.stunTimer = Math.max(e.stunTimer || 0, 1.0); // talents.js Brittle Scales
+        if (full && hasTalent('sunder_brittle')) for (const e of hitList) if (!e.dead && e.sunderUntil > fxTime && !isBossE(e)) e.stunTimer = Math.max(e.stunTimer || 0, 1.0); // talents.js Brittle Scales
         if (fire && hitList.length) {
             const burn = calcDmg(E.baseDmg, E.level) * 0.3; // per second for 3 s; refreshes, doesn't stack (main.js)
             for (const e of hitList) if (!e.dead) igniteEnemy(e, burn);

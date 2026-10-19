@@ -61,6 +61,25 @@ function hudChips() {
     if (n === 'Druid' && buffs.feralSurge > 0) c.push(['#b2ff59', 'Feral Surge', `${buffs.feralSurge.toFixed(1)}s`]);
     if (n === 'Druid' && buffs.direWolf > 0) c.push(['#ffab40', companion().big, `${buffs.direWolf.toFixed(1)}s`]);
     if (n === 'Druid' && player.wolves && player.wolves.length > 1) c.push(['#76ff03', companion().spirits, `${player.wolves.length - 1} · ${Math.max(...player.wolves.slice(1).map(w => w.life)).toFixed(1)}s`]); // druid.js; the gauge orb shows Bond
+    if (n === 'Witch' && wt.zombies.length) c.push(['#aed581', WT_KINDS[minionKind()].name, `${wt.zombies.length} / ${WT_ZOMBIE_MAX}`]); // witch.js; the gauge orb shows the souls near her
+    if (n === 'Witch' && player.broom) c.push(['#ce93d8', 'Broom', `${Math.max(0, player.broom.max - player.broom.t).toFixed(1)}s${player.broom.trail ? ' · trail' : ''}`]);
+    if (n === 'Monk' && mk.flurry > 0) c.push(['#ffb74d', 'Flurry', `${mk.flurry} / ${MK_FLURRY_MAX}`]); // monk.js; the gauge orb shows Chi
+    if (n === 'Monk' && mk.ironWill > 0) c.push(['#ff8a65', 'Iron Will', `${Math.round(monkWillPct(activeClass.skills[3].level) * 100)}% lifesteal, ${mk.ironWill.toFixed(1)}s`]);
+    if (n === 'Monk' && mk.ironBody > 0) c.push(['#ffcc80', 'Iron Body', `-50% damage, ${mk.ironBody.toFixed(1)}s`]);
+    if (n === 'Monk' && mk.karma) c.push(['#ce93d8', 'Karma', `${Math.round(mk.karma.store)} stored`]); // the web (monk.js)
+    if (n === 'Monk' && mk.stone) c.push(['#d7a85a', mk.stone.hard ? 'Stone Skin, hardened' : 'Stone Skin', `${Math.round(player.shield)}, ${mk.stone.t.toFixed(1)}s`]);
+    if (n === 'Monk' && mk.frenzy) c.push(['#ff9800', 'Tiger\'s Frenzy', 'next flurry: Hundred-Hand']);
+    if (n === 'Monk' && mk.recast[1] && mk.recast[1].n > 1) c.push(['#ffca28', 'Seven-Star', `rush ${mk.recast[1].n} / ${hasTalent('mk_star_seven') ? 7 : MK_STAR_MAX}`]);
+    if (n === 'Swordsaint') { // swordsaint.js; the gauge orb shows the Style rank
+        c.push(['#82b1ff', 'Mana Burst', `${ss.charges} / ${ssMaxCharges()}`]);
+        if (ss.unsealed > 0) c.push(['#ffd54f', 'Unsealed', `+${Math.round(ssUnsealPower() * 100)} Power, ${ss.unsealed.toFixed(1)}s${ss.recast[4] ? ' · R: Excalibur' : ''}`]);
+        if (ss.bullet > 0) c.push(['#fff8e1', 'Bullet time', `${ss.bullet.toFixed(1)}s`]);
+        if (ss.recast[1]) c.push(['#fff59d', 'Gale Step', `step ${ss.recast[1].n + 1} / 3`]);
+        if (ss.duel && !ss.duel.e.dead) c.push(['#ffd54f', 'Duel', ss.duel.hits >= 2 ? 'Q: plunge' : `${ss.duel.hits} / 2 lunges`]); // the web
+        if (ss.recast[4] && activeClass.skills[4].selectedUpg === 'B') c.push(['#e1f5fe', 'Twin Moons', `${ssMoonMax() - ss.moons} beams left`]);
+        if (ss.recast[2]) c.push(['#e3f2fd', 'Second Barrel', `${ss.recast[2].t.toFixed(1)}s`]);
+    }
+    for (const id in ELIXIRS) { const x = ELIXIRS[id], t = buffs[x.buff]; if (t > 0) c.push([x.col, x.name, `${Math.ceil(t)}s`]); } // potions.js
     let html = c.map(([col, label, val]) => `<span class="chip" style="--cc:${col}">${label} <b>${val}</b></span>`).join('');
     if (buffs.weakened > 0) html += '<span class="chip warn">Weakened</span>';
     if (player.wading) html += '<span class="chip" style="--cc:#69f0ae">Wading <b>Slowed · Poisoned</b></span>'; // map_cavern.js
@@ -93,16 +112,22 @@ function updateHUD() {
         const sk = activeClass.skills[i], cd = Math.max(0, cooldowns[`s${i}`] || 0);
         setSlot(hud.slots[i], cd, cooldownMax[`s${i}`] || sk.maxCd || 1, sk.level === 0, sk.level);
     }
-    if (hud.slots.rmb) setSlot(hud.slots.rmb, Math.max(0, cooldowns.rmb || 0), 4.0 * getCDR(), false, 0);
+    if (hud.slots.rmb) setSlot(hud.slots.rmb, Math.max(0, cooldowns.rmb || 0), (activeClass.name === 'Monk' || activeClass.name === 'Witch' || activeClass.name === 'Swordsaint') && cooldownMax.rmb ? cooldownMax.rmb : 4.0 * getCDR(), false, 0);
+    if (activeClass.name === 'Monk' || activeClass.name === 'Swordsaint') for (let i = 1; i <= 4; i++) { // monk.js / swordsaint.js: an open recast window drains as a gold ring on its slot
+        const w = (activeClass.name === 'Monk' ? mk : ss).recast[i], s = hud.slots[i]; s.el.classList.toggle('recast', !!w);
+        if (w) { s.cd.style.background = `conic-gradient(rgba(255, 213, 79, 0.5) ${Math.max(0, w.t / w.max) * 360}deg, transparent 0)`; s.num.textContent = w.t.toFixed(1); }
+    }
 
+    updatePotionHud(); // potions.js: the flask and the belt by the health orb
     const chips = hudChips();
     if (chips !== hud.chipSig) { el('hud-chips').innerHTML = chips; hud.chipSig = chips; }
 
     // Wave plaque: progress against the most enemies this wave has had left at once
     const left = enemiesToSpawn + activeEnemies;
     waveStats.peak = Math.max(waveStats.peak || 0, left);
-    el('wave-display').textContent = isTraining() ? 'Training' : wave > 0 ? `Wave ${wave}` : 'Prepare';
-    el('wave-subtext').textContent = isTraining() ? `${enemies.filter(e => e.dummy && !e.dead).length} dummies · T: panel` : wave === 0 ? 'Choose your first skill' : waveBreak > 0 ? `Next wave in ${Math.ceil(waveBreak)}` : currentMap.caveOpen ? (currentMap.type === 'hive' || currentMap.type === 'castle' ? 'Claim the crown' : 'The way is open') : left === 1 ? '1 enemy left' : `${left} enemies left`;
+    el('wave-display').textContent = isBase() ? 'Cinderholt' : isTraining() ? 'Training' : activeExpedition && wave > 0 ? expPlaque() : wave > 0 ? `Wave ${wave}` : 'Prepare';
+    if (isBase() && !inId()) { const m = matsHtml(); if (m !== hud.matSig) { el('wave-subtext').innerHTML = m; hud.matSig = m; } } // caches.js: the materials with their icons, rebuilt only when they change
+    else { hud.matSig = null; el('wave-subtext').textContent = isBase() ? baseSubtitle() : isTraining() ? `${enemies.filter(e => e.dummy && !e.dead).length} dummies · T: panel` : wave === 0 ? 'Choose your first skill' : waveBreak > 0 ? `Next wave in ${Math.ceil(waveBreak)}` : currentMap.caveOpen ? (activeExpedition ? 'The road home is open' : currentMap.type === 'hive' || currentMap.type === 'castle' ? 'Claim the crown' : 'The way is open') : left === 1 ? '1 enemy left' : `${left} enemies left`; }
     el('wave-prog').style.width = (waveBreak > 0 ? 100 : waveStats.peak ? (1 - left / waveStats.peak) * 100 : 0) + '%';
     if (player.gold !== hud.lastGold) {
         el('gold-display').textContent = player.gold;
@@ -110,14 +135,16 @@ function updateHUD() {
         hud.lastGold = player.gold;
     }
 
-    const boss = enemies.find(e => !e.dead && e.type.startsWith('boss') && !e.champion);
+    const boss = enemies.find(e => !e.dead && isBossE(e) && !e.champion);
     const guard = boss ? [] : enemies.filter(e => e.champion && !e.dead); // map_castle.js: the Royal Guard share one bar
     const showBoss = (boss && boss.state !== 'death_throes') || guard.length > 0;
     el('boss-bar').style.display = showBoss ? 'block' : 'none';
+    updateQuestTracker(showBoss); // sidequests.js: the active quests under the plaque (lower while the boss bar is up)
     if (showBoss) {
         const hp = boss ? boss.hp : guard.reduce((s, e) => s + Math.max(0, e.hp), 0), max = boss ? boss.maxHp : cst.guardMax || 1;
         const pct = Math.max(0, hp / max * 100) + '%';
-        el('boss-name').textContent = boss ? (boss.king ? 'Valerius, King of Thieves' : BOSS_NAMES[boss.type] || `Wave ${wave} Boss`) : 'The Royal Guard';
+        el('boss-name').textContent = boss ? (boss.chief ? boss.chief.name : boss.king ? 'Valerius, King of Thieves' : BOSS_NAMES[boss.type] || `Wave ${wave} Boss`) : 'The Royal Guard';
+        const sub = el('boss-sub'); if (sub) sub.textContent = boss && boss.chief ? boss.chief.title : ''; // expeditions.js: "Captain of the Turncoats"
         el('boss-fill').style.width = pct; el('boss-ghost').style.width = pct;
     }
 }
@@ -125,6 +152,18 @@ function updateHUD() {
 // ---------- class gauge (right orb): each class's own resource or signature mechanic ----------
 // Each entry returns { name, f (0..1 fill), big, small, light, dark, glow?, warn? }
 const GAUGES = {
+    Witch: () => { // Souls (witch.js): the souls lying within her reach; Raise Dead needs two
+        const n = soulsNear().length, ready = n >= WT_SOUL_MIN && wt.zombies.length < WT_ZOMBIE_MAX;
+        return { name: 'Souls', f: Math.min(1, n / WT_ZOMBIE_MAX), big: n, small: wt.zombies.length >= WT_ZOMBIE_MAX ? 'horde full' : ready ? 'E: raise them' : `${WT_SOUL_MIN} to raise`, light: '#69f0ae', dark: '#0f3324', glow: ready };
+    },
+    Swordsaint: () => { // Style (swordsaint.js): the rank's letter; the fill is the way to the next rank
+        const r = ssRank(), f = r >= 4 ? 1 : (ss.style - r * SS_RANK) / SS_RANK;
+        return { name: 'Style', f, big: SS_RANK_LETTER[r], small: r ? `+${Math.round(SS_RANK_POWER[r] * 100)} Power/+${Math.round(SS_RANK_SPEED[r] * 100)}% spd` : 'weave to rise', light: SSFX_RANK_COL[r], dark: '#14203d', glow: r >= 4 };
+    },
+    Monk: () => { // Chi (monk.js): flurry blows fill it; full, the next flurry is a Hundred-Hand Strike
+        const full = mk.chi >= MK_CHI_MAX;
+        return { name: 'Chi', f: mk.chi / MK_CHI_MAX, big: Math.floor(mk.chi), small: full ? 'Hundred-Hand ready' : `flurry x${mk.flurry}`, light: '#ffb74d', dark: '#5a2500', glow: full };
+    },
     Kensei: () => ({ name: 'Flow', f: player.flow / player.maxFlow, big: Math.floor(player.flow), small: player.stance === 'airborne' ? 'Airborne' : 'Handheld', light: '#4dd0e1', dark: '#003640' }),
     Cleric: () => { // the small line is what the next Divine Ray would hit for (skills.js RAY_ZEAL_MULT)
         const z = buffs.zealLocked && buffs.aspectOfReaper <= 0 ? 100 : (player.zeal || 0);
@@ -239,7 +278,7 @@ function updateHudCover() {
     const now = performance.now();
     if (!hud.rects || now - hud.rectsAt > 500) {
         hud.rectsAt = now;
-        hud.rects = ['hp-wrap', 'hud-center', 'gauge-wrap', 'wave-plaque', 'boss-bar', 'gold-plaque'].map(id => { const e = el(id), r = e.getBoundingClientRect(); return { e, r, on: r.width > 0 && r.height > 0, cov: e.classList.contains('hud-covered') }; });
+        hud.rects = ['hp-wrap', 'hud-center', 'gauge-wrap', 'wave-plaque', 'boss-bar', 'gold-plaque', 'quest-tracker'].map(id => { const e = el(id), r = e.getBoundingClientRect(); return { e, r, on: r.width > 0 && r.height > 0, cov: e.classList.contains('hud-covered') }; });
     }
     const pts = [[player.x, player.y, 30]];
     for (const e of enemies) if (!e.dead && !e.pod) pts.push([e.x, e.y, e.size * 0.7]); // pods line the walls; they'd keep the HUD faded
@@ -254,10 +293,11 @@ function updateHudCover() {
 
 function showWaveBanner() {
     const b = el('wave-banner'), s = siteById(activeDungeonId);
-    b.classList.toggle('boss', isBossWave);
+    b.classList.toggle('boss', isBossWave); b.classList.remove('quest'); // sidequests.js questBanner
     b.querySelector('.wb-kicker').textContent = isEndlessMode ? 'Limitless' : (s ? s.name : '');
     b.querySelector('.wb-title').textContent = `Wave ${wave}`;
     b.querySelector('.wb-sub').textContent = isBossWave ? 'A powerful foe approaches' : wave === 1 ? 'Survive' : 'They keep coming';
+    if (activeExpedition && expBanner(b)) return; // expeditions.js: its name in the kicker; the chief's wave waits for him to show (expEntrance)
     b.classList.remove('show'); void b.offsetWidth; b.classList.add('show');
 }
 
@@ -286,27 +326,35 @@ function renderTabSheet() {
     const stance = n === 'Kensei' && player.stance === 'airborne' ? (player.flow / player.maxFlow) * 0.5 : 0;
     const frenzy = n === 'Dragonknight' ? player.frenzyStacks * 0.02 : 0;
     const interval = 0.15 + activeClass.basicAttackCD / (1 + attackSpeedBonus()); // skills.js
-    h += row('Basic attack', `${Math.round(hitDmg(activeClass.basicDmg))} dmg &middot; ${(1 / interval).toFixed(1)}/s`);
-    if (glove) h += row(equipment.gloves.name, `${pct(glove)} speed`, 'sub');
+    h += row('Basic attack', `${Math.round(basicHitDmg())} dmg &middot; ${(1 / interval).toFixed(1)}/s`);
+    if (basicLevelMult() > 1) h += row('Hero level', `&times;${basicLevelMult().toFixed(2)}`, 'sub'); // combat.js
+    if (n === 'Witch') h += row('Poison stack', `${basicHitDmg().toFixed(1)} over ${WT_POISON_TIME}s · ${wtPoisonMax()} max`, 'sub') + row(WT_KINDS[minionKind()].name, `${wt.zombies.length} / ${WT_ZOMBIE_MAX}`, 'sub') + row('Souls near you', soulsNear().length, 'sub'); // witch.js
+    if (n === 'Swordsaint') h += row('Style', `${SS_RANK_LETTER[ssRank()]} (${SS_RANK_NAME[ssRank()]}) · ${Math.floor(ss.style)} / ${SS_MAX}`, 'sub') + row('Mana Burst', `${ss.charges} / ${ssMaxCharges()} charges`, 'sub'); // swordsaint.js
+    if (n === 'Monk') h += row('Flurry of Blows', `${mk.flurry} / ${MK_FLURRY_MAX} charges`, 'sub') + row('Chi', `${Math.floor(mk.chi)} / ${MK_CHI_MAX}`, 'sub') + row('Iron Will lifesteal', `${Math.round(monkWillPct(Math.max(1, activeClass.skills[3].level)) * 100)}%`, 'sub'); // monk.js
+    if (glove) h += row(itemName(equipment.gloves), `${pct(glove)} speed`, 'sub');
     if (stance) h += row('Airborne stance', `${pct(stance)} speed`, 'sub temp');
     if (frenzy) h += row(`Frenzy &times;${player.frenzyStacks}`, `${pct(frenzy)} speed`, 'sub temp');
+    if (ssSpeed()) h += row(`Style: ${SS_RANK_LETTER[ssRank()]} rank`, `${pct(ssSpeed())} speed`, 'sub temp'); // swordsaint.js
     h += row('Cooldown reduction', `${Math.round((1 - getCDR()) * 100)}%`);
-    if (equipment.amulet) h += row(equipment.amulet.name, pct(equipment.amulet.val), 'sub');
+    if (equipment.amulet) h += row(itemName(equipment.amulet), pct(equipment.amulet.val), 'sub');
     if (player.treeCdr) h += row('Talents', pct(player.treeCdr), 'sub'); // skilltree.js: Focus
 
     // Defense
     const gearHp = equipment.armor ? equipment.armor.val : 0;
     h += `<h4>Defense</h4>` + row('Max health', Math.round(player.maxHp));
     h += row('Class base', activeClass.baseMaxHp, 'sub');
-    if (gearHp) h += row(equipment.armor.name, `+${Math.round(gearHp)}`, 'sub');
+    if (gearHp) h += row(itemName(equipment.armor), `+${Math.round(gearHp)}`, 'sub');
     if (player.treeHp) h += row('Talents', `+${player.treeHp}`, 'sub'); // skilltree.js: Vitality
     const armorNow = player.armor * (typeof paladinArmorMult === 'function' && n === 'Paladin' ? paladinArmorMult() : 1);
     h += row('Armor', Math.round(armorNow * 10) / 10) + `<div class="note">blocks ${Math.round(armorReduction(armorNow) * 100)}% of every hit</div>`;
     if (player.shield > 0) h += row('Shield', Math.ceil(player.shield), 'sub temp');
     h += row('Move speed', Math.round(player.speed));
-    if (equipment.boots) h += row(equipment.boots.name, `+${Math.round(equipment.boots.val)}`, 'sub');
+    if (equipment.boots) h += row(itemName(equipment.boots), `+${Math.round(equipment.boots.val)}`, 'sub');
     if (player.treeSpeed) h += row('Talents', `+${player.treeSpeed}`, 'sub'); // skilltree.js: Fleetness
+    if (hasKeepsake('hound_tooth')) h += row(KEEPSAKES.hound_tooth.name, '+5%', 'sub'); // sidequests.js
     if (n === 'Ranger' && player.momentum > 0) h += row('Momentum', `${pct(player.momentum)} speed`, 'sub temp');
+
+    h += `<h4>Materials</h4>` + MAT_KEYS.map(k => row(matImg(k) + MAT_NAMES[k], mats[k])).join('') + `<div class="note">for rebuilding Cinderholt</div>`; // caches.js
 
     // Skills: rank, evolution and what they do now
     h += `<h4>Skills</h4>`;
@@ -317,12 +365,14 @@ function renderTabSheet() {
         h += `<div class="sk"><img class="${sk.level ? '' : 'off'}" src="${skillIcon(cid, i)}"><div class="n">${SLOT_KEYS[i]} &middot; ${sk.name}<i>${sk.level ? `Rank ${sk.level}` : 'Not learned'}${evo ? ` &middot; ${evo}` : ''}</i></div><div class="v">${v}</div></div>`;
     }
     h += `<h4>Passive</h4><div class="passive">${activeClass.passive || ''}</div>`;
-    el('tab-sheet').innerHTML = h;
+    const side = questSheetHtml(); // sidequests.js: quests, keepsakes and favours, a column of their own so neither runs off the screen
+    el('tab-sheet').classList.toggle('wide', !!side);
+    el('tab-sheet').innerHTML = side ? `<div class="ts-col">${h}</div><div class="ts-col ts-side">${side}</div>` : h;
 }
 
 // Fresh HUD for a new run
 function resetHUD() {
     hud.sig = null; hud.chipSig = ''; hud.hpGhost = 1; hud.lastFx = fxTime; hud.lastGold = -1; hud.gaugeF = 0; hud.gaugeSig = ''; hud.rects = null;
     const s = siteById(activeDungeonId);
-    el('wave-dungeon').textContent = s ? s.name : '';
+    el('wave-dungeon').textContent = activeMemory ? 'A memory' : s ? s.name : ''; // expeditions.js: a replayed dungeon is a memory
 }

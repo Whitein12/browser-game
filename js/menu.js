@@ -9,7 +9,7 @@ const MAP_W = 1000, MAP_H = 625; // logical map space; the canvas scales it to f
 const MAP_SITES = [
     { id: 'slime_caves', name: 'Slime Caves', levels: 'Lv. 1-10', color: '#558b2f', x: 250, y: 360, icon: 'cave', numeral: 'I',
       desc: 'A damp cave filled with highly regenerative oozes and toxic sludges.', bosses: 'The Slime King, The Hive Queen' },
-    { id: 'bandit_bastion', name: 'Bandit Bastion', levels: 'Lv. 5-15', color: '#9c3d1e', x: 690, y: 378, icon: 'fort', numeral: 'II',
+    { id: 'bandit_bastion', name: 'Bandit Bastion', levels: 'Lv. 10-20', color: '#9c3d1e', x: 690, y: 378, icon: 'fort', numeral: 'II',
       desc: 'Your village lies in ashes. Follow the raiders\' trail to their stronghold and make them pay.', bosses: 'The Warchief, the Beastmaster, Valerius, King of Thieves' },
     { id: 'frostpeak', name: 'Frostpeak Hollow', x: 505, y: 172, icon: 'spire', locked: true },
     { id: 'ember_forge', name: 'Ember Forge', x: 822, y: 262, icon: 'volcano', locked: true },
@@ -29,7 +29,7 @@ let mapScale = 1, mapCache = null, mapHover = null, mapPixel = 1;
 function mapRng(seed) { // deterministic, so the map looks the same every visit
     return () => { seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
 }
-const siteById = id => MAP_SITES.find(s => s.id === id);
+const siteById = id => MAP_SITES.find(s => s.id === id) || expSite(id); // expeditions.js: an expedition's id has no site of its own
 
 // Coastline as a wobbly radius around an ellipse; `grow` pushes it outward for the ripple rings
 const angDist = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
@@ -432,7 +432,7 @@ function drawMapFrame(t) {
         if (s.locked) drawFog(c, s, t);
         drawSeal(c, s.x, s.y + 24, hov ? 15 : 13, s.locked ? '#7d7366' : s.color, s);
         mapLabel(c, s.name, s.x, s.y + 50, 17, { bold: true, alpha: s.locked ? 0.55 : 1, spacing: 0.5 });
-        mapLabel(c, s.locked ? 'uncharted' : s.levels, s.x, s.y + 67, 13, { italic: true, color: s.locked ? '#6b5a48' : '#6b3a1a', alpha: s.locked ? 0.7 : 1 });
+        mapLabel(c, s.storyLock ? 'locked' : s.locked ? 'uncharted' : s.levels, s.x, s.y + 67, 13, { italic: true, color: s.locked ? '#6b5a48' : '#6b3a1a', alpha: s.locked ? 0.7 : 1 });
     }
 }
 
@@ -451,7 +451,9 @@ function siteAt(mx, my) { return MAP_SITES.find(s => s.box ? Math.abs(mx - s.x) 
 function showMapInfo(s) {
     const box = el('map-info');
     if (!s) { box.classList.add('hidden'); return; }
-    box.innerHTML = s.locked
+    box.innerHTML = s.storyLock // save.js: the hero hasn't earned this road yet
+        ? `<div class="mi-name">${s.name}</div><div class="mi-lv">${s.levels} &middot; locked</div><p>${s.storyLock}</p>`
+        : s.locked
         ? `<div class="mi-name">${s.name}</div><div class="mi-lv">Uncharted territory</div><p>The fog hasn't lifted from this region yet. Coming in a future update.</p>`
         : `<div class="mi-name" style="color:${s.color}">${s.name}</div><div class="mi-lv">${s.levels}</div><p>${s.desc}</p>${s.bosses ? `<div class="mi-boss">Bosses: ${s.bosses}</div>` : ''}<div class="mi-go">Click to ${s.box ? 'enter' : 'travel'} &rsaquo;</div>`;
     box.classList.remove('hidden');
@@ -548,7 +550,7 @@ window.showClassSelection = () => {
 };
 
 // Called once the JSON data is loaded
-window.openMainMenu = () => { fillClassDetails(); showDungeonMap(); };
+window.openMainMenu = () => { fillClassDetails(); openHeroMenu(); }; // save.js: the hero slots come first
 
 function menuFrame(now) {
     if (gameState !== STATE.MENU) return; // a run has started; stop animating the menu

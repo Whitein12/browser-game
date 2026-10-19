@@ -260,7 +260,7 @@ function updateIceWall(dt, ef) { // main.js effect loop
         const t = Math.max(0, Math.min(1, ((e.x - ef.x1) * dx + (e.y - ef.y1) * dy) / L2)), nx = ef.x1 + dx * t, ny = ef.y1 + dy * t;
         const d = Math.hypot(e.x - nx, e.y - ny), min = ICE_WALL_THICK / 2 + e.size / 2;
         if (d >= min) continue;
-        if (e.type.startsWith('boss')) { ef.life = 0.3; burst(nx, ny, 0, Math.PI * 2, 16, { kind: 'spark', color: '#e1f5fe', size: 3, life: 0.5, speed: [150, 400], drag: 4 }); addShake(2); return; } // smashed through
+        if (isBossE(e)) { ef.life = 0.3; burst(nx, ny, 0, Math.PI * 2, 16, { kind: 'spark', color: '#e1f5fe', size: 3, life: 0.5, speed: [150, 400], drag: 4 }); addShake(2); return; } // smashed through
         const side = d > 0.5 ? null : ((e.x - ef.x1) * dy - (e.y - ef.y1) * dx >= 0 ? 1 : -1);
         const ux = side === null ? (e.x - nx) / d : -dy / Math.sqrt(L2) * side, uy = side === null ? (e.y - ny) / d : dx / Math.sqrt(L2) * side;
         e.x = nx + ux * min; e.y = ny + uy * min; // held on its own side
@@ -424,7 +424,7 @@ function sanctifiedArrival() { // skills.js Phase Shift, after the blink
         effects.push({ type: 'holy_nova', x: z.x, y: z.y, radius: z.radius, life: 0.5, maxLife: 0.5 });
         burst(player.x, player.y, 0, Math.PI * 2, 16, { kind: 'dot', color: '#fff8e1', size: 2.5, life: 0.6, speed: [120, 300], drag: 3 });
         for (const e of enemies) { // thrown out of the holy ground
-            if (e.dead || e.pod || e.type.startsWith('boss') || Math.hypot(e.x - z.x, e.y - z.y) > z.radius + e.size / 2) continue;
+            if (e.dead || e.pod || isBossE(e) || Math.hypot(e.x - z.x, e.y - z.y) > z.radius + e.size / 2) continue;
             const [dx, dy, d] = getVector(z.x, z.y, e.x, e.y), to = z.radius + e.size / 2 + 20;
             if (d > 0) { e.x = z.x + dx / d * to; e.y = z.y + dy / d * to; clampToBounds(e, e.size / 2); }
         }
@@ -550,7 +550,7 @@ function releaseHurricane() { // skills.js Parry Thrust, while the blades are ga
                     hit.set(e, fxTime);
                     applyDamage(e, g.dmg * HURRICANE_MULT, 'slash', ang);
                 }
-                if (!e.dead && !e.type.startsWith('boss')) { // swept up and carried along
+                if (!e.dead && !isBossE(e)) { // swept up and carried along
                     e.x += ux * HURRICANE_SPEED * 0.85 * dt + (ef.x - e.x) * Math.min(1, dt * 5); e.y += uy * HURRICANE_SPEED * 0.85 * dt + (ef.y - e.y) * Math.min(1, dt * 5);
                     clampToBounds(e, e.size / 2);
                 }
@@ -720,7 +720,7 @@ function updateOrbit(ab, dt) {
             if (e.dead || e.pod || e.submerged || d > reach + e.size / 2 || (ring && d < o.r - ORBIT_REACH - e.size / 2)) continue;
             const a = Math.atan2(e.y - player.y, e.x - player.x);
             applyDamage(e, bladeHitDmg(BLADE_STEER_MULT * ORBIT_MULT), 'slash', a);
-            if (!e.type.startsWith('boss') && !e.dead) { e.x += Math.cos(a) * ORBIT_PUSH; e.y += Math.sin(a) * ORBIT_PUSH; clampToBounds(e, e.size / 2); }
+            if (!isBossE(e) && !e.dead) { e.x += Math.cos(a) * ORBIT_PUSH; e.y += Math.sin(a) * ORBIT_PUSH; clampToBounds(e, e.size / 2); }
         }
     }
     for (const p of projectiles) { // enemy shots coming into the circle are cut down
@@ -731,7 +731,11 @@ function updateOrbit(ab, dt) {
     if (o.t >= (o.time || ORBIT_TIME) + (o.extra || 0)) { ab.orbit = null; ab.attackTimer = 0.1; }
 }
 
+// The Witch has no entry: her finisher, the toxic trail, is a fresh LMB press during Broom Flight (witch.js witchBroomClick), the one
+// finisher that acts during the movement (the user's design, 2026-10-15). It still needs a deliberate press after the cast.
 const COMBO_FINISHERS = {
+    Monk: (dmg, heavy, c) => craneKick(dmg), // monk.js: keeps the flurry charge
+    Swordsaint: (dmg, heavy, c) => crosscut(dmg), // swordsaint.js: an X of two cuts, a burst where they cross
     Kensei: (dmg, heavy, c) => kenseiFinisher(dmg, c),
     Druid: (dmg, heavy, c) => callingBolt(dmg),
     Nightblade: (dmg, heavy, c) => shadowDaggers(dmg),

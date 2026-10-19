@@ -2,6 +2,10 @@
 // utils.js - Math and Spatial Logic
 // ==========================================
 
+// Boss rules (knockback and CC immunity, the Nightblade's weak point, the boss bar...) key off the type's 'boss' prefix; an
+// expedition's chief keeps its base type (so its AI and sprite work) and carries `isBoss` instead (expeditions.js)
+const isBossE = e => !!e && (e.isBoss === true || e.type.startsWith('boss'));
+
 function updateMapBounds() {
     const stageMap = typeof STAGE_MAPS !== 'undefined' && STAGE_MAPS[currentMap.type]; // stage.js: maps bigger than the screen
     currentMap.obstacles = stageMap ? stageMap.obstacles : null;

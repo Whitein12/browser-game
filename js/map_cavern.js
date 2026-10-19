@@ -634,6 +634,7 @@ function drawCavernDark() { drawDarkLayer('rgba(3, 5, 10, 0.74)', hole => {
     hole(3900, 1400, cav.sealBroken ? 440 : 230, cav.sealBroken ? 0.75 : 0.45);
     for (const L of cav.lakes) hole(L.x, L.y, Math.max(L.rx, L.ry) * L.s * 1.6, 0.55 + L.churn * 0.3);
     for (const m of cav.mush) hole(m.x, m.y, 120, 0.5);
+    cacheLights(hole); // caches.js
     for (const e of enemies) {
         if (e.dead) continue;
         if (e.type === 'voltaic_ooze') hole(e.x, e.y, 150, 0.6 + 0.2 * Math.sin(t * 20 + e.x));

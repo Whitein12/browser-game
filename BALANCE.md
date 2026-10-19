@@ -4,6 +4,41 @@ A snapshot of every number that matters for the balance patch: classes, skills, 
 
 ## Patch log
 
+### Basic attacks scale with level (2026-10-17)
+
+The user found late-game basics too weak ("around 40, not even tickles endgame bosses"), worst for basic-attack classes (Ranger, Swordsaint). Cause: skills grow with ranks (x1.6) and Power, but basics always used rank 1, so only Power grew them (~x2.1 from Lv. 5 to Lv. 20) while boss HP grows ~x6 (Slime King w5 3.6k → King of Thieves 22.75k).
+
+**Change** (the user's pick, the recommended option): the basic attack and its Space finisher deal +5% per hero level (`BASIC_LEVEL_SCALE`, `basicLevelMult()` in combat.js: x1.45 at Lv. 10, x1.95 at Lv. 20), applied in skills.js `castBasic` and monk.js `mkBasicDmg`. Kits that read `activeClass.basicDmg` directly (the Druid's companion, the Nightblade's venom, the Kensei's airborne blades, the Swordsaint's winds and Counter Burst, the Witch's trail) are left alone: scaling the shared number instead would have given the Druid +60% and the Nightblade +65% late, the Ranger only +36%. The Training Room's late-game kit counts as Lv. 20; the Tab sheet shows the multiplier ("Hero level").
+
+**Model** (headless, boss dummy, the campaign's median Power per level (134 / 180 / 282), ranks 2-3, no evolutions; a mashing rotation, so trust the percentages, not the absolute DPS). What the change adds to the whole rotation at Lv. 5 / 10 / 20: Dragonknight +11 / +25 / +52%, Spellweaver +8 / +18 / +39%, Ranger +3 / +17 / +37%, Nightblade 0 / +9 / +16%, Machinist +6 / +9 / +20%, Kensei +14 / +31 / +66%, Cleric +6 / +12 / +25%, Druid -2 / +1 / +4% (noise), Paladin +4 / +11 / +23%, Monk +10 / +24 / +50%, Witch +15 / +36 / +75%, Swordsaint +13 / +30 / +63%. Late basic hits: Ranger 17 → 35, Swordsaint 19 → 44, Dragonknight 28 → 55. Expected: late Bastion bosses ~25-30% shorter (King ~81 → ~60 s), the Queen (170 s against a 120 s target) ~15-20% shorter. **To do:** rerun the campaign bot to check boss times; boss HP was left as is.
+
+### The campaign pass (CAMPAIGN.md step 5, 2026-10-14)
+
+The first balance pass for the campaign: one hero from the Slime Caves through the Bandit Bastion, with the skill web, the smith and the flask. Measured with the campaign bot (the Bastion bot taught to spend web points, buy and upgrade at every clear screen, drink the flask under 45% HP; real save slots, the hero carried from the Caves into the Bastion; 9 classes × 2 runs; no elixirs). It's a mechanical, mortal player that dodges, so compare classes with each other and runs with runs, not with real play.
+
+**Before** (the old ×1.5 XP curve, no starter gear): the Caves ended at Lv. 13 and the Bastion at only Lv. 15 (Lv. 20 would have needed 221k XP; the whole campaign gives ~29k). The hero met the Slime King with no gear and ~120 HP: 44 dead attempts in the Caves, 20 of them at the King. The castle's 1.1-1.6k gold had nowhere to go (no shop after wave 11), so heroes ended with ~1.6k unspent and the weapon at +4 to +6 against a +10 cap. The 30% wave heal turned out minor (a few hundred HP per dungeon); the flask carries the boss fights, and the Dragonknight, Cleric and Druid hardly drink it.
+
+**Changes** (the user's picks, the recommended option each time):
+- **XP:** `XP_TABLE` in combat.js replaces ×1.5 a level: 70, 130, 230, 410, 730, 1290, 2280, 4030, 6400 to Lv. 10, then 7490 rising 5% a level to 11 600 for Lv. 19 → 20 (and on past it for Limitless). Bastion enemies give **×7.3 XP** (`DUNGEON_XP`). A saved hero's next level is recomputed on load.
+- **Starter kit:** a new Lv. 1 hero starts with the common weapon and armor at +0 (main.js `startGame`).
+- **Rest before the throne:** after wave 15's doors and his invitation, a "Before the Throne" screen with the Merchant, Smith, Apothecary and Save & Quit (map_castle.js → `showWaveCleared({ shops: true })`).
+- **The Bastion rebased for a Lv. 10 hero** (`bastionScale` in combat.js): the village (waves 1-5) ×1.8 HP and ×1.4 damage, the trail (6-10) ×1.3 HP; the bridge and the castle unchanged (already fought at Lv. 14-20).
+- Kept: the 30% heal at each wave start; the Slime King, left for a real playtest (the bot died to him the same way at Lv. 6, mostly with the melee classes it plays poorly).
+- Fixed on the way: a Toxic Fumes tick that killed the last enemy could crash the effects loop (main.js).
+
+**After** (the rerun, medians across classes; before the Bastion rebase):
+
+| | Caves w5 / w10 / w15 | Bastion w5 / w10 / w11 / w15 / w17 |
+|---|---|---|
+| Level | 5 / 7 / 9.5 (now 10 with the 6400 step) | 11 / 13 / 14 / 18 / 20 |
+| Power / Max HP | 134 / 157, 196 / 157, 236 / 351 | 182 / 360, 230 / 398, 234 / 444, 272 / 482, 282 / 482 |
+
+- Gear: weapon +3 / armor +1 to +2 entering the Bastion; +5 to +7 / +2 to +4 after the throne shop, where every run spent ~450. ~1.2k is left at the end, nearly all the Guard's and the King's purse, which goes home to Cinderholt.
+- Dead attempts: Caves 44 → 32, Bastion 19 → 14. By boss: Slime King 18, Amalgam 4 (+7 to its stage's shots and lake), Beastmaster 6, Valerius on the bridge 8, the King 0. Machinist, Cleric, Druid and Ranger almost never die; Kensei, Nightblade, Paladin and Spellweaver do.
+- Boss times (s): Slime King 57, Amalgam 70, Queen 170, Warchief 14, Beastmaster 43, bridge 74, Royal Guard 59, King 81. The Warchief at 14 s (a Lv. 10 hero against a stage built for Lv. 1) is what the rebase answers.
+
+**Rebase check** (the seasoned start, Lv. 10 with no gear until the wave 5 shop, waves 1-11, 9 classes × 1): Warchief 22 → 40 s (Nightblade 18 to Ranger 51), Beastmaster 46 → 57 s, the bridge 93 → 86 s; levels 11 / 13 / 14 at waves 5 / 10 / 11. Dead attempts moved to the Warchief (wave 5: 3 → 7; Spellweaver, Kensei, Nightblade, Paladin), the Beastmaster 5 → 2. A campaign hero arrives with about twice the seasoned hero's Power (a rare weapon +3 against nothing), so the Warchief should land near the ~25 s aim for them; the seasoned start is the one that now meets the village bare. **Changed after it** (the user's call): the seasoned start now gets a Caves hero's gear, the class's rare weapon +3 and rare armor +1, instead of 300 gold (save.js `kit: 'seasoned'`, handed out by `applyHero` once the class is picked).
+
 ### Status: v1.9, the Balance Patch (finished 2026-10-11)
 
 Everything in this log is the v1.9 Balance Patch, on top of v1.8 (the Slime Caves). In short:

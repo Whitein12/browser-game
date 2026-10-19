@@ -57,6 +57,8 @@ const viewW = () => canvas.width / camZoom(), viewH = () => canvas.height / camZ
 // Which map a wave is fought on
 function mapTypeForWave(w) {
     if (isTraining()) return 'training'; // training.js
+    if (isBase()) return 'base'; // map_base.js: Cinderholt freed
+    if (activeExpedition) return EXPEDITIONS[activeExpedition].map; // expeditions.js: one map for every wave
     if (isEndlessMode) return 'open';
     if (activeDungeonId === 'bandit_bastion' && w <= 5) return 'village';
     if (activeDungeonId === 'bandit_bastion' && w >= 6 && w <= 10) return 'trail'; // map_trail.js
@@ -76,6 +78,8 @@ function setStageMap(type) {
     if (changed && type === 'cavern') { buildCavern(); resetCavern(); } // map_cavern.js
     if (changed && type === 'hive') buildHive(); // map_hive.js
     if (changed && type === 'village') buildVillage(); // map_village.js
+    if (changed && type === 'base') buildBase(); // map_base.js
+    if (changed && isInterior(type)) buildInterior(type); // interiors.js
     if (changed && type === 'trail') buildTrail(); // map_trail.js
     if (changed && type === 'bridge') buildBridge(); // map_bridge.js
     if (changed && type === 'castle') buildCastle(); // map_castle.js
@@ -92,6 +96,8 @@ function setStageMap(type) {
         if (type === 'trail') resetTrail(); // map_trail.js: the logjams and the gate shut again
         if (type === 'bridge') resetBridge(); // map_bridge.js: nobody on the bridge yet
         if (type === 'castle') resetCastle(); // map_castle.js: every door barred again, the kegs back
+        placeCaches(type); // caches.js: the map's supply caches (after the map's own reset, before the flow field sees their obstacles)
+        questMapChanged(type); // sidequests.js: the ambushers go, the active quests' caches, stash and wares come out
         updateNav(true);
         updateCamera(0, true);
     }
@@ -268,6 +274,7 @@ function randomOpenSpot(minFromHero, near, clear = 40) {
 
 // Where a new enemy appears: under the tree line or out of the cave mouth, never right next to the player
 function pickSpawnPoint() {
+    if (activeExpedition && currentMap.type !== 'hive') return expSpawnPoint(); // expeditions.js: any open part, near the hero
     if (currentMap.type === 'cavern') return cavernSpawnPoint(); // map_cavern.js: out of the lakes and burrows
     if (currentMap.type === 'hive') return hiveSpawnPoint(); // map_hive.js: hatched from a brood pod
     if (currentMap.type === 'village') return villageSpawnPoint(); // map_village.js: a doorway, the trees, over the barricade
@@ -302,7 +309,8 @@ function onEnemySpawned(e) {
 // The wave's last enemy died (or a level-up after that closed). Regular waves roll on by themselves after a short
 // breather; only a boss stops the run: the stage exit opens, or (without a stage map) the boss-cleared screen and its shop.
 function onWaveCleared() {
-    if (isTraining()) return; // training.js: no waves to clear
+    if (isTraining() || isBase()) return; // training.js, map_base.js: no waves to clear
+    if (activeExpedition) { expWaveCleared(); return; } // expeditions.js: three waves and a chief, no screens in between
     // A boss wave whose boss a scene brings (the bridge's Valerius, the throne room) starts with nothing to kill: a
     // level-up closing then used to "clear" it and open the exit before the fight. Not cleared until the boss is out.
     if (isBossWave && !bossSpawned) { gameState = STATE.PLAYING; lastTime = performance.now(); return; }
@@ -325,9 +333,12 @@ function onWaveCleared() {
     waveBreak = WAVE_BREAK; // main.js update counts it down; the wave plaque shows it
 }
 
+// Where the stage's exit is: an expedition's is the map's start (the road home, expeditions.js); r: how close counts
+function stageExit() { const d = mapDef(); return activeExpedition ? expExit() : d && d.exit ? { x: d.exit.x, y: d.exit.y, r: d.exitR } : null; }
+
 function openStageExit(color) {
     currentMap.caveOpen = true; showStagePrompt(true);
-    const m = mapDef().exit;
+    const m = stageExit();
     effects.push({ type: 'cave_open_flash', x: m.x, y: m.y, color: color || '#b2ff59', life: 1.2, maxLife: 1.2 });
 }
 
@@ -394,6 +405,7 @@ function updateStageEvent(dt) {
     else if (ev.type === 'valerius_rises') updateValeriusRises(ev, dt);
     else if (ev.type === 'valerius_fall') updateValeriusFall(ev, dt);
     else if (ev.type === 'crown_claim') updateCrownClaim(ev, dt);
+    else if (ev.type === 'base_arrival') updateArrival(ev, dt); // map_base.js: home to Cinderholt
     else if (ev.type === 'cave_exit') {
         player.dash = null; player.grappleTarget = null;
         const [dx, dy, dd] = getVector(player.x, player.y, d.exitTo.x, d.exitTo.y);
@@ -409,10 +421,12 @@ function updateStage(dt) {
     const d = mapDef();
     if (currentMap.grid) { // map_hive.js / map_village.js / map_cavern.js
         updateNav();
-        if (currentMap.type === 'hive') updateHive(dt); else if (currentMap.type === 'village') updateVillage(dt); else if (currentMap.type === 'trail') updateTrail(dt); else if (currentMap.type === 'bridge') updateBridge(dt); else if (currentMap.type === 'castle') updateCastle(dt); else updateCavern(dt);
+        if (currentMap.type === 'hive') updateHive(dt); else if (currentMap.type === 'village') updateVillage(dt); else if (currentMap.type === 'trail') updateTrail(dt); else if (currentMap.type === 'bridge') updateBridge(dt); else if (currentMap.type === 'castle') updateCastle(dt); else if (currentMap.type === 'base') updateBase(dt); else if (isInterior(currentMap.type)) updateInterior(dt); else updateCavern(dt);
     }
-    if (d && currentMap.caveOpen && !stageEvent && Math.hypot(player.x - d.exit.x, player.y - d.exit.y) < d.exitR) {
-        if (currentMap.type === 'hive') startTrophyClaim(); else if (currentMap.type === 'castle') startCrownClaim(); else startCaveExit(); // map_hive.js / map_castle.js: a crown to claim
+    const ex = stageExit();
+    if (d && ex && currentMap.caveOpen && !stageEvent && Math.hypot(player.x - ex.x, player.y - ex.y) < ex.r) {
+        if (activeExpedition) expReturn(); // expeditions.js: the panel, then Cinderholt
+        else if (currentMap.type === 'hive') startTrophyClaim(); else if (currentMap.type === 'castle') startCrownClaim(); else startCaveExit(); // map_hive.js / map_castle.js: a crown to claim
     }
 }
 
@@ -435,12 +449,12 @@ function drawStageScreen() {
     if (!stageVignette || stageVignette.key !== key) { // painted once per map and window size, not every frame
         stageVignette = document.createElement('canvas'); stageVignette.width = cw; stageVignette.height = ch; stageVignette.key = key;
         const vc = stageVignette.getContext('2d'), v = vc.createRadialGradient(cw / 2, ch / 2, Math.min(cw, ch) * (cave ? 0.35 : 0.45), cw / 2, ch / 2, Math.max(cw, ch) * 0.75);
-        const edge = currentMap.type === 'hive' ? 'rgba(14, 0, 8, 0.6)' : currentMap.type === 'village' ? 'rgba(20, 7, 0, 0.55)' : currentMap.type === 'trail' ? 'rgba(8, 14, 2, 0.45)' : currentMap.type === 'bridge' ? 'rgba(20, 8, 24, 0.5)' : currentMap.type === 'castle' ? 'rgba(10, 6, 14, 0.55)' : cave ? 'rgba(0, 3, 8, 0.6)' : 'rgba(0, 12, 4, 0.45)';
+        const edge = currentMap.type === 'hive' ? 'rgba(14, 0, 8, 0.6)' : currentMap.type === 'village' ? 'rgba(20, 7, 0, 0.55)' : currentMap.type === 'base' ? 'rgba(14, 20, 6, 0.3)' : isInterior(currentMap.type) ? 'rgba(6, 3, 1, 0.5)' : currentMap.type === 'trail' ? 'rgba(8, 14, 2, 0.45)' : currentMap.type === 'bridge' ? 'rgba(20, 8, 24, 0.5)' : currentMap.type === 'castle' ? 'rgba(10, 6, 14, 0.55)' : cave ? 'rgba(0, 3, 8, 0.6)' : 'rgba(0, 12, 4, 0.45)';
         v.addColorStop(0, 'rgba(0, 10, 0, 0)'); v.addColorStop(1, edge); vc.fillStyle = v; vc.fillRect(0, 0, cw, ch);
     }
     ctx.drawImage(stageVignette, 0, 0);
     if (currentMap.caveOpen && !stageEvent) { // arrow at the screen edge pointing at the exit while it's off-screen
-        const m = d.exit, z = camZoom(), sx = (m.x - camera.x) * z, sy = (m.y - camera.y) * z;
+        const m = stageExit() || d.start, z = camZoom(), sx = (m.x - camera.x) * z, sy = (m.y - camera.y) * z;
         if (sx < 40 || sx > cw - 40 || sy < 40 || sy > ch - 40) {
             const a = Math.atan2(sy - ch / 2, sx - cw / 2), px = Math.max(50, Math.min(cw - 50, sx)), py = Math.max(50, Math.min(ch - 200, sy));
             const pulse = 0.7 + 0.3 * Math.sin(fxTime * 5);

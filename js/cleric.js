@@ -62,7 +62,7 @@ function clDesecTick(p, dmg) { // Desecration: Creeping Dark grows, Siphon heals
 
 // Phase Shift: Second Swap, Raven Swarm, Dread
 function clRavenDread(e, x0, y0) { // non-bosses on the path flee for 1.5 s
-    if (!hasTalent('cl_raven_dread') || e.type.startsWith('boss') || e.prop) return;
+    if (!hasTalent('cl_raven_dread') || isBossE(e) || e.prop) return;
     const a = Math.atan2(e.y - y0, e.x - x0);
     e.tauntTimer = 1.5; e.tauntX = e.x + Math.cos(a) * 400; e.tauntY = e.y + Math.sin(a) * 400;
 }

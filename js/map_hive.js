@@ -27,6 +27,7 @@ function resetHive() {
     hive.awake = false; hive.dead = false; hive.trophy = null; hive.stirAt = hive.pulseAt = -9;
     STAGE_MAPS.hive.exit = { ...STAGE_MAPS.hive.throneFront };
     for (const p of hive.pods) { p.state = 'whole'; p.ent = null; p.grownAt = -9; makePod(p); }
+    if (activeExpedition) expOpenMap('hive'); // expeditions.js: the throne is empty, the Queen gone
 }
 
 // ---------- generation ----------
@@ -204,7 +205,7 @@ function hivePaint(D, G) {
 // ---------- brood pods ----------
 
 function makePod(p) {
-    const e = { type: 'brood_pod', pod: p, x: p.x, y: p.y, size: 46, color: '#f48fb1', hp: 30 + wave * 8, maxHp: 30 + wave * 8, xp: 0, dmg: 0, meleeTimer: 0, frozenTimer: 0, facingAngle: 0, seed: Math.random() * 10 };
+    const e = { type: 'brood_pod', pod: p, x: p.x, y: p.y, size: 46, color: '#f48fb1', hp: 30 + statWave() * 8, maxHp: 30 + statWave() * 8, xp: 0, dmg: 0, meleeTimer: 0, frozenTimer: 0, facingAngle: 0, seed: Math.random() * 10 };
     p.ent = e; p.state = 'whole'; enemies.push(e);
 }
 function openPod(p, popped) {
@@ -216,7 +217,7 @@ function openPod(p, popped) {
 // combat.js: a pod's hp ran out (popped by the hero)
 function podPopped(e) {
     e.dead = true; openPod(e.pod, true);
-    gainXP(4 + wave);
+    gainXP(4 + statWave());
     // the slime waiting inside dies with it: one fewer to fight this wave (a boss wave keeps its last spawn, which brings the boss: main.js spawnEnemy)
     if (enemiesToSpawn > (isBossWave ? 1 : 0) && gameState === STATE.PLAYING) {
         enemiesToSpawn--; waveStats.kills++;
@@ -241,7 +242,7 @@ function updateHive(dt) {
     // Wading through royal jelly is no better than slime
     const suit = equipment.armor && equipment.armor.name === 'Hazard Suit';
     player.wading = !suit && player.z <= 4 && terrainAt(player.x, player.y) === T_LAKE;
-    if (player.wading) takeDamage((player.maxHp * 0.025 + wave * 0.6) * dt, true);
+    if (player.wading) takeDamage((player.maxHp * 0.025 + statWave() * 0.6) * dt, true);
     if (!player.dash && !player.grappleTarget) clampToBounds(player, player.radius);
     player.wallHit = null; for (const e of enemies) e.wallHit = null;
     // Pods grow back
@@ -346,6 +347,7 @@ function drawHiveGround() {
         for (const e of enemies) if (!e.dead && e.type === 'boss_slime_queen') hole(e.x, e.y, 340, 0.55);
         for (const [px, py] of HIVE_PILLARS) hole(px, py, 160, 0.3);
         if (hive.trophy) hole(hive.trophy.x, hive.trophy.y, 360, 0.8);
+        cacheLights(hole); // caches.js
     });
     ctx.save(); ctx.globalCompositeOperation = 'lighter';
     if (cavIn(HIVE_POOL.x, HIVE_POOL.y, V)) ptGlow(ctx, HIVE_POOL.x, HIVE_POOL.y, 300, '#ff4f9a', 0.07 + 0.03 * Math.sin(t * 1.5));

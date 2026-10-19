@@ -114,7 +114,7 @@ function drawBandit(e) {
     }
     const lift = e.liftZ > 0 ? 1 + e.liftZ / 380 : 1; // high in a leap, he looms larger (closer to the eye)
     if (lift !== 1) { ctx.save(); ctx.translate(x, y - z); ctx.scale(lift, lift); ctx.translate(-x, -(y - z)); }
-    stampBandit(e, x, y - z, face, scale, banditPose(e, face), e.hitFlash > 0 ? 1 : 0, alpha, e.type === 'hound' ? 0.3 : 0); // hounds run darker
+    stampBandit(e, x, y - z, face, scale, banditPose(e, face), e.hitFlash > 0 ? 1 : 0, alpha, e.type === 'hound' ? (e.chief ? 0.08 : 0.3) : 0); // hounds run darker (Old Scar's grey shows)
     if (lift !== 1) ctx.restore();
     if (e.type === 'cutpurse' && e.loot > 0) { // your gold: a coin spinning over its head, so you know which one to chase
         const cy = y - z - e.size / 2 - 28 + Math.sin(fxTime * 6) * 2.5, sq = Math.max(0.2, Math.abs(Math.cos(fxTime * 4)));
@@ -145,7 +145,7 @@ function drawBandit(e) {
         ctx.fillStyle = 'rgba(0, 0, 0, 0.65)'; ctx.fillRect(bx - 1, by - 1, w + 2, 6); ctx.fillStyle = '#c62828'; ctx.fillRect(bx, by, w * Math.max(0, e.hp / e.maxHp), 4);
         ctx.restore();
     }
-    if (!e.type.startsWith('boss') && e.hp < e.maxHp && !(e.spawnT > 0)) { // bosses have the HUD bar // a small health bar once it's hurt, like the slimes'
+    if (!isBossE(e) && e.hp < e.maxHp && !(e.spawnT > 0)) { // bosses have the HUD bar // a small health bar once it's hurt, like the slimes'
         const w = e.size, bx = e.x - w / 2, by = e.y - e.size / 2 - 16;
         ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; ctx.fillRect(bx - 1, by - 1, w + 2, 5);
         ctx.fillStyle = '#8bc34a'; ctx.fillRect(bx, by, w * Math.max(0, e.hp / e.maxHp), 3);
@@ -182,6 +182,7 @@ function banditPose(e, face) {
     const cos = Math.cos(face), sin = Math.sin(face), vx = Math.cos(e.face || 0) * (e.mv || 0), vy = Math.sin(e.face || 0) * (e.mv || 0);
     const p = { t: fxTime + (e.seed || 0), walk: (e.hop || 0) * 0.7, move: e.mv || 0, trail: { x: -(vx * cos + vy * sin) * 9, y: -(-vx * sin + vy * cos) * 9 } };
     p.stab = 0;
+    if (e.chief) { p.chief = e.chief.move; p.tint = e.tint; } // expeditions.js: a chief wears his own (expeditions_fx.js)
     if (e.type === 'thief') p.stab = e.state === 'windup' ? -0.6 * clamp01(1 - e.stateTimer / THIEF_WINDUP) : e.state === 'lunge' ? 1 : e.state === 'recover' ? clamp01(e.stateTimer / 0.35) : 0; // daggers drawn back, thrust, eased back
     if (e.type === 'archer') p.draw = clamp01(1 - e.attackTimer / 0.45);
     if (e.type === 'shield') {
@@ -264,6 +265,7 @@ function banditPose(e, face) {
     if (e.type === 'hound') {
         p.swipe = null; p.bite = e.biteAt !== undefined && fxTime - e.biteAt < 0.22 ? fxTime - e.biteAt : null; // sprWolf's jaws
         p.rest = e.restK || 0; p.lean = e.petted && e.master ? e.master.petK || 0 : 0; // lying at the Beastmaster's feet, leaning into his hand
+        if (e.chief && e.expTellAt !== undefined && fxTime - e.expTellAt < 0.85) p.bite = 0.1; // Old Scar's howl: the jaws open, the head up (expeditions.js)
     }
     return p;
 }
@@ -869,11 +871,14 @@ const BANDIT_SPRITES = {
     // A halberdier: plate over a red tabard, a great helm with an eye slit and a red plume, the halberd in both hands
     // (the axe blade, the back hook, the spike). p.haft turns it round the right hand; p.thrust drives it forward.
     halberd(c, p) {
+        const harrow = p.chief === 'rally'; // expeditions.js: Harrow the Deserter (expeditions_fx.js)
         banditFeet(c, p, '#263238');
+        if (harrow) harrowCloak(c, p);
         sprTorso(c, '#7e8a92', 14.5, 10.5);
         c.strokeStyle = '#4f5b62'; c.lineWidth = 1.1; for (const r of [9, 6.5]) { c.beginPath(); c.arc(1, 0, r, Math.PI * 0.62, Math.PI * 1.38); c.stroke(); } // the back plate's lames
-        sprEllipse(c, -1.5, 0, 6, 10, '#7b1a1a', false); // the red tabard
+        sprEllipse(c, -1.5, 0, 6, 10, harrow ? sprShade(p.tint || '#8e1f1f', -0.15) : '#7b1a1a', false); // the red tabard
         sprPauldrons(c, '#9aa7ad', 6, 12.5);
+        if (harrow) harrowChain(c, p);
         const ha = p.dead ? 0.3 : (p.haft === undefined ? -0.25 : p.haft), th = p.thrust || 0, px = p.dead ? -8 : 5 + th * (th > 0 ? 10 : 7), py = p.dead ? 22 : 9;
         c.save(); c.translate(px, py); c.rotate(ha); drawHalberd(c); c.restore();
         if (p.dead) { banditArm(c, -1, 0, -18, '#7e8a92', '#455a64'); banditArm(c, 1, -2, 17, '#7e8a92', '#455a64'); }
@@ -946,6 +951,8 @@ const BANDIT_SPRITES = {
         const dead = !!p.dead, b = dead ? null : p.bite, lunge = b === null || b === undefined ? 0 : Math.sin(Math.min(1, b * 2) * Math.PI) * 6;
         c.save();
         if (dead) { c.rotate(0.4); c.scale(1, 0.8); }
+        const scar = p.chief === 'howl'; // expeditions.js: Old Scar (expeditions_fx.js)
+        if (scar) p = { ...p, coat: SCAR_COAT, tornEar: true };
         sprWolf(c, dead ? { ...p, move: 0, bite: null } : p);
         c.strokeStyle = '#212121'; c.lineWidth = 3; c.beginPath(); c.ellipse(12, 0, 3.2, 10.5, 0, 0, Math.PI * 2); c.stroke(); // leather collar
         c.fillStyle = '#b0bec5'; c.beginPath(); // five iron spikes, pointing out from the collar
@@ -954,11 +961,12 @@ const BANDIT_SPRITES = {
             c.moveTo(bx - uy * 1.6, by + ux * 1.6); c.lineTo(bx + ux * 4.5, by + uy * 4.5); c.lineTo(bx + uy * 1.6, by - ux * 1.6);
         }
         c.fill();
+        if (scar) scarMarks(c, p);
         if (p.lean) { c.translate(10, 0); c.rotate(p.lean * 0.35); c.translate(-10, 0); } // sprWolf turns the head into the stroking hand
         if (p.lean > 0.5) for (const s of [-1, 1]) { // eyes shut, content
             sprEllipse(c, 21, s * 4, 2.2, 2.2, '#6d4c41', false);
             c.strokeStyle = '#1a120d'; c.lineWidth = 1; c.beginPath(); c.arc(20.4, s * 4, 1.6, -0.9, 0.9); c.stroke();
-        } else { c.fillStyle = '#ff3d00'; for (const s of [-1, 1]) { c.beginPath(); c.arc(21 + lunge, s * 4, 1.2, 0, Math.PI * 2); c.fill(); } } // red eyes over the green
+        } else { c.fillStyle = '#ff3d00'; for (const s of [-1, 1]) { if (scar && s < 0) { scarEye(c, 21 + lunge, -4); c.fillStyle = '#ff3d00'; continue; } c.beginPath(); c.arc(21 + lunge, s * 4, 1.2, 0, Math.PI * 2); c.fill(); } } // red eyes over the green
         c.restore();
     },
 
@@ -1174,12 +1182,12 @@ function warchiefTorchTip(e, face, scale, tk) {
 function banditDeathFx(e) {
     if (e.type === 'powder_keg') return;
     if (e.type === 'boss_warlord' && currentMap.type === 'village') vil.bossFell = { x: e.x, y: e.y }; // map_village.js: where his letter falls
-    const boss = e.type.startsWith('boss'), away = Math.atan2(e.y - player.y, e.x - player.x);
+    const boss = isBossE(e), away = Math.atan2(e.y - player.y, e.x - player.x);
     burst(e.x, e.y, 0, Math.PI * 2, boss ? 14 : 7, { kind: 'smoke', color: 'rgba(120, 104, 88, 0.6)', size: boss ? 14 : 9, speed: [20, 80], life: 0.7, drag: 3, grow: 20 });
     burst(e.x, e.y, away, 1.8, boss ? 12 : 5, { kind: 'debris', color: '#6d5c4d', size: 3, speed: [60, 200], life: 0.45, drag: 4 });
     if (e.type === 'shield' && e.shieldHp > 0) burst(e.x, e.y, away, 1.6, 6, { kind: 'debris', color: '#8d6e63', size: 4, speed: [60, 180], life: 0.5, drag: 3 });
     const life = e.king ? 9999 : boss ? 25 : 7; // the King of Thieves lies in his hall for good
-    effects.push({ type: 'bandit_corpse', x: e.x + Math.cos(away) * 6, y: e.y + Math.sin(away) * 6, kind: e.type, face: away + jitter(0.6), scale: e.size / 26, drop: jitter(2), life, maxLife: life, helmless: !!(e.helmless || e.king), crownless: !!e.crownless, unarmed: !!e.king });
+    effects.push({ type: 'bandit_corpse', x: e.x + Math.cos(away) * 6, y: e.y + Math.sin(away) * 6, kind: e.type, face: away + jitter(0.6), scale: e.size / 26, drop: jitter(2), life, maxLife: life, helmless: !!(e.helmless || e.king), crownless: !!e.crownless, unarmed: !!e.king, chief: e.chief ? e.chief.move : null, tint: e.tint });
     if (boss) { addShake(7); effects.push({ type: 'slime_shock', x: e.x, y: e.y, radius: 150, color: '#ff7043', life: 0.5, maxLife: 0.5 }); }
 }
 
@@ -1221,7 +1229,7 @@ function kegBlown(e) {
     e.dead = true;
     const k = e.pod; k.ent = null; k.goneAt = fxTime;
     const obs = currentMap.obstacles, i = obs ? obs.indexOf(k.obs) : -1; if (i >= 0) obs.splice(i, 1);
-    powderBlast(e.x, e.y, KEG_DMG(wave), KEG_DMG_ENEMY(wave), e);
+    powderBlast(e.x, e.y, KEG_DMG(statWave()), KEG_DMG_ENEMY(statWave()), e);
 }
 
 // Light a keg's fuse: it goes off a moment later (updateBanditFx)
@@ -1298,7 +1306,7 @@ function warchiefKegKick(e) {
             if (!boom && currentMap.obstacles) boom = currentMap.obstacles.some(o => o.kind !== 'keg' && Math.hypot(nx - o.x, ny - o.y) < o.r + p.radius);
             if (!boom && player.z <= 4) boom = Math.hypot(player.x - p.x, player.y - p.y) < player.radius + p.radius;
             if (!boom) boom = enemies.some(o => !o.dead && o !== p.owner && !o.prop && !(o.spawnT > 0) && Math.hypot(o.x - p.x, o.y - p.y) < o.size / 2 + p.radius);
-            if (boom) { p.life = 0; powderBlast(p.x, p.y, pDmg, KEG_DMG_ENEMY(wave), null); } // main.js removes it before the touch check
+            if (boom) { p.life = 0; powderBlast(p.x, p.y, pDmg, KEG_DMG_ENEMY(statWave()), null); } // main.js removes it before the touch check
         } });
 }
 
@@ -1315,10 +1323,10 @@ function updateBanditFx(dt) {
         if (ef.type !== 'ground_fire') continue;
         const k = Math.min(1, ef.life / 0.6); // the last moments are only embers
         if (k < 0.3) continue;
-        if (player.z <= 4 && Math.hypot(player.x - ef.x, player.y - ef.y) < ef.radius + player.radius * 0.4) { takeDamage(FIRE_DPS(wave) * dt, true); player.burning = true; }
+        if (player.z <= 4 && Math.hypot(player.x - ef.x, player.y - ef.y) < ef.radius + player.radius * 0.4) { takeDamage(FIRE_DPS(statWave()) * dt, true); player.burning = true; }
         for (const e of enemies) {
             if (e.dead || e.prop || e.airborne || e.spawnT > 0 || e.type === 'boss_warlord' || e.king || e.submerged) continue; // the Warchief and the King walk through their own fires
-            if (Math.hypot(e.x - ef.x, e.y - ef.y) < ef.radius + e.size * 0.3) applyDamage(e, FIRE_DPS_ENEMY(wave) * dt, 'dot');
+            if (Math.hypot(e.x - ef.x, e.y - ef.y) < ef.radius + e.size * 0.3) applyDamage(e, FIRE_DPS_ENEMY(statWave()) * dt, 'dot');
         }
     }
     for (const e of enemies) {
@@ -1441,7 +1449,7 @@ function drawBanditGround(ef) {
     }
     if (ef.type === 'bandit_corpse') {
         const a = Math.min(1, ef.life / 1.5), lay = Math.min(1, (ef.maxLife - ef.life) / 0.25); // falls over, lies there, fades
-        const pose = { t: 0, walk: 0, move: 0, trail: { x: 0, y: 0 }, stab: 0, draw: 0, shield: 0, throwK: 0, torchK: 0, kegK: 0, dead: true, helmless: ef.helmless, crownless: ef.crownless, unarmed: ef.unarmed };
+        const pose = { t: 0, walk: 0, move: 0, trail: { x: 0, y: 0 }, stab: 0, draw: 0, shield: 0, throwK: 0, torchK: 0, kegK: 0, dead: true, helmless: ef.helmless, crownless: ef.crownless, unarmed: ef.unarmed, chief: ef.chief, tint: ef.tint };
         if (lay < 1) { stampBandit(null, ef.x, ef.y, ef.face, ef.scale * (0.92 + 0.08 * lay), pose, 0, a * 0.95, 0.25 * lay, ef.kind); return true; }
         if (!ef.img) { const E = banditExtent(ef.kind, ef.scale); ef.img = cavCanvas(E * 2, E * 2); stampBandit(null, 0, 0, ef.face, ef.scale, pose, 0, 1, 0.25, ef.kind, ef.img); } // it lies still: painted once
         c.save(); c.globalAlpha = a * 0.95; c.drawImage(ef.img, ef.x - ef.img.width / 2, ef.y - ef.img.height / 2); c.restore();
