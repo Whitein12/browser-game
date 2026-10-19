@@ -573,7 +573,7 @@ const CS_CAP = { hound: 4, bannerman: 2, crossbow: 3, halberd: 4, grenadier: 2, 
 const castleAlive = type => enemies.filter(e => !e.dead && !e.prop && e.type === type).length;
 const castleRoom = type => Math.max(0, (CS_CAP[type] || 99) - castleAlive(type));
 function castleMinions(list) {
-    const mix = CS_MIX[Math.min(1, cst.open)];
+    const mix = CS_MIX[Math.min(1, cst.spawnSec ?? cst.open)]; // the part it steps into (castleSpawnPoint), not the newest
     const out = list.map(m => ({ ...m, weight: m.type in mix ? mix[m.type] : 0 })).filter(m => m.weight > 0 && castleRoom(m.type) > 0);
     return out.length ? out : list;
 }
@@ -582,6 +582,12 @@ function castleMinions(list) {
 function castleSpawnPoint() {
     const G = currentMap.grid, reach = p => !nav.dist || nav.dist[Math.floor(p.y / G.cell) * G.cols + Math.floor(p.x / G.cell)] >= 0;
     const dist = p => Math.hypot(p.x - player.x, p.y - player.y), sec = cst.open;
+    cst.spawnSec = sec; // castleMinions reads the part the enemy steps into
+    const hs = player.x < CS.keep ? 0 : player.x < CS.throne ? 1 : 2; // the hero walked back into an earlier part: half the waves come to them there (stage.js flankSpawn)
+    if (hs < sec && !isBossWave && Math.random() < 0.5) {
+        const f = flankSpawn(cst.spawns.filter(p => p.sec === hs), hs === 0 ? CS.gate + 100 : CS.keepIn + 100, hs === 0 ? CS.keep - 100 : CS.throne - 100, hs === 0 ? CS.keep : CS.throne);
+        if (f) { cst.spawnSec = hs; cst.lastSpawn = f; return { x: f.x + (Math.random() - 0.5) * 16, y: f.y + (Math.random() - 0.5) * 16, from: f.from }; }
+    }
     const pool = cst.spawns.filter(p => p.sec === sec && reach(p));
     let cand = pool.filter(p => { const d = dist(p); return d > 430 && d < 1300 && p.x > player.x - 150; });
     if (!cand.length) cand = pool.filter(p => dist(p) > 300).sort((a, b) => dist(a) - dist(b)).slice(0, 3);

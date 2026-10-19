@@ -13,9 +13,24 @@ const maLive = e => !e.dead && !e.pod && !e.prop && !e.submerged && !(e.spawnT >
 
 // ---------- Q: the evolved turrets (skills.js spawnTurret's update hands them here) ----------
 
+// Turrets and coils only act on what they can see: walls block, as for every shot (round obstacles don't stop player shots). Cached 0.2 s per enemy.
+function maSees(t, e) {
+    if (!currentMap.grid) return true;
+    const m = t.sees || (t.sees = new WeakMap()), c = m.get(e);
+    if (c && c[0] > fxTime) return c[1];
+    const v = shotClear(t.x, t.y, e.x, e.y); m.set(e, [fxTime + 0.2, v]); return v;
+}
+function maTarget(t, range) { // the nearest visible enemy (utils.js getNearestEnemyFromPoint's filter)
+    let best = null, bd = range;
+    for (const e of enemies) {
+        if (e.dead || e.submerged || e.prop) continue;
+        const d = Math.hypot(e.x - t.x, e.y - t.y); if (d < bd && maSees(t, e)) { bd = d; best = e; }
+    }
+    return best;
+}
 function maTurretTick(t, dt) {
     if (t.flame) {
-        const wide = hasTalent('ma_flame_wide'), R = wide ? 240 : 180, half = wide ? 0.6 : 0.45, target = getNearestEnemyFromPoint(t.x, t.y, R);
+        const wide = hasTalent('ma_flame_wide'), R = wide ? 240 : 180, half = wide ? 0.6 : 0.45, target = maTarget(t, R);
         if (!target) return;
         t.angle = Math.atan2(target.y - t.y, target.x - t.x);
         if (t.attackTimer > 0) return;
@@ -25,7 +40,7 @@ function maTurretTick(t, dt) {
         for (const e of enemies) {
             if (e.dead || e.submerged) continue;
             const d = Math.hypot(e.x - t.x, e.y - t.y);
-            if (d > R + e.size / 2 || Math.abs(Math.atan2(Math.sin(Math.atan2(e.y - t.y, e.x - t.x) - t.angle), Math.cos(Math.atan2(e.y - t.y, e.x - t.x) - t.angle))) > half + Math.atan2(e.size / 2, Math.max(d, 1))) continue;
+            if (d > R + e.size / 2 || !maSees(t, e) || Math.abs(Math.atan2(Math.sin(Math.atan2(e.y - t.y, e.x - t.x) - t.angle), Math.cos(Math.atan2(e.y - t.y, e.x - t.x) - t.angle))) > half + Math.atan2(e.size / 2, Math.max(d, 1))) continue;
             applyDamage(e, t.damage * 0.35 * mult, 'magic');
             if (!e.dead) igniteEnemy(e, t.damage * 0.3);
         }
@@ -36,11 +51,12 @@ function maTurretTick(t, dt) {
         return;
     }
     // Sniper: the toughest enemy in reach, a beam every 2 s
+    if (t.attackTimer > 0) { if (t.snipeTarget && !t.snipeTarget.dead) t.angle = Math.atan2(t.snipeTarget.y - t.y, t.snipeTarget.x - t.x); return; } // the search only runs when it's ready to fire (cheap)
     let target = null;
-    for (const e of enemies) if (maLive(e) && Math.hypot(e.x - t.x, e.y - t.y) < 900 && (!target || e.hp > target.hp)) target = e;
+    for (const e of enemies) if (maLive(e) && Math.hypot(e.x - t.x, e.y - t.y) < 900 && (!target || e.hp > target.hp) && maSees(t, e)) target = e; // the toughest one it can see
+    t.snipeTarget = target;
     if (!target) return;
     t.angle = Math.atan2(target.y - t.y, target.x - t.x);
-    if (t.attackTimer > 0) return;
     t.attackTimer = hasTalent('ma_snipe_load') ? 1.4 : 2;
     t.shots = (t.shots || 0) + 1;
     const head = hasTalent('ma_snipe_head') && t.shots % 3 === 0, hit = t.damage * 4 * (head ? 3 : 1) * teslaShot(t, target, 0);
@@ -90,7 +106,7 @@ function maCoilTick(c, dt) {
     effects.push({ type: 'tesla_pulse', x: c.x, y: c.y, radius: R, life: 0.3, maxLife: 0.3 });
     let zaps = 0;
     for (const e of enemies) {
-        if (e.dead || Math.hypot(e.x - c.x, e.y - c.y) > R + e.size / 2) continue;
+        if (e.dead || Math.hypot(e.x - c.x, e.y - c.y) > R + e.size / 2 || !maSees(c, e)) continue; // not through a wall
         if (zaps++ < 5) effects.push({ type: 'lightning', x1: c.x, y1: c.y, x2: e.x, y2: e.y, color: '#00e5ff', life: 0.15, maxLife: 0.15 });
         applyDamage(e, c.damage * (c.hv && hasTalent('ma_hv_shock') && e.rootedTimer > 0 ? 1.5 : 1), 'magic'); // Overload Arc
         e.shockTimer = 0.6;
@@ -100,13 +116,14 @@ function maCoilTick(c, dt) {
         }
     }
     if (c.hv && hasTalent('ma_hv_storm')) // Static Storm: the pulse leaps to 3 enemies outside the field
-        enemies.filter(e => maLive(e) && Math.hypot(e.x - c.x, e.y - c.y) > R + e.size / 2 && Math.hypot(e.x - c.x, e.y - c.y) < R + 260)
+        enemies.filter(e => maLive(e) && Math.hypot(e.x - c.x, e.y - c.y) > R + e.size / 2 && Math.hypot(e.x - c.x, e.y - c.y) < R + 260 && maSees(c, e))
             .sort((a, b) => Math.hypot(a.x - c.x, a.y - c.y) - Math.hypot(b.x - c.x, b.y - c.y)).slice(0, 3)
             .forEach(e => { effects.push({ type: 'lightning', x1: c.x, y1: c.y, x2: e.x, y2: e.y, color: '#80d8ff', life: 0.2, maxLife: 0.2 }); applyDamage(e, c.damage * 0.6, 'magic'); });
     if (!c.net) return;
     const reach = hasTalent('ma_arc_long') ? 600 : 400; // Arc Network: lines to the turrets (and, with Grid, the other coil)
     const links = projectiles.filter(t => (t.type === 'turret' || (t.type === 'tesla_coil_trap' && t !== c && t.bornAt < c.bornAt && hasTalent('ma_arc_grid'))) && Math.hypot(t.x - c.x, t.y - c.y) < reach);
     for (const t of links) {
+        if (!shotClear(c.x, c.y, t.x, t.y)) continue; // no line through rock (every 0.5 s, a few links)
         effects.push({ type: 'lightning', x1: c.x, y1: c.y, x2: t.x, y2: t.y, color: '#00e5ff', life: 0.2, maxLife: 0.2 });
         if (t.type === 'turret' && hasTalent('ma_arc_charge')) t.linkedUntil = fxTime + 0.6; // Supercharge
         for (const e of enemies) {

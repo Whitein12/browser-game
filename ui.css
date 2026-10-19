@@ -642,3 +642,14 @@ kbd { display: inline-block; min-width: 14px; padding: 1px 5px; border: 1px soli
 /* The quest tracker's pinned tag: which noticeboard trip a step waits on (sidequests.js qtWhere) */
 #quest-tracker .qt-where { display: inline-flex; align-items: center; gap: 5px; margin-top: 2px; padding: 0 6px 0 4px; border-radius: 3px; font: italic 10.5px/15px var(--serif); color: #e6cf9c; background: rgba(201, 168, 106, 0.12); }
 #quest-tracker .qt-pin { width: 6px; height: 6px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #ffb3a8, #c62828 55%, #5d0d0d); box-shadow: 0 1px 0 rgba(0, 0, 0, 0.6); }
+
+/* ---------- charms (charms.js) ---------- */
+.charm-row { display: flex; gap: 28px; justify-content: space-between; margin-top: 16px; }
+.cr-group { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.cr-cells { display: flex; gap: 8px; align-items: flex-start; flex-wrap: wrap; }
+.charm-row .item-cell { width: 52px; height: 52px; }
+.cr-wave { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.cr-use { padding: 2px 12px; font-size: 11px; }
+.cr-none { margin: 0; line-height: 52px; }
+.cr-note { margin: 0; text-align: left; }
+.ware-head { grid-column: 1 / -1; font: 11px var(--serif); letter-spacing: 3px; text-transform: uppercase; color: var(--faint); border-bottom: 1px solid #3d3122; padding-bottom: 3px; margin-top: 6px; }

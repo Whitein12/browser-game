@@ -40,6 +40,13 @@ function fmtStat(type, v) {
     return itemDataConfig.slotData[type].descTemplate.replace('{VAL}', n);
 }
 function itemTypeLine(item) { return `${item.rarity === 'rare' ? 'Rare ' : ''}${SLOT_NAMES[item.type]} · +${item.up || 0} of +${upgradeCap()}`; }
+function milestoneHtml(item) { // the tiers earned in gold, the next one greyed out
+    const t = milestoneTier(item), n = itemDataConfig.upgrade.milestones.length;
+    let h = '';
+    for (let i = 1; i <= t; i++) h += `<div class="tt-stat" style="color:var(--gold)">${milestoneLine(item.type, i)}</div>`;
+    if (t < n) h += `<div class="tt-stat" style="opacity:.45">at +${itemDataConfig.upgrade.milestones[t]}: ${MILESTONE_TEXT[item.type](milestoneValue(item.type, t + 1))}</div>`;
+    return h;
+}
 function itemDelta(item) { const eq = equipment[item.type]; if (!eq || eq === item) return null; return item.val - eq.val; }
 function isUpgrade(item) { const eq = equipment[item.type]; if (!eq) return true; const d = itemDelta(item); return d !== null && d > 0; }
 
@@ -55,7 +62,7 @@ function itemTooltip(item, foot) {
     }
     return `<div class="tt-name" style="color:${item.rarity === 'rare' ? 'var(--rare)' : 'var(--text)'}">${itemName(item)}</div>
         <div class="tt-type">${itemTypeLine(item)}${worn ? ' · worn' : ''}</div>
-        <div class="tt-stat">${itemDesc(item)}</div>${cmp}${foot ? `<div class="tt-foot">${foot}</div>` : ''}`;
+        <div class="tt-stat">${itemDesc(item)}</div>${milestoneHtml(item)}${cmp}${foot ? `<div class="tt-foot">${foot}</div>` : ''}`;
 }
 // An inventory-style square showing one item (or an empty slot)
 function itemCell(item, opts = {}) {
@@ -120,6 +127,8 @@ function renderInventory() {
         g.appendChild(itemCell(equipment[t], { slot: t, tip: () => 'Click to take it off', click: () => unequipItem(t) }));
         doll.appendChild(g);
     }
+    renderCharmDoll(doll); // charms.js: the two charm slots
+    renderCharmRow(); // charms.js: charms in the pack, the wave charms' pouch
     const rows = [
         ['Max Health', Math.round(player.maxHp)], ['Armor', `${player.armor} (${Math.round(armorReduction(player.armor) * 100)}%)`], ['Power', playerPower()], // combat.js
         ['Attack Speed', `+${Math.round((equipment.gloves ? equipment.gloves.val : 0) * 100)}%`],
@@ -158,6 +167,7 @@ const owned = item => (equipment[item.type] && equipment[item.type].name === ite
 function renderShop() {
     el('shop-gold-display').textContent = player.gold;
     const buy = el('shop-buy-list'); buy.innerHTML = '';
+    buy.insertAdjacentHTML('beforeend', '<div class="ware-head">Gear</div>');
     shopItems.forEach(item => {
         const price = shopPrice(item), have = owned(item), afford = player.gold >= price, d = document.createElement('div'); // sidequests.js: the merchant's favour
         d.className = 'ware' + (item.rarity === 'rare' ? ' rare' : '') + (afford && !have ? '' : ' poor');
@@ -170,10 +180,12 @@ function renderShop() {
         };
         buy.appendChild(d);
     });
+    renderCharmWares(buy); // charms.js: Charms and Wave charms, the same cards
     fillBackpack(el('shop-sell-list'), {
         tip: item => `Click to sell for ${sellPrice(item)} gold`,
         click: item => { player.gold += sellPrice(item); inventory.splice(inventory.indexOf(item), 1); renderShop(); updateHUD(); },
     });
+    renderCharmSell(el('shop-sell-list')); // charms.js
 }
 
 // ==========================================
@@ -198,11 +210,13 @@ function smithDetail() {
     if (!it) { box.innerHTML = '<div class="ui-hint">Pick a piece of gear to see what the next +1 does.</div>'; return; }
     const cap = upgradeCap(), cost = upgradeCost(it), capped = it.up >= cap, poor = player.gold < cost;
     const nv = itemVal({ ...it, up: it.up + 1 });
+    const hit = !capped && milestoneTier({ up: it.up + 1 }) > milestoneTier(it); // the next +1 reaches a milestone (items.js)
     const why = capped ? (cap < itemDataConfig.upgrade.capCaves ? `At +${cap} for now: clear the Slime Caves to go further` : `At +${cap}: the most the smith can do`) : poor ? `You need ${cost - player.gold} more gold` : '';
     box.innerHTML = `<div class="tt-name" style="color:${it.rarity === 'rare' ? 'var(--rare)' : 'var(--text)'}">${itemName(it)}</div>
         <div class="tt-type">${itemTypeLine(it)}</div>
         <div class="sm-stat">${fmtStat(it.type, it.val)}${capped ? '' : ` <span class="sm-arrow">&rarr;</span> <b>${fmtStat(it.type, nv)}</b>`}</div>
         ${it.rarity === 'rare' ? `<div class="ui-hint" style="text-align:left">${rareFx(it)}</div>` : ''}
+        ${milestoneHtml(it)}${hit ? `<div class="tt-stat" style="color:var(--gold);font-weight:bold">Next: ${milestoneLine(it.type, milestoneTier(it) + 1)}</div>` : ''}
         ${capped ? '' : `<div class="w-price sm-cost">Cost <span class="coin"></span>${cost}</div>`}
         <button class="btn btn-gold" id="btn-smith-up"${capped || poor ? ' disabled' : ''}>${capped ? 'Fully upgraded' : `Upgrade to +${it.up + 1}`}</button>
         <div class="sm-why">${why}</div>
@@ -461,6 +475,7 @@ window.devOpenShop = function() { closeDevMenu(); openShop(); } // closeDevMenu 
 window.devTalk = function(id) { closeDevMenu(); const f = FRIENDS[id]; openDialogue({ name: f.name, title: f.title, portrait: id, lines: f.lines }); } // npcs.js: the talk alone, no shop after
 window.devVisitBase = function() { closeDevMenu(); startBase(); } // map_base.js: the village by day, the friends in it
 window.devVisitSmithy = function() { closeDevMenu(); if (!isBase()) startBase(); goThrough('smithy', INTERIORS.smithy.arrive); } // interiors.js: no door leads there yet
+window.devCharmsAll = function() { charmsGiveAll(); recalcStats(); updateHUD(); openDevMenu(); } // charms.js: every charm owned, the pouch full
 window.devAddMats = function() { for (const k of MAT_KEYS) mats[k] += 50; updateHUD(); openDevMenu(); } // caches.js
 window.devResetBase = function() { closeDevMenu(); resetCinderholt(); } // rebuild.js: no rebuilds, the arrival unseen
 window.devFriendsWalk = function() { // npcs.js: the three wander round the hero's spot; again sends them away

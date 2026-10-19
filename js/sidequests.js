@@ -48,7 +48,7 @@ const lowerFirst = s => s.charAt(0).toLowerCase() + s.slice(1);
 function saveQuests() { if (questsOn()) saveHero({ base: heroData.base }); } // cheap and rare: on a count, a pickup, a hand-in (not per frame)
 
 // ---------- effects of keepsakes and favours ----------
-const goldBonus = v => Math.round(v * (hasKeepsake('lucky_coin') ? 1.15 : 1)); // combat.js: gold from kills
+const goldBonus = v => Math.round(v * (hasKeepsake('lucky_coin') ? 1.15 : 1) * charmGoldMult()); // combat.js: gold from kills
 const moveBonus = () => hasKeepsake('hound_tooth') ? 1.05 : 1; // main.js recalcStats
 const flaskBonus = () => hasKeepsake('herb_pouch') ? 1.1 : 1; // potions.js drinkFlask
 const elixirPrice = () => hasPerk('apoth_elixir') ? 20 : ELIXIR_PRICE; // potions.js

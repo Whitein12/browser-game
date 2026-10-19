@@ -200,6 +200,7 @@ function setTrainingKit(on) { // the late-game kit of the DPS tests: the class's
     training.kit = on;
     equipment = on ? Object.fromEntries(GEAR_SLOT_LIST.map(t => [t, makeRare(t, t === 'weapon' ? 10 : 0)])) : { weapon: null, armor: null, amulet: null, boots: null, gloves: null }; // items.js: the rare weapon at +10 (90 Power)
     player.orbDmg = on ? 0.8 : 0;
+    if (on) charmsGiveAll(); // charms.js: every charm in the pack, the pouch full (the Training Room never saves)
     recalcStats(); player.hp = player.maxHp; hud.sig = null; updateHUD();
 }
 // The panel's rank and evolution buttons write the skill's branch of the tree (skilltree.js): rank 4 is an evolution,

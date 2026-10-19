@@ -29,6 +29,7 @@ function heroSnapshot() {
         level: player.level, xp: player.xp, maxXp: player.maxXp, skillPoints: player.skillPoints, tree: { ...player.tree },
         gold: player.gold, equipment: deepCopy(equipment), inventory: deepCopy(inventory),
         ...potionsSnapshot(), // potions.js: the flask's upgrades ({ flask: { max, potency } }) and the belt
+        charms: charmsSnapshot(), // charms.js: worn, in the pack and the wave charms' pouch (never the active one)
         mats: { ...mats }, found: { ...cacheFound }, // caches.js: the materials in the pack and the caches already opened (a Retry puts back what that run found)
     };
 }
@@ -51,6 +52,7 @@ function applyHero() {
     if (h.kit === 'seasoned') { equipment.weapon = makeRare('weapon', 3); equipment.armor = makeRare('armor', 1); delete h.kit; } // what a hero has after the Caves (BALANCE.md "The campaign pass"), once the class is known
     inventory = inventory.map(migrateItem).filter(Boolean);
     applyPotions(h); // potions.js: old saves get 3 charges, the base brew and an empty belt
+    applyCharms(h); // charms.js: old saves have none
     applyMats(h); // caches.js: old saves have no materials
     recalcStats(); player.hp = player.maxHp;
     return Object.keys(h.tree).some(k => k.endsWith('_learn')); // a skill learned: no first-skill pick

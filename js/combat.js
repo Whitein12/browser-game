@@ -19,6 +19,7 @@ function armorReduction(armor) { return armor > 0 ? armor / (armor + ARMOR_K) : 
 function powerParts() {
     const n = activeClass.name, P = [['Class base', activeClass.dmgMult]];
     if (equipment.weapon) P.push([itemName(equipment.weapon), equipment.weapon.val]);
+    if (gearBonus('amulet')) P.push([`${milestoneName(milestoneTier(equipment.amulet))} ${equipment.amulet.name}`, gearBonus('amulet')]); // items.js: the amulet's milestone
     if (n === 'Dragonknight' && player.frenzyStacks > 0) P.push([`Frenzy &times;${player.frenzyStacks}`, player.frenzyStacks * 0.02, true]);
     if (n === 'Ranger' && player.momentum > 0) P.push(['Momentum', player.momentum, true]);
     if (n === 'Nightblade') { const [rush, fr] = nbPower(); if (rush) P.push(['Bloodrush', rush, true]); if (fr) P.push(['Frenzy of Shadows', fr, true]); } // nightblade.js
@@ -31,6 +32,7 @@ function powerParts() {
     if (player.orbDmg > 0) P.push([`Power orbs${player.orbDmg >= ORB_DMG_CAP ? ' (max)' : ''}`, player.orbDmg]);
     if (player.treePower > 0) P.push(['Talents', player.treePower]); // skilltree.js: Might
     if (buffs.elixirMight > 0) P.push(['Elixir of Might', ELIXIR_MIGHT, true]); // potions.js
+    if (waveCharm('whetstone')) P.push(['Whetstone', CH_WHETSTONE, true]); // charms.js
     return P;
 }
 function powerMult() { return powerParts().reduce((s, p) => s + p[1], 0); }
@@ -47,7 +49,8 @@ function hitDmg(baseAmount, skillLevel = 1) { return calcDmg(baseAmount, skillLe
 // The basic attack grows with the hero's level as skills grow with ranks (+5% a level: x1.45 at Lv. 10, x1.95 at Lv. 20).
 // Only the basic and its Space finisher (skills.js castBasic, monk.js mkBasicDmg), not the kits built on basicDmg (companion, venom, blades)
 const BASIC_LEVEL_SCALE = 0.05;
-function basicLevelMult() { return 1 + BASIC_LEVEL_SCALE * (Math.max(player.level, isTraining() && training.kit ? 20 : 1) - 1); } // training.js: the late-game kit counts as Lv. 20
+function basicLvMult() { return 1 + BASIC_LEVEL_SCALE * (Math.max(player.level, isTraining() && training.kit ? 20 : 1) - 1); } // training.js: the late-game kit counts as Lv. 20
+function basicLevelMult() { return basicLvMult() * (1 + gearBonus('gloves')); } // the gloves' milestone (items.js) rides with the level everywhere it is applied
 function basicHitDmg(m = 1) { return hitDmg(activeClass.basicDmg) * basicLevelMult() * m; }
 
 function calcUtility(baseAmount, skillLevel = 1) {
@@ -263,9 +266,11 @@ function takeDamage(amount, isContinuous = false, sourceObj = null) {
     amount = itemsDamageTaken(amount, isContinuous); // items.js: class armors (0 = dodged)
     amount = talentsDamageTaken(amount, isContinuous, sourceObj); // talents.js: Scaled Hide
     if (buffs.elixirIron > 0) amount *= 1 - ELIXIR_IRON; // potions.js: Iron Skin Draught, before armour and shields
+    amount *= 1 - gearBonus('armor'); // items.js: the armor's milestone
     if (activeClass.name === 'Monk') amount = monkDamageTaken(amount); // monk.js: Iron Body halves it
     if (activeClass.name === 'Witch') amount = witchDamageTaken(amount, isContinuous, sourceObj); // witch.js: only shots reach her on the broom; the Shroud of the Coven
     if (amount <= 0) return;
+    if (charmsBlock(isContinuous)) return; // charms.js: the Warding Candle eats the hit whole (after the dodges, before armour and shields)
     ssHurt(isContinuous); // swordsaint.js: two Style ranks off; a held beam goes off
     
     // Cleric Vestments of the Fractured Soul interaction
@@ -331,6 +336,7 @@ function takeDamage(amount, isContinuous = false, sourceObj = null) {
 
     if (player.hp <= 0 && trainingGod()) player.hp = 1; // training.js: god mode
     if (player.hp <= 0) talentsLethal(); // talents.js: Undying Flame
+    if (player.hp <= 0) charmsLethal(); // charms.js: the Phoenix Feather, then the Smelling Salts
     if (player.hp <= 0) playerDied();
     updateHUD();
 }
@@ -338,6 +344,7 @@ function takeDamage(amount, isContinuous = false, sourceObj = null) {
 // The hero falls. If Valerius is there to see it, he has a word first (dialogue.js), then the death screen.
 function playerDied() {
     if (isBase()) { baseDeath(); return; } // sidequests.js: Cinderholt (the ruins' ambush) is no death: a fade and awake at the gate
+    charmsClear(); // charms.js: a wave charm doesn't outlive the run
     player.hp = 0; player.fallen = true; // main.js draws the hero dimmed where they fell
     const taunt = valeriusTaunt(); // dialogue.js
     if (taunt) openDialogue({ ...taunt, onClose: showDeathScreen });
@@ -360,6 +367,7 @@ const BASTION_SCALE = [{ hp: 1, dmg: 1 }, { hp: 1.8, dmg: 1.4 }, { hp: 1.3, dmg:
 
 // A level gives skill points; they wait on the skill web (skilltree.js), so the fight never stops for them
 function gainXP(amount) {
+    amount *= charmXpMult(); // charms.js: the Quill, the Lure
     player.xp += amount; let leveledUp = false;
     while (player.xp >= player.maxXp) { player.level++; player.xp -= player.maxXp; player.maxXp = xpToNext(player.level); player.skillPoints += TREE_PTS_PER_LEVEL; leveledUp = true; }
     if (leveledUp) levelUpNotice();
@@ -376,6 +384,7 @@ function checkEnemyDeath(e) {
         if (e.dummy) { trainingDummyDied(e); return; } // training.js: no loot, no XP, no wave; it's back on its post soon
         if (e.questFoe) { questFoeDied(e); return; } // sidequests.js: the ruins' ambushers are no wave enemies: no XP, no drops, no counters
         questOnKill(e); // sidequests.js: bounties count the kill
+        charmsOnKill(e); // charms.js: Bloodstone, Vial Hook
         expOnKill(e); // expeditions.js: the tally; the chief's death (the Prism splits)
         if (e.loot > 0) cutpurseLoot(e); // ai.js: a cutpurse killed with your gold drops it x1.5
 
