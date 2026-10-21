@@ -561,7 +561,7 @@ function update(dt) {
                     let dy = player.y - ab.y;
                     let distToPlayer = Math.hypot(dx, dy);
                     
-                    let orbitAngle = Date.now() / 500;
+                    let orbitAngle = fxTime * 2; // game time: the wall clock jumped the blade round the circle after every pause
                     let ox = player.x + Math.cos(orbitAngle) * 80;
                     let oy = player.y + Math.sin(orbitAngle) * 80;
                     let tox = ox - ab.x;
@@ -1507,7 +1507,7 @@ function draw() {
         else if (ef.type === 'storm_cyclone') {
             ctx.save();
             ctx.translate(ef.x, ef.y);
-            ctx.rotate(Date.now() / 50 + ef.angle);
+            ctx.rotate(fxTime * 20 + ef.angle);
             ctx.globalAlpha = ef.life / ef.maxLife;
             // Draw multiple massive curved wind/slash blades
             for (let i = 0; i < 4; i++) {

@@ -724,7 +724,7 @@ var SkillRegistry = {
                 if (!buffs.zealLocked) {
                     if (isShadow) {
                         if (player.zeal >= cost) player.zeal -= cost;
-                        else player.hp -= player.maxHp * (hasTalent('cl_raven_cheap') ? 0.05 : 0.1);
+                        else player.hp = Math.max(1, player.hp - player.maxHp * (hasTalent('cl_raven_cheap') ? 0.05 : 0.1)); // never kills: HP paid here skips takeDamage, so 0 HP froze the game with no death screen
                     } else {
                         if (isUpgradedCast) player.zeal = Math.max(0, player.zeal - cost);
                         else player.zeal = Math.min(player.maxZeal, player.zeal + 20); // Generate if base

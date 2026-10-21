@@ -336,7 +336,7 @@ function takeDamage(amount, isContinuous = false, sourceObj = null) {
 
     if (player.hp <= 0 && trainingGod()) player.hp = 1; // training.js: god mode
     if (player.hp <= 0) talentsLethal(); // talents.js: Undying Flame
-    if (player.hp <= 0) charmsLethal(); // charms.js: the Phoenix Feather, then the Smelling Salts
+    if (player.hp <= 0 && !isBase()) charmsLethal(); // charms.js: the Phoenix Feather, then the Smelling Salts (not in Cinderholt, where a fall costs nothing)
     if (player.hp <= 0) playerDied();
     updateHUD();
 }

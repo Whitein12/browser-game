@@ -131,7 +131,7 @@ function renderInventory() {
     renderCharmRow(); // charms.js: charms in the pack, the wave charms' pouch
     const rows = [
         ['Max Health', Math.round(player.maxHp)], ['Armor', `${player.armor} (${Math.round(armorReduction(player.armor) * 100)}%)`], ['Power', playerPower()], // combat.js
-        ['Attack Speed', `+${Math.round((equipment.gloves ? equipment.gloves.val : 0) * 100)}%`],
+        ['Attack Speed', `+${Math.round(attackSpeedBonus() * 100)}%`], // skills.js: gloves, the weapon's milestone, elixirs, Style...
         ['Cooldown Reduction', `${Math.round((1 - getCDR()) * 100)}%`], ['Move Speed', Math.round(player.speed)],
         ['Gold', player.gold], ...MAT_KEYS.map(k => [matImg(k) + MAT_NAMES[k], mats[k]]), // caches.js, icons.js
     ];
