@@ -16,8 +16,9 @@ const SS_RANK_POWER = [0, 0.10, 0.25, 0.40, 0.60], SS_RANK_SPEED = [0, 0.05, 0.1
 const SS_BT_TIME = 1, SS_BT_CD = 3, SS_BT_SCALE = 0.3, SS_BT_BOSS = 0.5;
 // Two swords to compare (the user, 2026-10-15; the Training Room panel switches them, ssBlade): the original (cuts 110 px, thrust 150,
 // the first sword art; Crosscut's X at its tip, 84 px, with a lunge) and the long one (cuts 120, thrust 180, a broad longsword in her hand, X at 105)
+// The long one is her sword in the real game (the user, 2026-10-21); the original stays a Training Room option.
 const SS_BLADES = { og: { cut: 110, thrust: 150, cross: 84 }, long: { cut: 120, thrust: 180, cross: 105 } };
-let ssBlade = 'og';
+let ssBlade = 'long';
 const ssB = () => SS_BLADES[ssBlade];
 const SS_CHAIN_RESET = 1, SS_CUT_HALF = Math.PI * 50 / 180, SS_THRUST_W = 22, SS_THRUST_MULT = 1.5, SS_WAVE_REACH = 250, SS_WAVE_SPEED = 900;
 const SS_GAP = 0.25, SS_Q_WINDOW = 3, SS_STEP = 130, SS_STEP_DUR = 0.14, SS_SPIN_R = 100, SS_LEAP = 190, SS_LEAP_DUR = 0.3, SS_SLAM_R = 140, SS_SLAM_MULT = 1.6, SS_SLAM_STAGGER = 0.4;
@@ -40,6 +41,7 @@ const ss = { style: 0, last: null, hitT: -99, recast: { 1: null, 2: null, 4: nul
     charges: SS_BURST_CHARGES, rechT: 0, chain: 0, chainT: -99, anim: null, side: 1, winds: [], avalonReady: 0, pop: null,
     dodgeKind: null, counter: null, shoves: [], launched: [], cyclones: [], duel: null, countered: false, overCut: null, wakes: [], unsealT: 0, sealGain: 0, moons: 0, lastBeam: null };
 function resetSwordsaint() {
+    if (!isTraining()) ssBlade = 'long'; // training.js: a swap to the original there never carries into a run
     ss.style = 0; ss.last = null; ss.hitT = -99; ss.recast = { 1: null, 2: null, 4: null }; ss.unsealed = 0; ss.bullet = 0; ss.bulletReady = 0;
     ss.dodgeUntil = ss.dodgeAt = -99; ss.charges = ssMaxCharges(); ss.rechT = 0; ss.chain = 0; ss.chainT = -99; ss.anim = null; ss.winds = []; ss.avalonReady = 0; ss.pop = null;
     for (const l of ss.launched) if (l.e) l.e.mkLift = 0;
