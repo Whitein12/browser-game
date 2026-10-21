@@ -43,7 +43,8 @@ function drinkFlask() { // main.js keydown F
     if (!potionReady() || f.healT > 0 || f.lockT > 0) return false;
     if (f.charges <= 0) { potionCue('No flask', '#9e9e9e'); return false; }
     if (player.hp >= player.maxHp) { potionCue('Full health', '#9e9e9e'); return false; } // no wasted charge
-    f.charges--; f.healLeft = player.maxHp * FLASK_POTENCY[f.potency] * flaskBonus(); // sidequests.js: the Herb Pouch f.rate = f.healLeft / FLASK_HEAL_T; f.healT = FLASK_HEAL_T; f.swirlT = 0;
+    f.charges--; f.healLeft = player.maxHp * FLASK_POTENCY[f.potency] * flaskBonus(); // sidequests.js: the Herb Pouch
+    f.rate = f.healLeft / FLASK_HEAL_T; f.healT = FLASK_HEAL_T; f.swirlT = 0;
     potionCue('+HP', '#69f0ae');
     return true;
 }

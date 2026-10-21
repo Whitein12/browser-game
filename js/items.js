@@ -21,6 +21,14 @@ const GEAR_SLOT_LIST = ['weapon', 'armor', 'amulet', 'boots', 'gloves'];
 const gearCfg = (type, rarity) => itemDataConfig.gear[type][rarity === 'rare' ? 'rare' : 'common'];
 function itemStep(item) { return gearCfg(item.type, item.rarity).step * (item.type === 'armor' ? armorHpMult() : 1); } // combat.js: armor scales with the class's HP
 function itemVal(item) { return Math.round((item.base + item.up * itemStep(item)) * 1000) / 1000; }
+// Milestones (the smith's +3 / +6 / +10): the piece gains a second stat for its slot, any rarity; items.json "upgrade" holds the table.
+// Plain globals so the weapon visuals can read the tier: milestoneTier(item) is 0-3, gearBonus(slot) the worn piece's bonus (0 with none).
+function milestoneTier(item) { return item ? itemDataConfig.upgrade.milestones.filter(m => (item.up || 0) >= m).length : 0; }
+function milestoneName(tier) { return tier > 0 ? itemDataConfig.upgrade.tiers[tier - 1] : ''; }
+function milestoneValue(type, tier) { return tier > 0 ? itemDataConfig.upgrade.bonus[type][tier - 1] : 0; }
+function gearBonus(slot) { return milestoneValue(slot, milestoneTier(equipment[slot])); }
+const MILESTONE_TEXT = { weapon: v => `Attack speed +${Math.round(v * 100)}%`, armor: v => `Damage taken -${Math.round(v * 100)}%`, amulet: v => `+${Math.round(v * 100)} Power`, boots: v => `Move speed +${Math.round(v * 100)}%`, gloves: v => `Basic attack damage +${Math.round(v * 100)}%` };
+function milestoneLine(type, tier) { return `+${itemDataConfig.upgrade.milestones[tier - 1]} ${milestoneName(tier)}: ${MILESTONE_TEXT[type](milestoneValue(type, tier))}`; }
 function itemName(item) { return item.name + (item.up > 0 ? ` +${item.up}` : ''); }
 function rareOf(type) { return activeClass[{ weapon: 'rareWeapon', armor: 'rareArmor', amulet: 'rareAmulet', boots: 'rareBoots', gloves: 'rareGloves' }[type]]; }
 function rareFx(item) { // a rare's effect text, read from the class (the Druid's swaps wolf for jaguar there); its first segment is the stat, which we show ourselves

@@ -110,9 +110,18 @@ Dialogue uses `openDialogue({ name, title, portrait, lines, onClose })`; each NP
 |---|---|---|
 | Smith | `openSmith` (`#smith-screen`) | knobs to pick from: a higher upgrade cap than +10, cheaper upgrades, repair, recolouring gear |
 | Apothecary | `openApothecary` (`#apothecary-screen`) | more elixirs, a third belt slot, a higher flask tier, better prices |
-| Merchant | `openShop` (the fixed catalogue) | a wider stock, for example another class's rares for a hero who wants them |
+| Merchant | `openShop` (the fixed catalogue) | a wider stock: all thirteen charms and wave charms (the dungeon stop sells five; see "The merchant's charms"), later perhaps another class's rares |
 
 Every knob raises the economy's pressure (see the smith's numbers above), so each one is a design decision with the user, not a default. Renovating a building is what unlocks or upgrades its NPC.
+
+## The merchant's charms (built 2026-10-19, awaiting playtest)
+
+The user's idea (2026-10-19): smaller items for the merchant, so he stays worth visiting after the first dungeon. The user's picks (all the recommended options): **2 charm slots** to choose between (keepsakes stay always-on and separate), **wave charms usable any time, one active**, sold at **both** merchants with the full list in Cinderholt. Code in js/charms.js, art in js/charms_fx.js.
+
+- **Charms** (passive, bought once, 2 slots on the paper doll, sell for half): Magnet Stone 120 (drops pulled from 110 px, pickup doubled), Gambler's Die 150 (+25% gold, -10% max HP), Bloodstone 180 (a kill under 30% HP heals 2% max HP), Wardstone Ring 200 (each wave starts with a 10% max HP shield for 15 s), Vial Hook 160 (a boss kill returns a flask charge), Scholar's Quill 150 (+10% XP), Phoenix Feather 250 (the first lethal hit leaves 1 HP; spent).
+- **Wave charms** (pouch of up to 3 each, Use from the inventory, last until the wave is cleared; from the breather they cover the next wave): Whetstone 40 (+20 Power), Bounty Writ 50 (+50% gold), Warding Candle 50 (the first 3 hits blocked), Hunter's Lure 40 (spawns 25% faster, +25% XP), Smelling Salts 80 (a death revives at 30%), Map Scrap 30 (marks the nearest unopened supply cache).
+- **Stock:** the stage-cleared stop: Whetstone, Bounty Writ, Warding Candle, Magnet Stone, Scholar's Quill. Cinderholt's rebuilt shop: all thirteen. The merchant's favour discounts them.
+- **Known gaps:** King Valerius never reaches `checkEnemyDeath`, so his death gives no Vial Hook charge; HP lost outside `takeDamage` (the bridge's fall, Cleric blood costs) can't trigger the feather or the salts.
 
 ## Materials and renovation
 

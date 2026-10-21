@@ -13,11 +13,13 @@
     "gloves": { "namePrefix": "Gloves", "valBase": 0.05, "valMult": 0.025, "descTemplate": "+{VAL}% Attack Speed" }
   },
   "gear": {
-    "weapon": { "common": { "name": "Iron Sword", "names": { "sword": "Iron Sword", "staff": "Oak Staff", "bow": "Hunting Bow", "dagger": "Iron Dagger", "scattergun": "Rusty Scattergun", "phantom_blade": "Iron Katana", "censer": "Brass Censer", "totem": "Carved Totem", "mace": "Iron Mace", "fists": "Cloth Hand Wraps", "blightstaff": "Gnarled Staff", "saint_sword": "Squire's Longsword" }, "base": 0.06, "step": 0.04, "price": 40 }, "rare": { "base": 0.5, "step": 0.04, "price": 250 } },
-    "armor": { "common": { "name": "Padded Jerkin", "base": 40, "step": 18, "price": 40 }, "rare": { "base": 240, "step": 20, "price": 250 } },
-    "amulet": { "common": { "name": "Bone Charm", "base": 0.03, "step": 0.013, "price": 40 }, "rare": { "base": 0.2, "step": 0.01, "price": 250 } },
-    "boots": { "common": { "name": "Worn Boots", "base": 10, "step": 3, "price": 30 }, "rare": { "base": 50, "step": 3, "price": 200 } },
-    "gloves": { "common": { "name": "Leather Gloves", "base": 0.05, "step": 0.015, "price": 30 }, "rare": { "base": 0.25, "step": 0.012, "price": 200 } }
+    "weapon": { "common": { "name": "Iron Sword", "names": { "sword": "Iron Sword", "staff": "Oak Staff", "bow": "Hunting Bow", "dagger": "Iron Dagger", "scattergun": "Rusty Scattergun", "phantom_blade": "Iron Katana", "censer": "Brass Censer", "totem": "Carved Totem", "mace": "Iron Mace", "fists": "Cloth Hand Wraps", "blightstaff": "Gnarled Staff", "saint_sword": "Squire's Longsword" }, "base": 0.06, "step": 0.10, "price": 40 }, "rare": { "base": 0.5, "step": 0.10, "price": 250 } },
+    "armor": { "common": { "name": "Padded Jerkin", "base": 40, "step": 45, "price": 40 }, "rare": { "base": 240, "step": 50, "price": 250 } },
+    "amulet": { "common": { "name": "Bone Charm", "base": 0.03, "step": 0.026, "price": 40 }, "rare": { "base": 0.2, "step": 0.02, "price": 250 } },
+    "boots": { "common": { "name": "Worn Boots", "base": 10, "step": 7, "price": 30 }, "rare": { "base": 50, "step": 7, "price": 200 } },
+    "gloves": { "common": { "name": "Leather Gloves", "base": 0.05, "step": 0.03, "price": 30 }, "rare": { "base": 0.25, "step": 0.025, "price": 200 } }
   },
-  "upgrade": { "costRate": 0.3, "capStart": 5, "capCaves": 10 }
+  "upgrade": { "costRate": 0.3, "capStart": 5, "capCaves": 10,
+    "milestones": [3, 6, 10], "tiers": ["Honed", "Masterwork", "Mythic"],
+    "bonus": { "weapon": [0.04, 0.08, 0.12], "armor": [0.04, 0.08, 0.12], "amulet": [0.08, 0.16, 0.25], "boots": [0.04, 0.08, 0.12], "gloves": [0.06, 0.12, 0.18] } }
 }

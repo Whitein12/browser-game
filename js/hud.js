@@ -44,6 +44,7 @@ function setSlot(s, cd, maxCd, locked, level) {
 function hudChips() {
     const c = [], n = activeClass.name;
     // Class stacks (Frenzy, Momentum, Flow...) live in the gauge orb; chips are for extra buffs and dangers
+    if (charms.active) { const a = charms.active, d = WAVE_CHARMS[a.id]; c.push([d.col, d.name, a.id === 'warding_candle' ? `${a.wardsLeft} ward${a.wardsLeft === 1 ? '' : 's'}` : 'this wave']); } // charms.js
     if (player.orbDmg > 0) c.push(['#ffb74d', 'Power orbs', `+${Math.round(player.orbDmg * 100)} Power${player.orbDmg >= ORB_DMG_CAP ? ' (max)' : ''}`]);
     if (n === 'Paladin' && player.hammer) {
         const st = player.hammer.state;
@@ -327,11 +328,13 @@ function renderTabSheet() {
     const frenzy = n === 'Dragonknight' ? player.frenzyStacks * 0.02 : 0;
     const interval = 0.15 + activeClass.basicAttackCD / (1 + attackSpeedBonus()); // skills.js
     h += row('Basic attack', `${Math.round(basicHitDmg())} dmg &middot; ${(1 / interval).toFixed(1)}/s`);
-    if (basicLevelMult() > 1) h += row('Hero level', `&times;${basicLevelMult().toFixed(2)}`, 'sub'); // combat.js
+    if (basicLvMult() > 1) h += row('Hero level', `&times;${basicLvMult().toFixed(2)}`, 'sub'); // combat.js
+    if (gearBonus('gloves')) h += row(`${milestoneName(milestoneTier(equipment.gloves))} ${equipment.gloves.name}`, `&times;${(1 + gearBonus('gloves')).toFixed(2)}`, 'sub'); // items.js
     if (n === 'Witch') h += row('Poison stack', `${basicHitDmg().toFixed(1)} over ${WT_POISON_TIME}s · ${wtPoisonMax()} max`, 'sub') + row(WT_KINDS[minionKind()].name, `${wt.zombies.length} / ${WT_ZOMBIE_MAX}`, 'sub') + row('Souls near you', soulsNear().length, 'sub'); // witch.js
     if (n === 'Swordsaint') h += row('Style', `${SS_RANK_LETTER[ssRank()]} (${SS_RANK_NAME[ssRank()]}) · ${Math.floor(ss.style)} / ${SS_MAX}`, 'sub') + row('Mana Burst', `${ss.charges} / ${ssMaxCharges()} charges`, 'sub'); // swordsaint.js
     if (n === 'Monk') h += row('Flurry of Blows', `${mk.flurry} / ${MK_FLURRY_MAX} charges`, 'sub') + row('Chi', `${Math.floor(mk.chi)} / ${MK_CHI_MAX}`, 'sub') + row('Iron Will lifesteal', `${Math.round(monkWillPct(Math.max(1, activeClass.skills[3].level)) * 100)}%`, 'sub'); // monk.js
     if (glove) h += row(itemName(equipment.gloves), `${pct(glove)} speed`, 'sub');
+    if (gearBonus('weapon')) h += row(`${milestoneName(milestoneTier(W))} ${W.name}`, `${pct(gearBonus('weapon'))} speed`, 'sub'); // items.js
     if (stance) h += row('Airborne stance', `${pct(stance)} speed`, 'sub temp');
     if (frenzy) h += row(`Frenzy &times;${player.frenzyStacks}`, `${pct(frenzy)} speed`, 'sub temp');
     if (ssSpeed()) h += row(`Style: ${SS_RANK_LETTER[ssRank()]} rank`, `${pct(ssSpeed())} speed`, 'sub temp'); // swordsaint.js
@@ -345,15 +348,18 @@ function renderTabSheet() {
     h += row('Class base', activeClass.baseMaxHp, 'sub');
     if (gearHp) h += row(itemName(equipment.armor), `+${Math.round(gearHp)}`, 'sub');
     if (player.treeHp) h += row('Talents', `+${player.treeHp}`, 'sub'); // skilltree.js: Vitality
+    if (gearBonus('armor')) h += row(`${milestoneName(milestoneTier(equipment.armor))} ${equipment.armor.name}`, `-${Math.round(gearBonus('armor') * 100)}% damage taken`, 'sub'); // items.js
     const armorNow = player.armor * (typeof paladinArmorMult === 'function' && n === 'Paladin' ? paladinArmorMult() : 1);
     h += row('Armor', Math.round(armorNow * 10) / 10) + `<div class="note">blocks ${Math.round(armorReduction(armorNow) * 100)}% of every hit</div>`;
     if (player.shield > 0) h += row('Shield', Math.ceil(player.shield), 'sub temp');
     h += row('Move speed', Math.round(player.speed));
     if (equipment.boots) h += row(itemName(equipment.boots), `+${Math.round(equipment.boots.val)}`, 'sub');
     if (player.treeSpeed) h += row('Talents', `+${player.treeSpeed}`, 'sub'); // skilltree.js: Fleetness
+    if (gearBonus('boots')) h += row(`${milestoneName(milestoneTier(equipment.boots))} ${equipment.boots.name}`, pct(gearBonus('boots')), 'sub'); // items.js
     if (hasKeepsake('hound_tooth')) h += row(KEEPSAKES.hound_tooth.name, '+5%', 'sub'); // sidequests.js
     if (n === 'Ranger' && player.momentum > 0) h += row('Momentum', `${pct(player.momentum)} speed`, 'sub temp');
 
+    h += charmsSheetHtml(); // charms.js
     h += `<h4>Materials</h4>` + MAT_KEYS.map(k => row(matImg(k) + MAT_NAMES[k], mats[k])).join('') + `<div class="note">for rebuilding Cinderholt</div>`; // caches.js
 
     // Skills: rank, evolution and what they do now

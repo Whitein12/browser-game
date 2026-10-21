@@ -175,9 +175,13 @@ function nearestOpenCell(cx, cy, air) {
 }
 
 // Can something walk in a straight line from a to b? (walls and ravines block; lakes don't)
-function walkClear(x0, y0, x1, y1) {
+// With a body radius r (default 0: a bare line) it also samples two lines offset by ~0.8 r and treats round obstacles as blocking,
+// so a big boss whose centre line slips past a corner doesn't think the way is open and grind against it.
+function walkClear(x0, y0, x1, y1, r = 0) {
     const d = Math.hypot(x1 - x0, y1 - y0), n = Math.ceil(d / 10);
-    for (let i = 1; i < n; i++) { const k = i / n; if (solidCell(terrainAt(x0 + (x1 - x0) * k, y0 + (y1 - y0) * k), false)) return false; }
+    const lines = r > 0 && d > 0 ? [[0, 0], [-(y1 - y0) / d * r * 0.8, (x1 - x0) / d * r * 0.8], [(y1 - y0) / d * r * 0.8, -(x1 - x0) / d * r * 0.8]] : [[0, 0]];
+    for (const [ox, oy] of lines) for (let i = 1; i < n; i++) { const k = i / n; if (solidCell(terrainAt(x0 + ox + (x1 - x0) * k, y0 + oy + (y1 - y0) * k), false)) return false; }
+    if (r > 0 && currentMap.obstacles) for (const o of currentMap.obstacles) if (distToSegment(o.x, o.y, x0, y0, x1, y1) < o.r + r) return false;
     return true;
 }
 // Can a shot fly from a to b? (only walls block)
@@ -239,8 +243,9 @@ function updateNav(force) {
 // Returns a replacement [edx, edy] (same length as the real one) that walks around rock, or null to go straight
 function navSteer(e, edx, edy, edist) {
     const G = currentMap.grid; if (!G || !nav.dist || edist === Infinity) return null;
-    if (!(fxTime - (e.losAt || -9) < 0.25)) { e.losAt = fxTime; e.los = walkClear(e.x, e.y, player.x, player.y); }
-    if (e.los) return null;
+    const rad = (e.size || 0) / 2;
+    if (!(fxTime - (e.losAt || -9) < 0.25)) { e.losAt = fxTime; e.los = walkClear(e.x, e.y, player.x, player.y, rad); } // with its body, not a bare line
+    if (e.los && !(e.navForceUntil > fxTime)) return null; // navForceUntil: it was stuck, so the flow field for a while
     const cs = G.cell, cols = G.cols, cx = Math.floor(e.x / cs), cy = Math.floor(e.y / cs), D = nav.dist;
     const at = (x, y) => (x < 0 || y < 0 || x >= cols || y >= G.rows ? -1 : D[y * cols + x]);
     let bd = at(cx, cy); if (bd < 0) bd = 1e9;
@@ -251,9 +256,36 @@ function navSteer(e, edx, edy, edist) {
         if (ox && oy && (at(cx + ox, cy) < 0 || at(cx, cy + oy) < 0)) continue; // don't cut rock corners
         bd = v; bx = (cx + ox + 0.5) * cs; by = (cy + oy + 0.5) * cs;
     }
-    if (bx === null) return null;
-    const dx = bx - e.x, dy = by - e.y, d = Math.hypot(dx, dy) || 1;
+    if (bx === null) { bx = player.x; by = player.y; } // already in the hero's cell (or none lower): straight on, round obstacles below
+    let dx = bx - e.x, dy = by - e.y, d = Math.hypot(dx, dy) || 1;
+    // the flow field only knows rock: swing round a round obstacle (pillar, boulder, prop) on the way, keeping to one side
+    const obs = currentMap.obstacles;
+    if (obs && !e.airborne) {
+        const ux = dx / d, uy = dy / d; let best = null, ba = 1e9;
+        for (const o of obs) {
+            const ox = o.x - e.x, oy = o.y - e.y, along = ox * ux + oy * uy, perp = ox * uy - oy * ux, reach = o.r + rad + 6;
+            if (along > 0 && along < reach + 90 && along < edist && Math.abs(perp) < reach && along < ba) { ba = along; best = [o, perp, reach]; }
+        }
+        if (best) {
+            const [o, perp, reach] = best, ox = o.x - e.x, oy = o.y - e.y, od = Math.hypot(ox, oy) || 1;
+            if (e.navSideO !== o) { e.navSideO = o; e.navSide = perp > 0 ? -1 : 1; } // stays on one side until another obstacle is in the way
+            const px = oy / od * e.navSide, py = -ox / od * e.navSide; // beside the obstacle (side +1 = its clockwise flank)
+            const tx = o.x + px * (reach + 14), ty = o.y + py * (reach + 14);
+            dx = tx - e.x; dy = ty - e.y; d = Math.hypot(dx, dy) || 1;
+        }
+    }
     return [dx / d * edist, dy / d * edist];
+}
+
+// Per enemy, per frame, from main.js's enemy loop: one that is chasing but has barely moved for ~1.2 s goes onto the flow field for 2 s
+function navStuckTick(e, dt, edist, curSpd) {
+    if (!currentMap.grid || curSpd <= 0 || edist === Infinity || e.prop || e.pod || e.submerged || e.airborne || e.state === 'dash_execute' || e.state === 'charge' || e.state === 'jousting' || e.state === 'leap') { e.stuckT = 0; return; }
+    if (edist < (e.size || 0) / 2 + player.radius + 90) { e.stuckT = 0; return; } // in reach: standing still is right
+    if (e.stuckT === undefined || e.stuckT <= 0) { e.stuckT = 0; e.stuckX = e.x; e.stuckY = e.y; }
+    e.stuckT += dt;
+    if (e.stuckT < 1.2) return;
+    if (Math.hypot(e.x - e.stuckX, e.y - e.stuckY) < 25) { e.navForceUntil = fxTime + 2; e.losAt = -9; } // re-test the sight line at once too
+    e.stuckT = 0;
 }
 
 // A random walkable spot the enemies can reach, at least `minFromHero` away from the hero (null if none found)
@@ -271,6 +303,33 @@ function randomOpenSpot(minFromHero, near, clear = 40) {
 }
 
 // ---------- spawns ----------
+
+// "Waves follow you" (the trail and the castle open one section at a time): when the hero has walked back into an earlier
+// section, about half of each spawn comes from THEIR section, out of sight, instead of every enemy queueing at the opening
+// (a turret nest there deleted them). `pool` is the section's spawn points, [x0, x1] its walkable span, `openX` the opening
+// toward the newer section. Prefers the far side of the hero from that opening so a nest facing it gets flanked. Returns
+// { x, y, from, ox, oy } or null (the caller then spawns ahead as usual).
+function flankSpawn(pool, x0, x1, openX) {
+    const G = currentMap.grid; if (!G) return null;
+    const hw = viewW() / 2 + 80, hh = viewH() / 2 + 80, dir = Math.sign(openX - player.x) || 1;
+    const reach = (x, y) => !nav.dist || nav.dist[Math.floor(y / G.cell) * G.cols + Math.floor(x / G.cell)] >= 0;
+    const ok = (x, y) => Math.hypot(x - player.x, y - player.y) > 450 && reach(x, y) && !(Math.abs(x - camera.x - viewW() / 2) < hw && Math.abs(y - camera.y - viewH() / 2) < hh);
+    const far = p => (p.x - player.x) * dir < 0; // the side away from the opening
+    let cand = pool.filter(p => ok(p.x, p.y)); // the section's own tree line / doorways keep their step-out entry
+    if (cand.some(far)) cand = cand.filter(far);
+    if (cand.length) return cand[(Math.random() * cand.length) | 0];
+    let spot = null; // no such point: any open ground of the section, out of sight
+    for (let tries = 0; tries < 60; tries++) {
+        const x = x0 + Math.random() * (x1 - x0), y = currentMap.top + Math.random() * (currentMap.bottom - currentMap.top);
+        if (G.data[Math.floor(y / G.cell) * G.cols + Math.floor(x / G.cell)] !== T_FLOOR || !ok(x, y)) continue;
+        if (solidCell(terrainAt(x + 40, y), false) || solidCell(terrainAt(x - 40, y), false) || solidCell(terrainAt(x, y + 40), false) || solidCell(terrainAt(x, y - 40), false)) continue;
+        if (!spot || (far({ x }) && !far(spot))) spot = { x, y };
+        if (far({ x })) break;
+    }
+    if (!spot) return null;
+    const a = Math.atan2(spot.y - player.y, spot.x - player.x); // steps in from a little farther out, as plain open ground
+    return { x: spot.x, y: spot.y, from: 'flank', ox: spot.x + Math.cos(a) * 30, oy: spot.y + Math.sin(a) * 30 };
+}
 
 // Where a new enemy appears: under the tree line or out of the cave mouth, never right next to the player
 function pickSpawnPoint() {
@@ -310,6 +369,7 @@ function onEnemySpawned(e) {
 // breather; only a boss stops the run: the stage exit opens, or (without a stage map) the boss-cleared screen and its shop.
 function onWaveCleared() {
     if (isTraining() || isBase()) return; // training.js, map_base.js: no waves to clear
+    if (!(isBossWave && !bossSpawned)) charmsWaveEnd(); // charms.js: the active wave charm covered this wave (a boss wave whose boss is still to come isn't cleared)
     if (activeExpedition) { expWaveCleared(); return; } // expeditions.js: three waves and a chief, no screens in between
     // A boss wave whose boss a scene brings (the bridge's Valerius, the throne room) starts with nothing to kill: a
     // level-up closing then used to "clear" it and open the exit before the fight. Not cleared until the boss is out.

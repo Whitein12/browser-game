@@ -324,6 +324,7 @@
                     <div class="doll" id="doll"><canvas id="doll-portrait"></canvas></div>
                     <div class="stats-sheet" id="stats-sheet"></div>
                 </div>
+                <div class="charm-row" id="charm-row"></div>
                 <div class="backpack-head"><span class="ui-label">Backpack</span><span class="ui-hint" style="margin: 0;">Click an item to equip it &middot; click worn gear to take it off &middot; <span class="up">&#9650;</span> upgrade</span></div>
                 <div class="backpack" id="backpack-list"></div>
                 <div class="ui-row" style="margin-top: 14px;"><button class="btn" onclick="closeInventory()">Close <kbd>Esc</kbd></button></div>
@@ -401,7 +402,7 @@
                     <div class="dev-grid"><button class="btn btn-dev" onclick="devExpedition('fallen_bastion')">Fallen Bastion</button><button class="btn btn-dev" onclick="devExpedition('raiders_camp')">Raiders' Camp</button><button class="btn btn-dev" onclick="devExpedition('silent_hive')">Silent Hive</button></div>
                 </div>
                 <div class="dev-section"><span class="ui-label">Cinderholt's friends</span>
-                    <div class="dev-grid"><button class="btn btn-dev" onclick="devTalk('smith')">Smith</button><button class="btn btn-dev" onclick="devTalk('apothecary')">Apothecary</button><button class="btn btn-dev" onclick="devTalk('merchant')">Merchant</button><button class="btn btn-dev" onclick="devFriendsWalk()">Walk here</button><button class="btn btn-dev" onclick="devVisitBase()">Visit freed Cinderholt</button><button class="btn btn-dev" onclick="devVisitSmithy()">The smithy</button><button class="btn btn-dev" onclick="devAddMats()">+50 materials</button><button class="btn btn-dev" onclick="devResetBase()">Reset Cinderholt</button><button class="btn btn-dev" onclick="devQuestsComplete()">Quests: complete active</button><button class="btn btn-dev" onclick="devQuestsReset()">Quests: reset</button></div>
+                    <div class="dev-grid"><button class="btn btn-dev" onclick="devTalk('smith')">Smith</button><button class="btn btn-dev" onclick="devTalk('apothecary')">Apothecary</button><button class="btn btn-dev" onclick="devTalk('merchant')">Merchant</button><button class="btn btn-dev" onclick="devFriendsWalk()">Walk here</button><button class="btn btn-dev" onclick="devVisitBase()">Visit freed Cinderholt</button><button class="btn btn-dev" onclick="devVisitSmithy()">The smithy</button><button class="btn btn-dev" onclick="devAddMats()">+50 materials</button><button class="btn btn-dev" onclick="devCharmsAll()">Charms: all</button><button class="btn btn-dev" onclick="devResetBase()">Reset Cinderholt</button><button class="btn btn-dev" onclick="devQuestsComplete()">Quests: complete active</button><button class="btn btn-dev" onclick="devQuestsReset()">Quests: reset</button></div>
                 </div>
                 <div class="dev-section"><span class="ui-label">State</span><div class="dev-readout" id="dev-readout"></div></div>
                 <button class="btn btn-dev" style="width: 100%; margin-top: 24px; padding: 11px;" onclick="closeDevMenu()">Close console</button>
@@ -455,6 +456,8 @@
     <script src="js/swordsaint_fx.js"></script>
     <script src="js/items.js"></script>
     <script src="js/potions.js"></script>
+    <script src="js/charms.js"></script>
+    <script src="js/charms_fx.js"></script>
     <script src="js/sprites.js"></script>
     <script src="js/portraits.js"></script>
     <script src="js/icons.js"></script>

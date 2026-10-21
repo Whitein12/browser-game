@@ -612,7 +612,30 @@ function drawPlayerWeapon(aimAngle) {
     weaponAnim.tip = weaponAnim.censer = weaponAnim.wandTip = weaponAnim.bladeBase = null;
     const draw = activeClass && WEAPON_DRAW[activeClass.weapon];
     if (draw) draw(aimAngle);
+    drawWeaponTier(aimAngle);
     if (player.parryTimer > 0) drawParryGuard(aimAngle); // skillfx.js
+}
+
+// The smith's milestones (items.js milestoneTier): motes of light circling the weapon hand, one per tier, so a Mythic
+// piece reads at a glance. Drawn by the hand, not along the blade: every class's weapon has its own shape and swing.
+const TIER_MOTE = [null, { c: '#cfd8dc', core: '#ffffff' }, { c: '#ffc107', core: '#fff8e1' }, { c: '#e040fb', core: '#ffe082' }]; // Honed steel, Masterwork gold, Mythic violet
+function drawWeaponTier(aimAngle) {
+    const tier = typeof milestoneTier === 'function' ? milestoneTier(equipment.weapon) : 0;
+    if (!tier || player.fallen) return;
+    const T = TIER_MOTE[tier], [hx, hy] = polar(aimAngle, 10, 9), t = fxTime;
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    if (tier === 3) glow(ctx, hx, hy, 20, T.c, 0.18 + 0.06 * Math.sin(t * 3)); // Mythic: a soft halo round the hand
+    for (let i = 0; i < tier; i++) {
+        const a = t * (1.6 + tier * 0.3) + i * Math.PI * 2 / tier, r = 15 + 2 * Math.sin(t * 2.3 + i);
+        const x = hx + Math.cos(a) * r, y = hy + Math.sin(a) * r * 0.55 - 4; // a tilted ring: the hand is seen from above, the ring leans with it
+        glow(ctx, x, y, 7, T.c, 0.55);
+        ctx.fillStyle = T.core; ctx.beginPath(); ctx.arc(x, y, 1.4, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+    if (tier >= 2 && t - (player.tierMoteAt || 0) > (tier === 3 ? 0.18 : 0.4)) { // fxTime: no sparks pile up while paused
+        player.tierMoteAt = t;
+        spawnParticle({ kind: 'dot', color: T.c, x: hx + (Math.random() - 0.5) * 22, y: hy + (Math.random() - 0.5) * 12, vx: (Math.random() - 0.5) * 10, vy: -22 - Math.random() * 18, size: 1.6, life: 0.6, drag: 1, grow: 0, spin: 0, rot: 0 });
+    }
 }
 
 // ==========================================

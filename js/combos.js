@@ -325,7 +325,7 @@ function teslaShot(t, target, delay) {
         let next = null, bd = TESLA_CHAIN_RANGE;
         for (const e of enemies) {
             if (e === target || e.dead || e.pod || e.submerged) continue;
-            const d = Math.hypot(e.x - target.x, e.y - target.y); if (d < bd) { bd = d; next = e; }
+            const d = Math.hypot(e.x - target.x, e.y - target.y); if (d < bd && shotClear(target.x, target.y, e.x, e.y)) { bd = d; next = e; } // not through a wall
         }
         if (!next) return;
         effects.push({ type: 'lightning', x1: target.x, y1: target.y, x2: next.x, y2: next.y, color: '#84ffff', life: 0.18, maxLife: 0.18 });
@@ -354,7 +354,7 @@ function rodBlast(dmg, angle) { // skills.js scattergun, after each blast
     for (const e of enemies) { // the first: the nearest enemy ahead
         if (e.dead || e.pod || e.submerged) continue;
         const d = Math.hypot(e.x - player.x, e.y - player.y), diff = Math.atan2(e.y - player.y, e.x - player.x) - angle;
-        if (d - e.size / 2 < bd && Math.abs(Math.atan2(Math.sin(diff), Math.cos(diff))) < ROD_CONE) { bd = d - e.size / 2; target = e; }
+        if (d - e.size / 2 < bd && Math.abs(Math.atan2(Math.sin(diff), Math.cos(diff))) < ROD_CONE && shotClear(player.x, player.y, e.x, e.y)) { bd = d - e.size / 2; target = e; }
     }
     const hit = [];
     for (let j = 0; target && j <= ROD_JUMPS; j++) {
@@ -363,7 +363,7 @@ function rodBlast(dmg, angle) { // skills.js scattergun, after each blast
         from = target; target = null; let nd = ROD_JUMP_RANGE;
         for (const e of enemies) {
             if (e.dead || e.pod || e.submerged || hit.includes(e)) continue;
-            const d = Math.hypot(e.x - from.x, e.y - from.y); if (d < nd) { nd = d; target = e; }
+            const d = Math.hypot(e.x - from.x, e.y - from.y); if (d < nd && shotClear(from.x, from.y, e.x, e.y)) { nd = d; target = e; }
         }
     }
 }
@@ -605,7 +605,7 @@ function machinistOverload(dmg, c) {
         addShake(3);
         let zaps = 0;
         for (const e of enemies) {
-            if (e.dead || e.pod || Math.hypot(e.x - a.x, e.y - a.y) > NOVA_RADIUS + e.size / 2) continue;
+            if (e.dead || e.pod || Math.hypot(e.x - a.x, e.y - a.y) > NOVA_RADIUS + e.size / 2 || !shotClear(a.x, a.y, e.x, e.y)) continue; // not through a wall
             if (zaps++ < 8) effects.push({ type: 'lightning', x1: a.x, y1: a.y, x2: e.x, y2: e.y, color: '#e0f7fa', life: 0.25, maxLife: 0.25 });
             applyDamage(e, a.damage * NOVA_MULT, 'magic');
             e.shockTimer = 0.6; e.stunTimer = Math.max(e.stunTimer || 0, NOVA_STUN);

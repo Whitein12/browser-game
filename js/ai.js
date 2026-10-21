@@ -14,9 +14,10 @@ var MeleeAI = (e, dt, curSpd, edx, edy, edist, i) => {
 };
 
 var RangedAI = (e, dt, curSpd, edx, edy, edist, i) => {
-    if (edist > 250) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
+    const see = edist > 400 || shotClear(e.x, e.y, player.x, player.y); // no clear shot: keep walking (the flow field) instead of standing behind rock
+    if (edist > 250 || !see) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
     e.attackTimer -= dt;
-    if (e.attackTimer <= 0 && edist <= 400 && e.frozenTimer <= 0 && shotClear(e.x, e.y, player.x, player.y)) {
+    if (e.attackTimer <= 0 && edist <= 400 && e.frozenTimer <= 0 && see) {
         let projShape = e.type === 'archer' ? 'arrow' : 'slime_blob';
         const [sx, sy, sd] = getVector(e.x, e.y, player.x, player.y); // the real line, even while walking a detour
         projectiles.push({ x: e.x, y: e.y, vx: (sx/sd)*350, vy: (sy/sd)*350, radius: 6, color: e.type==='archer' ? '#8d6e63' : '#ba68c8', life: 3.0, isEnemy: true, owner: e, damage: e.dmg, shape: projShape });
@@ -1366,7 +1367,7 @@ var EnemyAI = {
         if (hpPercent > 0.6) {
             if (edist > 150) { e.x += (edx/edist)*curSpd*dt; e.y += (edy/edist)*curSpd*dt; }
             if (e.stateTimer <= 0) {
-                if (Math.random() < 0.5) { // she lobs two eggs; they hatch where they land
+                if (Math.random() < 0.5 || !shotClear(e.x, e.y, player.x, player.y)) { // she lobs two eggs; they hatch where they land (and when the spit would hit rock)
                     for(let k=0; k<2; k++) {
                         const a = Math.random() * Math.PI * 2, sp = randomOpenSpot(0, { x: e.x + Math.cos(a) * 230, y: e.y + Math.sin(a) * 230, r: 60 }), mx = sp ? sp[0] : e.x + Math.cos(a) * 120, my = sp ? sp[1] : e.y + Math.sin(a) * 120;
                         enemies.push({ x: mx, y: my, size: 28, color: '#8bc34a', speed: 115, hp: 40, maxHp: 40, type: 'slime_melee', dmg: 10, xp: 0, meleeTimer: 0, frozenTimer: 0, facingAngle: 0, spawnT: 0.95, spawnMax: 0.95, flyUntil: fxTime + 0.6 }); activeEnemies++;

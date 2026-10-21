@@ -4,7 +4,7 @@
 
 // Every attack-speed source, as one bonus (+0.3 = 30% faster). The Tab sheet (hud.js) shows the same number.
 function attackSpeedBonus() {
-    let bonus = equipment.gloves ? equipment.gloves.val : 0;
+    let bonus = (equipment.gloves ? equipment.gloves.val : 0) + gearBonus('weapon'); // items.js: the weapon's milestone
     if (activeClass.name === 'Kensei' && player.stance === 'airborne') bonus += (player.flow / player.maxFlow) * 0.5; // up to +50% in airborne
     if (activeClass.name === 'Dragonknight') bonus += player.frenzyStacks * 0.02; // Frenzy: +2% per stack
     if (buffs.focus > 0 && hasTalent('focus_haste')) bonus += 0.3;
@@ -468,7 +468,7 @@ function spawnTurret(x, y, upg, dmg, tier = null) {
             if (this.overload > 0) this.overload -= dt;
             teslaCrackle(this, dt); // combos.js Tesla Turret
             if (this.flame || this.sniper) { maTurretTick(this, dt); return; } // machinist.js: Flame / Sniper Turret
-            let target = getNearestEnemyFromPoint(this.x, this.y, 500);
+            let target = maTarget(this, 500); // machinist.js: the nearest enemy it can see, not one behind a wall
             if (target) {
                 this.angle = Math.atan2(target.y - this.y, target.x - this.x);
                 if (this.attackTimer <= 0) {

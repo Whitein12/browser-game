@@ -4,6 +4,18 @@ A snapshot of every number that matters for the balance patch: classes, skills, 
 
 ## Patch log
 
+### Playtest fixes: the flask, Machinist cheese, the smith (2026-10-19)
+
+- **The flask never healed** (bug): potions.js `drinkFlask`'s heal start had slid into the Herb Pouch hook's comment, so a drink spent the charge and showed "+HP" with no heal. Fixed.
+- **Bosses wedged on corners** (the Machinist turreted the Queen behind a pillar, the Warchief behind a house): stage.js `walkClear` tested a zero-width line, so a big body whose centre slipped past a corner walked straight into it forever. It now takes a body radius (navSteer passes `e.size / 2`) and counts round obstacles; navSteer sidesteps round obstacles the flow field doesn't know; `navStuckTick` (main.js enemy loop) puts an enemy that hasn't moved 25 px in 1.2 s while chasing onto the flow field for 2 s. Ranged slimes / archers walk to a clear shot instead of standing still; the Queen lobs an egg instead of spitting into a wall.
+- **Turrets shot through walls**: every turret, the Tesla Coil and the turret combos (Tesla Turret, Lightning Rod, Overload's nova) only hit what they can see (`shotClear`, machinist.js `maSees` / `maTarget`, cached 0.2 s). The Sniper picks the toughest *visible* enemy; the Flame cone burns only what it sees. Magnetic Field's pull is unchanged.
+- **Chokepoint nests on the Trail and the Castle** (the user's pick, the recommended option: "waves follow you"): when the hero is in an earlier section than the newest open one, half of each regular spawn (`flankSpawn`, stage.js) comes from the hero's own section, out of sight, preferring the far side from the opening. Forward play, boss waves, scripted spawns and expeditions are unchanged.
+- **The smith** (the user's pick, the recommended option: "milestones + bigger steps"; prices and costs unchanged, a rare piece is still ~4,100 gold to +10):
+  - Steps: weapon 0.04 → 0.10 (+10 Power a step), armor 18 / 20 → 45 / 50 HP, amulet 1.3% / 1% → 2.6% / 2% CDR (2x for MAX_CDR 60%: a +10 rare amulet is 40% alone, so Focus builds reach the cap), boots 3 → 7, gloves 1.5% / 1.2% → 3% / 2.5% attack speed (2x, it stacks with a lot).
+  - At +10, before → after (common | rare): weapon 46 → 106 | 90 → 150 Power; armor 220 → 490 | 440 → 740 HP (before the class's armor scale); amulet 16 → 29% | 30 → 40% CDR; boots +40 → +80 | +80 → +120; gloves 20 → 35% | 37 → 50%.
+  - Milestones at +3 / +6 / +10 (Honed, Masterwork, Mythic; items.json `upgrade`, items.js `milestoneTier` / `gearBonus`): weapon +4 / 8 / 12% attack speed, armor -4 / 8 / 12% damage taken, amulet +8 / 16 / 25 Power, boots +4 / 8 / 12% move speed, gloves +6 / 12 / 18% basic damage (through `basicLevelMult`, so finishers too). Shown in tooltips, on the smith screen and the Tab sheet; the weapon wears one mote of light per tier round the hand (weapons.js `drawWeaponTier`).
+  - **Watch:** a rare weapon and rare gloves at +10 add +62% attack speed from gear alone.
+
 ### Basic attacks scale with level (2026-10-17)
 
 The user found late-game basics too weak ("around 40, not even tickles endgame bosses"), worst for basic-attack classes (Ranger, Swordsaint). Cause: skills grow with ranks (x1.6) and Power, but basics always used rank 1, so only Power grew them (~x2.1 from Lv. 5 to Lv. 20) while boss HP grows ~x6 (Slime King w5 3.6k → King of Thieves 22.75k).

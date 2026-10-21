@@ -14,6 +14,7 @@ function startGame(className) {
     player.level = 1; player.xp = 0; player.maxXp = xpToNext(1); player.gold = 0; player.orbDmg = 0.0; player.skillPoints = TREE_PTS_PER_LEVEL;
     wave = 0; equipment = { weapon: null, armor: null, amulet: null, boots: null, gloves: null }; inventory = [];
     treeReset(); // skilltree.js: nothing learned yet
+    resetCharms(); // charms.js: none worn, an empty pouch; applyHero restores a saved hero's
     resetPotions(); // potions.js: defaults and no elixir running; applyHero then restores a saved hero's flask and belt
     resetMats(); // caches.js: no materials found yet; applyHero restores a saved hero's
     const heroReady = applyHero(); // save.js: a saved hero's level, web, gold and gear
@@ -90,6 +91,7 @@ window.startNextWave = function() {
     el('intermission-screen').classList.add('hidden'); el('inventory-screen').classList.add('hidden'); el('shop-screen').classList.add('hidden');
     player.hp = Math.min(player.maxHp, player.hp + (player.maxHp * 0.3));
     refillFlask(); // potions.js
+    charmsWaveStart(); // charms.js: the Wardstone Ring
     waveStats = { kills: 0, gold0: player.gold, time: 0, dmgTaken: 0, peak: 0 };
     gameState = STATE.PLAYING; lastTime = performance.now(); updateHUD(); showWaveBanner();
 }
@@ -122,12 +124,12 @@ initializeData();
 
 function recalcStats() {
     let gearHp = equipment.armor ? equipment.armor.val : 0;
-    player.maxHp = activeClass.baseMaxHp + gearHp + (player.treeHp || 0); // skilltree.js: Vitality
+    player.maxHp = (activeClass.baseMaxHp + gearHp + (player.treeHp || 0)) * charmHpMult(); // skilltree.js: Vitality; charms.js: the Gambler's Die
     player.armor = activeClass.baseArmor;
     if (player.hp > player.maxHp) player.hp = player.maxHp;
 
     let gearMs = equipment.boots ? equipment.boots.val : 0;
-    player.speed = (250 + gearMs + (player.treeSpeed || 0)) * moveBonus(); // skilltree.js: Fleetness; sidequests.js: the Hound-Tooth Charm
+    player.speed = (250 + gearMs + (player.treeSpeed || 0)) * moveBonus() * (1 + gearBonus('boots')); // skilltree.js: Fleetness; sidequests.js: the Hound-Tooth Charm
     
     player.maxFlow = 100;
     
@@ -352,11 +354,12 @@ function update(dt) {
     updateWitch(dt); // witch.js: souls, poison, zombies, the toads' curse on bosses
     updateSwordsaint(dt); // swordsaint.js: Style, bullet time, Gale Step's window, Mana Burst's charges, the tornado
     updatePotions(dt); // potions.js: the flask's heal, the elixirs' timers
+    updateCharms(dt); // charms.js: the Map Scrap follows its cache
     updateNpcs(dt); // npcs.js: Cinderholt's friends wandering
     updateSidequests(dt); // sidequests.js: the ruins' ambush, the wares to walk over
     updateBanditFx(dt); // bandits.js: fire on the ground, lit powder kegs
     updateExpedition(dt); // expeditions.js: the chief's moves, the road home
-    if (enemiesToSpawn > 0) { enemySpawnTimer -= dt; if (enemySpawnTimer <= 0) { spawnEnemy(); enemySpawnTimer = activeExpedition ? EXP_SPAWN_GAP : Math.max(0.5, 2.0 - (wave * 0.1)); } }
+    if (enemiesToSpawn > 0) { enemySpawnTimer -= dt; if (enemySpawnTimer <= 0) { spawnEnemy(); enemySpawnTimer = (activeExpedition ? EXP_SPAWN_GAP : Math.max(0.5, 2.0 - (wave * 0.1))) * charmSpawnMult(); } }
     if (cooldowns.basic > 0) cooldowns.basic -= dt;
     if (cooldowns.rmb > 0) cooldowns.rmb -= dt;
     for(let i=1; i<=4; i++) if (cooldowns[`s${i}`] > 0) cooldowns[`s${i}`] -= dt;
@@ -713,7 +716,9 @@ function update(dt) {
 
     for (let i = drops.length - 1; i >= 0; i--) {
         const d = drops[i]; d.life -= dt; if (d.life <= 0) { drops.splice(i, 1); continue; }
-        if (Math.hypot(player.x - d.x, player.y - d.y) < player.radius + d.radius) {
+        let dd = Math.hypot(player.x - d.x, player.y - d.y);
+        if (charmMagnet() && dd < CH_MAGNET_R && dd > 1) { const s = Math.min(dd, CH_MAGNET_SPEED * dt) / dd; d.x += (player.x - d.x) * s; d.y += (player.y - d.y) * s; dd = Math.hypot(player.x - d.x, player.y - d.y); } // charms.js: the Magnet Stone draws drops in
+        if (dd < (player.radius + d.radius) * (charmMagnet() ? 2 : 1)) {
             if (d.type === 'hp') { player.hp = Math.min(player.maxHp, player.hp + (player.maxHp * 0.25)); } 
             else if (d.type === 'dmg') { pickUpDmgOrb(); }
             else if (d.type === 'flask') { pickUpFlask(); } // potions.js
@@ -1018,6 +1023,7 @@ function update(dt) {
             else window.EnemyAI['slime_melee'](e, dt, curSpd, edx, edy, edist, i);
         }
         
+        if (currentMap.grid && !e.tauntTimer) navStuckTick(e, dt, edist, curSpd); // stage.js: wedged on a corner while chasing -> the flow field
         clampToBounds(e, e.size/2);
     }
     if (anchor && !player.dash) { player.x = anchor[0]; player.y = anchor[1]; }
@@ -1764,6 +1770,7 @@ function draw() {
         drawPlayerWeapon(aimAngle); // weapons.js
 
         drawPlayerShield(); // skillfx_e.js
+        if (typeof drawCharmWorld === 'function') drawCharmWorld(); // charms_fx.js: the Warding Candle's wards
         drawSlamCharge(); // weapons.js: the Dragonknight's charge ring, above the shield
         drawComboWindow(); // combos.js: a finisher is ready
         if (lift > 0) ctx.restore();
@@ -1805,6 +1812,7 @@ function draw() {
 
     drawStageScreen(); // stage.js: vignette, pointer to the cave
     drawQuestScreen(); // sidequests_fx.js: chips pointing to a friend waiting with a '?', a fall in Cinderholt
+    if (typeof drawCharmScreen === 'function') drawCharmScreen(); // charms_fx.js: the Map Scrap's pointer to its cache
     drawExpeditionScreen(); // expeditions_fx.js: an arrow to a chief off the view, a memory's warm edges
     drawDoorFade(); // interiors.js: through a door
     if (activeClass && activeClass.name === 'Swordsaint') drawSwordsaintScreen(ctx); // swordsaint_fx.js: bullet time's tint

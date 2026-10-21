@@ -88,7 +88,7 @@ const TR_CAP = { horse: 2, hound: 4 }; // most of each alive at once on the trai
 const trailAlive = type => enemies.filter(e => !e.dead && !e.prop && e.type === type).length;
 const trailRoom = type => Math.max(0, (TR_CAP[type] || 99) - trailAlive(type)); // how many more may spawn (a pack asks after its first hound is already in)
 function trailMinions(list) {
-    const mix = TR_MIX[trl.open > 0 ? 1 : 0];
+    const mix = TR_MIX[(trl.spawnSec ?? trl.open) > 0 ? 1 : 0]; // the section it steps into (trailSpawnPoint), not the newest
     const out = list.map(m => ({ ...m, weight: m.type in mix ? mix[m.type] : m.weight })).filter(m => m.weight > 0 && trailRoom(m.type) > 0);
     return out.length ? out : list;
 }
@@ -521,10 +521,18 @@ function trProp(c, o, rnd) {
 
 // ---------- spawns ----------
 
+const trailSecAt = x => x < TR_JAM[0].x0 ? 0 : x < TR_JAM[1].x0 ? 1 : 2; // which section an x lies in (the logjams divide them)
+
 // Bandits step out of the trees of the open section, or out of the camp's doorways, ahead of the hero
 function trailSpawnPoint() {
     const G = currentMap.grid, reach = p => !nav.dist || nav.dist[Math.floor(p.y / G.cell) * G.cols + Math.floor(p.x / G.cell)] >= 0;
     const dist = p => Math.hypot(p.x - player.x, p.y - player.y), sec = trl.open;
+    trl.spawnSec = sec; // trailMinions reads the section the enemy steps into
+    const hs = trailSecAt(player.x); // the hero walked back into an earlier section: half the waves come to them there (stage.js flankSpawn)
+    if (hs < sec && !isBossWave && Math.random() < 0.5) {
+        const f = flankSpawn(trl.spawns.filter(p => p.sec === hs), hs === 0 ? 150 : TR_JAM[hs - 1].x1 + 100, TR_JAM[hs].x0 - 100, TR_JAM[hs].x0);
+        if (f) { trl.spawnSec = hs; trl.lastSpawn = f; return { x: f.x + (Math.random() - 0.5) * 16, y: f.y + (Math.random() - 0.5) * 16, from: f.from }; }
+    }
     const pool = trl.spawns.filter(p => p.sec === sec && reach(p));
     let cand = pool.filter(p => { const d = dist(p); return d > 430 && d < 1300 && p.x > player.x - 150; });
     if (!cand.length) cand = pool.filter(p => dist(p) > 300).sort((a, b) => dist(a) - dist(b)).slice(0, 3);
